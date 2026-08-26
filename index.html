@@ -148,6 +148,22 @@
   .btn[disabled]:active{transform:none;box-shadow:var(--drop)}
   .status{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
 
+  /* ---- transport / animation ---- */
+  .transport{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:14px 0 0}
+  .transport .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;flex:1;min-width:260px}
+  body:not(.anim) .anim-only{display:none !important}
+  .transport input[type=range]{flex:1;min-width:110px;max-width:260px}
+  .btn.sm{padding:7px 14px;font-size:11px;box-shadow:none;border-width:2px;min-width:74px}
+  .lbl.inline{display:inline-block;margin:0;white-space:nowrap}
+  .lbl.inline b{float:none;margin-left:5px}   /* .lbl b floats right in the grid panels */
+  .lbl b.ok{color:var(--gold)}
+  .lbl b.warn{color:var(--ember)}
+  #animCtl{margin-top:14px}
+  .note{
+    display:block;font-family:var(--mono);font-size:10px;line-height:1.8;letter-spacing:.08em;
+    text-transform:uppercase;color:#7E6FBC;margin-top:10px;
+  }
+
   footer{
     margin-top:44px;padding-top:18px;border-top:2px solid var(--edge);
     font-family:var(--mono);font-size:11px;line-height:1.9;letter-spacing:.04em;color:#7E6FBC;
@@ -184,6 +200,20 @@
     <span>·</span>
     <span>Scale <b id="scaleOut">4×</b></span>
     <span id="skipped" class="warn"></span>
+  </div>
+
+  <div class="transport">
+    <div class="seg" id="mode" role="group" aria-label="Output mode">
+      <button data-mode="still" aria-pressed="true">Still</button>
+      <button data-mode="anim" aria-pressed="false">Animated</button>
+    </div>
+    <div class="row anim-only">
+      <button class="btn ghost sm" id="play">Play</button>
+      <input type="range" id="scrub" min="0" max="99" step="1" value="0" aria-label="Frame">
+      <span class="lbl inline">Frame <b id="frameOut">1/100</b></span>
+      <span class="lbl inline">Gif <b id="sizeOut"></b></span>
+      <span class="lbl inline">Motion <b id="romFlag" class="ok">ROM stock</b></span>
+    </div>
   </div>
 
   <div class="field">
@@ -249,10 +279,54 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
     </div>
   </div>
 
+  <div class="controls anim-only" id="animCtl">
+    <div class="ctl">
+      <span class="lbl">Entry distance <b id="distVal">96</b></span>
+      <input type="range" id="dist" aria-label="Entry distance" min="0" max="256" step="1" value="96">
+    </div>
+    <div class="ctl">
+      <span class="lbl">Initial velocity <b id="vel0Val">4</b></span>
+      <input type="range" id="vel0" aria-label="Initial velocity" min="0.25" max="16" step="0.25" value="4">
+    </div>
+    <div class="ctl">
+      <span class="lbl">Acceleration <b id="accelVal">0.25</b></span>
+      <input type="range" id="accel" aria-label="Acceleration" min="0.05" max="2" step="0.05" value="0.25">
+    </div>
+    <div class="ctl">
+      <span class="lbl">Bounciness <b id="dampVal">0.5</b></span>
+      <input type="range" id="damp" aria-label="Bounciness" min="0.1" max="0.95" step="0.05" value="0.5">
+    </div>
+    <div class="ctl">
+      <span class="lbl">Amplitude <b id="ampVal">100%</b></span>
+      <input type="range" id="amp" aria-label="Amplitude" min="10" max="200" step="5" value="100">
+    </div>
+    <div class="ctl">
+      <span class="lbl">Headroom <b id="headVal">auto</b></span>
+      <input type="range" id="head" aria-label="Headroom" min="-1" max="128" step="1" value="-1">
+    </div>
+    <div class="ctl" style="grid-column:1/-1;border-right:0">
+      <span class="lbl">Timebase</span>
+      <div class="seg" id="timebase" role="group" aria-label="Timebase">
+        <button data-tb="pal" aria-pressed="true">Every ROM frame · PAL exact</button>
+        <button data-tb="ntsc" aria-pressed="false">Resampled · NTSC duration</button>
+      </div>
+      <span class="note">GIF delays are whole centiseconds, so 60 fps cannot be represented.
+      All 100 ROM frames at 2cs is exactly PAL speed (2.00s); the resampled option drops to
+      83 frames to match NTSC duration (1.66s) instead.</span>
+    </div>
+    <div class="ctl" style="grid-column:1/-1;border-bottom:0;border-right:0">
+      <button class="btn ghost sm" id="romReset" style="min-width:0">Reset to ROM values</button>
+      <span class="note">Defaults are read from Obj_TitleBanner_Main in the Sonic&nbsp;3 &amp; Knuckles
+      disassembly: 96px entry, 4px/frame initial velocity, 0.25px/frame² spring, velocity halved
+      on each zero crossing. Stock values settle in 100 frames.</span>
+    </div>
+  </div>
+
   <div class="export">
     <button class="btn" id="dlPng">Download PNG</button>
     <button class="btn ghost" id="dlWebp">WebP</button>
     <button class="btn ghost" id="dlAvif">AVIF</button>
+    <button class="btn ghost anim-only" id="dlGif">Download GIF</button>
     <button class="btn ghost" id="copy">Copy image</button>
     <span class="status" id="status"></span>
   </div>
@@ -280,8 +354,23 @@ let ready = false;
 const SUP = { webp:true, avif:true };
 const state = {
   text:'', style:'outline', scale:4, track:-2, lead:-2, pad:0,
-  align:'center', bg:'none', touchedTrack:false, touchedLead:false
+  align:'center', bg:'none', touchedTrack:false, touchedLead:false,
+  mode:'still', timebase:'pal',
+  dist:96, vel0:4, accel:0.25, damp:0.5, amp:100, head:-1
 };
+
+/* ---------- canvas limits ----------
+   render() used to cap on pixel AREA only; browsers also cap each AXIS, so a
+   long line at high scale produced a silently blank canvas. Cap on both. */
+const MAX_DIM = 32767;
+const STILL_BUDGET = 36e6;
+const ANIM_BUDGET  = 1e6;   // animated frames multiply, so cap harder than stills
+
+function clampScale(w0, h0, want, budget){
+  let s = Math.max(1, want);
+  while(s > 1 && (w0*s > MAX_DIM || h0*s > MAX_DIM || w0*s*h0*s > budget)) s--;
+  return s;
+}
 
 /* ---------- layout ---------- */
 function layout(){
@@ -305,9 +394,10 @@ function layout(){
 }
 
 /* ---------- draw ---------- */
-function paint(target, scale, L){
+function paint(target, scale, L, dy, head){
   const pad = state.pad;
-  const W = (L.w + pad*2)*scale, H = (L.h + pad*2)*scale;
+  dy = dy||0; head = head||0;
+  const W = (L.w + pad*2)*scale, H = (L.h + pad*2 + head)*scale;
   target.width = W; target.height = H;
   const c = target.getContext('2d');
   c.imageSmoothingEnabled = false;
@@ -320,36 +410,449 @@ function paint(target, scale, L){
     const oy = i*(L.rowh + state.lead);
     for(const {g,x} of line.items){
       c.drawImage(atlas, g[0],g[1],g[2],g[3],
-        (pad + ox + x)*scale, (pad + oy + g[4])*scale, g[2]*scale, g[3]*scale);
+        (pad + ox + x)*scale, (head + pad + oy + g[4] + dy)*scale, g[2]*scale, g[3]*scale);
     }
   });
   return {W,H};
 }
 
+function geom(L){
+  const head = headroom();
+  return { head, w0: L.w + state.pad*2, h0: L.h + state.pad*2 + head };
+}
+function scaleFor(L){
+  const g = geom(L);
+  return clampScale(g.w0, g.h0, state.scale,
+                    state.mode === 'anim' ? ANIM_BUDGET : STILL_BUDGET);
+}
+
+const player = { playing:false, frame:0, raf:0, acc:0, last:0 };
+
 function render(){
   if(!ready) return;
   const L = layout();
-  let scale = state.scale;
-  const budget = 36e6;
-  while(scale>1 && (L.w+state.pad*2)*scale*(L.h+state.pad*2)*scale > budget) scale--;
-  const {W,H} = paint(canvas, scale, L);
+  const g = geom(L);
+  const scale = scaleFor(L);
+  const anim = state.mode === 'anim';
+  const frames = anim ? motion().frames : null;
+  if(anim && player.frame >= frames.length) player.frame = 0;
+  const {W,H} = paint(canvas, scale, L, anim ? frames[player.frame] : 0, g.head);
+
   canvas.classList.toggle('ghost', L.ghost);
   el('dims').textContent = W + ' × ' + H + ' px';
-  el('scaleOut').textContent = scale + '×';
+  el('scaleOut').textContent = scale + '×' + (scale !== state.scale ? ' (capped)' : '');
   el('skipped').textContent = L.skipped.length ? '· skipped ' + L.skipped.join(' ') : '';
-  if(scale !== state.scale) el('scaleOut').textContent = scale + '× (capped)';
+
   const has = !!state.text.trim();
   el('dlPng').disabled = !has;
   el('copy').disabled = !has;
   el('dlWebp').disabled = !has || !SUP.webp;
   el('dlAvif').disabled = !has || !SUP.avif;
+  el('dlGif').disabled = !has || !anim;
+
+  if(anim){
+    const sc = el('scrub');
+    sc.max = frames.length - 1;
+    sc.value = player.frame;
+    el('frameOut').textContent = (player.frame+1) + '/' + frames.length;
+    const m = motion();
+    el('romFlag').textContent = !m.settled ? 'never settles — loop jumps'
+                              : isRomStock() ? 'ROM stock' : 'modified';
+    el('romFlag').className = (!m.settled || !isRomStock()) ? 'warn' : 'ok';
+    queueEstimate();
+  }
+}
+
+/* ---------- playback ---------- */
+const FRAME_MS = 20;                 // GIF delay is whole centiseconds: 2cs
+function tick(ts){
+  if(!player.playing) return;
+  const frames = motion().frames;
+  if(player.last) player.acc += ts - player.last;
+  player.last = ts;
+  let stepped = false;
+  while(player.acc >= FRAME_MS){
+    player.acc -= FRAME_MS;
+    player.frame = (player.frame + 1) % frames.length;
+    stepped = true;
+  }
+  if(stepped) render();
+  player.raf = requestAnimationFrame(tick);
+}
+function play(){
+  if(player.playing) return;
+  player.playing = true; player.last = 0; player.acc = 0;
+  el('play').textContent = 'Pause';
+  player.raf = requestAnimationFrame(tick);
+}
+function pause(){
+  player.playing = false;
+  cancelAnimationFrame(player.raf);
+  el('play').textContent = 'Play';
+}
+
+
+/* ---------- ROM motion ----------------------------------------------------
+   Ported from Obj_TitleBanner_Main, sonic3k.asm:6039 (sonicretro/skdisasm).
+   The title banner is a damped spring, not an eased tween: position lives in a
+   32-bit fixed-point accumulator, acceleration flips sign across rest, and the
+   velocity is halved (asr) on every zero crossing. The "& KNUCKLES" subtitle
+   has no motion of its own -- Obj_TitleANDKnuckles_Display welds it to
+   banner_y + $5C -- so the whole block travels as one rigid body.
+
+   With stock values this lands exactly on the ROM's own settle test
+   (offset 0 and y_vel == -$5B) at frame 99, giving 100 frames.             */
+const ROM = { dist:96, vel0:4, accel:0.25, damp:0.5 };
+const SETTLE_VEL = -0x5B, MAX_FRAMES = 400, SETTLE_WIN = 16;
+
+const s16 = v => { v &= 0xFFFF; return v & 0x8000 ? v - 0x10000 : v; };
+const s32 = v => { v = v|0; return v; };
+
+function springCurve(o){
+  o = o || {};
+  const dist  = o.dist  === undefined ? ROM.dist  : o.dist;
+  const vel0  = o.vel0  === undefined ? ROM.vel0  : o.vel0;
+  const accel = o.accel === undefined ? ROM.accel : o.accel;
+  const damp  = o.damp  === undefined ? ROM.damp  : o.damp;
+  const amp   = o.amp   === undefined ? 1 : o.amp;
+  // stock ROM parameters -> use the ROM's exact terminating condition
+  const isRom = dist===ROM.dist && vel0===ROM.vel0 && accel===ROM.accel && damp===ROM.damp;
+
+  let acc = s32(-dist * 65536);      // $30(a0), init $FFA00000 when dist = 96
+  let vel = s16(Math.round(vel0 * 256));  // y_vel, init $400 when vel0 = 4
+  const d1base = Math.round(accel * 256); // ±$40 when accel = 0.25
+  let flag = 0, done = false;
+  const raw = [];                          // unscaled offsets, for the settle test
+
+  for(let f = 0; f < MAX_FRAMES && !done; f++){
+    const prev = flag;                       // move.b $34(a0),d2
+    acc = s32(acc + s32(vel * 256));         // add.l d0,$30(a0)
+    const hi = s16((acc >> 16) & 0xFFFF);    // move.w $30(a0),d0 -> high word
+    flag = 0;
+    let d1 = d1base;
+    if(hi >= 0){
+      // Stock parameters land exactly on the ROM's own test. Tuned parameters
+      // may never hit it, so fall back to an envelope: once a whole window of
+      // frames stays within a pixel of rest the motion is visually over. A
+      // plain zero-run does not work -- damping near 0.7 dithers 0/-1 forever.
+      if(isRom){
+        if(hi === 0 && vel === s16(SETTLE_VEL)) done = true;
+      }else if(raw.length >= SETTLE_WIN){
+        let peak = Math.abs(hi);
+        for(let i = raw.length - SETTLE_WIN; i < raw.length; i++)
+          peak = Math.max(peak, Math.abs(raw[i]));
+        if(peak <= 1) done = true;
+      }
+      if(!done){ flag = -1; d1 = -d1base; }  // loc_48AA
+    }
+    if(!done){
+      vel = s16(vel + d1);                   // add.w d1,y_vel
+      if(prev !== flag) vel = s16(Math.floor(vel * damp)); // asr y_vel
+    }
+    raw.push(hi);
+  }
+
+  if(!isRom && done){
+    // close the loop cleanly on rest instead of on a 1px dither
+    let end = raw.length;
+    while(end > 1 && Math.abs(raw[end-1]) <= 1) end--;
+    raw.length = Math.min(raw.length, end + 2);
+    raw[raw.length-1] = 0;
+  }
+  const out = raw.map(v => Math.round(v * amp));
+  out.settled = done;                        // false => hit the guard, loop will jump
+  return out;
+}
+
+/* Screen delta from rest is -offset: +offset means higher up (smaller y). */
+const curveCache = { key:'', frames:null, head:0 };
+function motion(){
+  const k = [state.dist,state.vel0,state.accel,state.damp,state.amp].join('|');
+  if(curveCache.key !== k){
+    const off = springCurve({
+      dist:state.dist, vel0:state.vel0, accel:state.accel,
+      damp:state.damp, amp:state.amp/100
+    });
+    curveCache.key = k;
+    curveCache.frames = off.map(v => -v);          // -> downward pixel delta
+    curveCache.head = Math.max(0, ...off);         // overshoot above rest
+    curveCache.settled = off.settled;
+  }
+  return curveCache;
+}
+function headroom(){
+  if(state.mode !== 'anim') return 0;
+  return state.head < 0 ? motion().head : state.head;
+}
+function isRomStock(){
+  return state.dist===ROM.dist && state.vel0===ROM.vel0 &&
+         state.accel===ROM.accel && state.damp===ROM.damp && state.amp===100 &&
+         (state.head < 0 || state.head === motion().head);
+}
+
+/* ---------- indexed atlas -------------------------------------------------
+   The sheet is 7 opaque colours with no partial alpha (a real Genesis
+   palette), so an indexed representation is lossless. GIF export needs it,
+   and palette recolouring will reuse it.                                   */
+let ATLAS_IDX = null, PALETTE = null, ATLAS_W = 0, ATLAS_H = 0;
+function buildIndexed(){
+  const c = document.createElement('canvas');
+  ATLAS_W = c.width = atlas.naturalWidth;
+  ATLAS_H = c.height = atlas.naturalHeight;
+  const x = c.getContext('2d', {willReadFrequently:true});
+  x.drawImage(atlas, 0, 0);
+  const d = x.getImageData(0, 0, ATLAS_W, ATLAS_H).data;
+  const seen = new Map();
+  PALETTE = [[0,0,0]];                       // index 0 reserved: transparent
+  ATLAS_IDX = new Uint8Array(ATLAS_W * ATLAS_H);
+  for(let i = 0, p = 0; i < d.length; i += 4, p++){
+    if(d[i+3] < 128) continue;               // stays 0
+    const k = (d[i]<<16) | (d[i+1]<<8) | d[i+2];
+    let idx = seen.get(k);
+    if(idx === undefined){
+      idx = PALETTE.length;
+      PALETTE.push([d[i], d[i+1], d[i+2]]);
+      seen.set(k, idx);
+    }
+    ATLAS_IDX[p] = idx;
+  }
+}
+
+/* Bounding box of the text block, in output pixels, for a given frame offset.
+   Frames use GIF disposal 2 (restore to background), so each frame only has to
+   carry the rectangle the block actually occupies -- the rest is cleared for
+   us. Vertical travel makes that a large saving. */
+function frameRect(L, scale, dy, head, W, H){
+  const pad = state.pad;
+  let lo = Infinity, hi = -Infinity;
+  L.lines.forEach(line => {
+    if(!line.items.length) return;
+    let ox = 0;
+    if(state.align === 'center') ox = Math.round((L.w - line.w)/2);
+    if(state.align === 'right')  ox = L.w - line.w;
+    lo = Math.min(lo, ox); hi = Math.max(hi, ox + line.w);
+  });
+  if(lo === Infinity) return {x:0, y:0, w:1, h:1};
+  const x0 = Math.max(0, Math.min(W, (pad + lo)*scale));
+  const x1 = Math.max(0, Math.min(W, (pad + hi)*scale));
+  const y0 = Math.max(0, Math.min(H, (head + pad + dy)*scale));
+  const y1 = Math.max(0, Math.min(H, (head + pad + dy + L.h)*scale));
+  if(x1 <= x0 || y1 <= y0) return {x:0, y:0, w:1, h:1};   // fully off-canvas
+  return {x:x0, y:y0, w:x1-x0, h:y1-y0};
+}
+
+/* Draw one frame into a palette-index buffer (0 = transparent). */
+function paintIndexed(rect, scale, L, dy, head, bgIdx){
+  const W = rect.w, H = rect.h;
+  const buf = new Uint8Array(W * H);
+  if(bgIdx) buf.fill(bgIdx);
+  const pad = state.pad;
+  L.lines.forEach((line, i) => {
+    let ox = 0;
+    if(state.align === 'center') ox = Math.round((L.w - line.w)/2);
+    if(state.align === 'right')  ox = L.w - line.w;
+    const oy = i*(L.rowh + state.lead);
+    for(const {g, x} of line.items){
+      const dx0 = (pad + ox + x)*scale - rect.x;
+      const dy0 = (head + pad + oy + g[4] + dy)*scale - rect.y;
+      const [sx, sy, sw, sh] = g;
+      for(let yy = 0; yy < sh; yy++){
+        const srow = (sy + yy)*ATLAS_W + sx;
+        for(let ry = 0; ry < scale; ry++){
+          const ty = dy0 + yy*scale + ry;
+          if(ty < 0 || ty >= H) continue;
+          const trow = ty*W;
+          for(let xx = 0; xx < sw; xx++){
+            const v = ATLAS_IDX[srow + xx];
+            if(!v) continue;
+            const tx0 = dx0 + xx*scale;
+            for(let rx = 0; rx < scale; rx++){
+              const tx = tx0 + rx;
+              if(tx >= 0 && tx < W) buf[trow + tx] = v;
+            }
+          }
+        }
+      }
+    }
+  });
+  return buf;
+}
+
+/* ---------- GIF89a encoder ------------------------------------------------
+   Hard-edged art with a tiny palette, so 1-bit GIF transparency is lossless
+   here and the whole thing fits a 3-bit colour table.                      */
+function lzwEncode(px, minCodeSize){
+  const clear = 1 << minCodeSize, eoi = clear + 1;
+  const out = [];
+  let dict = new Map(), next = eoi + 1, codeSize = minCodeSize + 1;
+  let cur = 0, curBits = 0;
+  const emit = code => {
+    cur |= code << curBits;
+    curBits += codeSize;
+    while(curBits >= 8){ out.push(cur & 0xFF); cur >>>= 8; curBits -= 8; }
+  };
+  const reset = () => { dict = new Map(); next = eoi + 1; codeSize = minCodeSize + 1; };
+  emit(clear);
+  let prefix = px[0];
+  for(let i = 1; i < px.length; i++){
+    const k = px[i], key = (prefix << 8) | k;
+    const hit = dict.get(key);
+    if(hit !== undefined){ prefix = hit; continue; }
+    emit(prefix);
+    dict.set(key, next++);
+    if(next === (1 << codeSize)){
+      if(codeSize < 12) codeSize++;
+      else { emit(clear); reset(); }
+    }
+    prefix = k;
+  }
+  emit(prefix);
+  emit(eoi);
+  if(curBits > 0) out.push(cur & 0xFF);
+  return out;
+}
+
+function buildGif(frames, W, H, palette){
+  const b = [];
+  const str = t => { for(const ch of t) b.push(ch.charCodeAt(0)); };
+  const u16 = v => b.push(v & 0xFF, (v >> 8) & 0xFF);
+  const bits = Math.max(2, Math.ceil(Math.log2(Math.max(2, palette.length))));
+  const entries = 1 << bits;
+
+  str('GIF89a');
+  u16(W); u16(H);
+  b.push(0x80 | 0x70 | (bits - 1), 0, 0);        // GCT present, size = 2^bits
+  for(let i = 0; i < entries; i++){
+    const c = palette[i] || [0,0,0];
+    b.push(c[0], c[1], c[2]);
+  }
+  b.push(0x21, 0xFF, 11); str('NETSCAPE2.0'); b.push(3, 1, 0, 0, 0);  // loop forever
+
+  for(const f of frames){
+    const d = Math.max(1, Math.round(f.delay || 2));
+    b.push(0x21, 0xF9, 4, 0x09, d & 0xFF, (d >> 8) & 0xFF, 0, 0);
+    b.push(0x2C); u16(f.x); u16(f.y); u16(f.w); u16(f.h); b.push(0);
+    b.push(bits);
+    const data = lzwEncode(f.buf, bits);
+    for(let i = 0; i < data.length; i += 255){
+      const chunk = data.slice(i, i + 255);
+      b.push(chunk.length);
+      for(const v of chunk) b.push(v);
+    }
+    b.push(0);
+  }
+  b.push(0x3B);
+  return new Uint8Array(b);
 }
 
 /* ---------- export ---------- */
+/* Still exports always render the settled pose with no headroom, so PNG /
+   WebP / AVIF output is unchanged by animation settings. */
 function exportCanvas(){
   const off = document.createElement('canvas');
-  paint(off, state.scale, layout());
+  const L = layout();
+  const scale = clampScale(L.w + state.pad*2, L.h + state.pad*2, state.scale, STILL_BUDGET);
+  paint(off, scale, L, 0, 0);
   return off;
+}
+
+/* ---------- animated export ---------- */
+function gifPalette(){
+  const pal = PALETTE.slice();
+  let bgIdx = 0;
+  if(state.bg !== 'none'){
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(state.bg);
+    if(m){ bgIdx = pal.length; pal.push([parseInt(m[1],16), parseInt(m[2],16), parseInt(m[3],16)]); }
+  }
+  return {pal, bgIdx};
+}
+
+function gifFrame(W, H, scale, L, dy, head, bgIdx){
+  // a solid background must cover the whole canvas every frame
+  const rect = bgIdx ? {x:0, y:0, w:W, h:H} : frameRect(L, scale, dy, head, W, H);
+  return Object.assign({buf: paintIndexed(rect, scale, L, dy, head, bgIdx)}, rect);
+}
+
+function gifFrames(){
+  const L = layout(), g = geom(L), scale = scaleFor(L);
+  const W = g.w0*scale, H = g.h0*scale;
+  const {pal, bgIdx} = gifPalette();
+  let offs = motion().frames;
+  if(state.timebase === 'ntsc'){
+    // resample the ROM curve onto a 50fps grid so wall-clock matches NTSC
+    const n = Math.round(offs.length / 59.92 / (FRAME_MS/1000));
+    const src = offs;
+    offs = Array.from({length:n}, (_,i) => src[Math.min(src.length-1, Math.round(i*(src.length-1)/(n-1)))]);
+  }
+  // The spring holds still for several frames at a time near each turning point
+  // and at rest. Collapsing each run into one frame with a proportionally longer
+  // delay is exactly equivalent playback and drops roughly a third of the frames.
+  const runs = [];
+  for(const dy of offs){
+    const last = runs[runs.length-1];
+    if(last && last.dy === dy) last.delay += 1;
+    else runs.push({dy, delay:1});
+  }
+  return {W, H, pal, bgIdx, offs, runs, L, g, scale};
+}
+
+function estimateGif(){
+  const {W,H,pal,bgIdx,runs,L,g,scale} = gifFrames();
+  const probe = [0, Math.floor(runs.length/2), runs.length-1];
+  let bytes = 0;
+  const bits = Math.max(2, Math.ceil(Math.log2(Math.max(2, pal.length))));
+  for(const i of probe){
+    bytes += lzwEncode(gifFrame(W,H,scale,L,runs[i].dy,g.head,bgIdx).buf, bits).length + 18;
+  }
+  return (bytes/probe.length)*runs.length + pal.length*3 + 800;
+}
+
+let estTimer = 0;
+function queueEstimate(){
+  clearTimeout(estTimer);
+  el('sizeOut').textContent = '…';
+  estTimer = setTimeout(()=>{
+    if(state.mode !== 'anim' || !state.text.trim()){ el('sizeOut').textContent = ''; return; }
+    try{
+      const n = estimateGif();
+      el('sizeOut').textContent = '≈' + (n > 1048576 ? (n/1048576).toFixed(1)+' MB' : Math.round(n/1024)+' KB');
+    }catch(e){ el('sizeOut').textContent = ''; }
+  }, 450);
+}
+
+async function downloadGif(){
+  const btn = el('dlGif');
+  btn.disabled = true;
+  const wasPlaying = player.playing;
+  pause();
+  try{
+    const {W,H,pal,bgIdx,offs,runs,L,g,scale} = gifFrames();
+    const bufs = [];
+    for(let i = 0; i < runs.length; i++){
+      const f = gifFrame(W, H, scale, L, runs[i].dy, g.head, bgIdx);
+      f.delay = runs[i].delay * (FRAME_MS/10);
+      bufs.push(f);
+      if(i % 8 === 0){
+        say('Rendering ' + Math.round(i/runs.length*100) + '%');
+        await new Promise(r => setTimeout(r, 0));
+      }
+    }
+    say('Encoding…');
+    await new Promise(r => setTimeout(r, 0));
+    const bytes = buildGif(bufs, W, H, pal);
+    const blob = new Blob([bytes], {type:'image/gif'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName('gif'); a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    say('Saved GIF · ' + runs.length + ' frames (' + offs.length + ' ROM) · '
+        + (offs.length*FRAME_MS/1000).toFixed(2) + 's · ' + Math.round(blob.size/1024) + ' KB');
+  }catch(err){
+    say('GIF failed — try a lower scale');
+  }finally{
+    btn.disabled = false;
+    if(wasPlaying) play();
+  }
 }
 function fileName(ext){
   const base = state.text.trim().toUpperCase().replace(/&/g,'and')
@@ -423,6 +926,57 @@ el('custom').addEventListener('input', e=>{
   render();
 });
 
+/* ---------- animation wiring ---------- */
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+el('mode').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  state.mode = b.dataset.mode;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  document.body.classList.toggle('anim', state.mode === 'anim');
+  pause();
+  player.frame = 0;
+  render();
+  // never autoplay for readers who asked for reduced motion
+  if(state.mode === 'anim' && !REDUCED && state.text.trim()) play();
+});
+
+el('timebase').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  state.timebase = b.dataset.tb;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  render();
+});
+
+el('play').addEventListener('click', ()=> player.playing ? pause() : play());
+el('scrub').addEventListener('input', e=>{ pause(); player.frame = +e.target.value; render(); });
+
+const MOTION = [
+  ['dist','distVal',  v => String(v)],
+  ['vel0','vel0Val',  v => String(v)],
+  ['accel','accelVal',v => String(v)],
+  ['damp','dampVal',  v => String(v)],
+  ['amp','ampVal',    v => v + '%'],
+  ['head','headVal',  v => v < 0 ? 'auto' : String(v)]
+];
+MOTION.forEach(([id,out,fmt])=>{
+  el(id).addEventListener('input', e=>{
+    state[id] = +e.target.value;
+    el(out).textContent = fmt(+e.target.value);
+    if(player.frame >= motion().frames.length) player.frame = 0;
+    render();
+  });
+});
+
+el('romReset').addEventListener('click', ()=>{
+  Object.assign(state, ROM, {amp:100, head:-1});
+  MOTION.forEach(([id,out,fmt])=>{ el(id).value = state[id]; el(out).textContent = fmt(state[id]); });
+  player.frame = 0;
+  render();
+});
+
+el('dlGif').onclick = downloadGif;
+
 el('dlPng').onclick  = ()=>download('image/png','png');
 el('dlWebp').onclick = ()=>download('image/webp','webp');
 el('dlAvif').onclick = ()=>download('image/avif','avif');
@@ -436,6 +990,7 @@ el('copy').onclick = async ()=>{
 
 atlas.onload = ()=>{
   ready = true;
+  buildIndexed();
   SUP.webp = supports('image/webp');
   SUP.avif = supports('image/avif');
   if(!SUP.webp) el('dlWebp').title = "This browser can't encode WebP";
