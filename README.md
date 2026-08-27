@@ -72,77 +72,21 @@ Two sprites sit on top of the planes rather than in them: `Obj_SKTitle_DeathEgg`
 `Camera_Y_pos_P2` to. The Death Egg descends from `$B0` to `$F0` during the sequence; the
 familiar title-screen shot has it high, so `$B0` is what is baked in.
 
-### The S&K background moves
+Both ship the **settled pose**, static. Neither title screen animates here, and for the
+S&K one that is a deliberate call rather than a gap.
 
-Knuckles cracks his knuckles. `Obj_SKTitle_HandAnim` runs four independent channels —
-face, finger-tap and two knuckle channels — each a script of frame values that index
-tile art, DMA'd over fixed slots every 3&ndash;5 frames. Their periods are 10, 138, 45
-and 21 game frames, so **all four only realign after 14,490 frames — four minutes**.
-There is no short loop that closes all of them.
+Its idle motion is `Obj_SKTitle_HandAnim`, four independent channels whose periods are
+10, 138, 45 and 21 game frames — they only realign after **14,490 frames, about four
+minutes**, so no short loop closes all of them. The full intro is worse: `Obj_SKTitle_SonicFall`
+drops 218 frames at 1px each, then a camera scrolls 8px a frame while Plane&nbsp;A swaps
+through all four tilemaps as he lands. Because the camera moves, nothing can be encoded as
+a sub-rectangle — every one of roughly 320 frames is a whole-screen repaint. Measured
+through this project's own encoders, a full 320&times;224 frame costs 13&ndash;33&nbsp;KB
+depending on scale, putting the intro at about **4.1&nbsp;MB of GIF at 1&times;** and
+**10.2&nbsp;MB at 2&times;**.
 
-So the two knuckle channels run and the other two hold at rest. Those resync every
-**315 frames**, which becomes the animated export's length: the text spring settles at
-frame 100 and Knuckles keeps going to 315, where everything lines up exactly. Only a
-128&times;64 region changes, and the two channels have three art states each, so all
-nine combinations are pre-rendered into one 3.8&nbsp;KB strip rather than composited from
-tiles at runtime. At 1&times; scale that takes the GIF from 319&nbsp;KB to 729&nbsp;KB —
-roughly double, not the 3&times; the longer duration would suggest, because the frames
-outside that region are unchanged and cost almost nothing.
-
-It is a toggle, and it is **off by default** — the settled screen is the one worth
-looking at. The S3 background stays static too: its motion is a water palette cycle, which
-has no equivalent cheap representation and would repaint most of the frame.
-
-**The full intro is deliberately absent.** Sonic dropping in from the top is a separate
-multi-stage sequence — `Obj_SKTitle_SonicFall` falling 218 frames at 1px each, then a
-camera scrolling 8px a frame while Plane&nbsp;A swaps through all four tilemaps as he
-lands. Because the camera moves, every frame is a whole-screen repaint rather than a small
-region, and a full 320×224 frame costs 13&ndash;33&nbsp;KB depending on scale. That puts the
-intro at roughly **4.1&nbsp;MB of GIF at 1×** and **10.2&nbsp;MB at 2×**, against 796&nbsp;KB
-for the idle loop. It is buildable with the decoders already here; it is just not a file
-anyone would want to share.
-
-## Animated export
-
-Four formats, and they are not equivalent:
-
-| | lossless | timing | alpha |
-|---|---|---|---|
-| **GIF** | yes | PAL exact; NTSC approximated | 1-bit |
-| **APNG** | yes | **PAL and NTSC both exact** | 1-bit |
-| WebM | no | real-time capture | yes |
-| MP4 | no | real-time capture | **no** |
-
-WebM and MP4 go through `MediaRecorder`, which timestamps frames as they arrive, so
-they are real-time captures — approximate by nature, and lossy. WebM does keep
-transparency; MP4 does not, because H.264 has no alpha channel.
-
-## GIF and APNG
-
-The sheet is **7 opaque colours with no partial alpha** — a real Genesis palette
-— so GIF is lossless here rather than a compromise: everything fits a 3-bit
-colour table, and 1-bit transparency is exact against hard-edged art. The encoder
-is hand-rolled GIF89a with LZW, about 130 lines, no dependency.
-
-Two things keep the files down. Frames use disposal method 2, so each one carries
-only the rectangle the text block occupies. And because the spring holds still for
-several frames at a time near each turning point, identical consecutive frames are
-collapsed into one with a proportionally longer delay — 100 ROM frames become 76
-GIF frames with playback unchanged.
-
-GIF delays are whole centiseconds, so 60 fps cannot be represented: all 100 ROM
-frames at 2cs is exactly PAL (2.00s), while NTSC has to be approximated by resampling
-to 83 frames (1.66s). **APNG delays are a fraction**, so it expresses 59.92 Hz exactly
-as `100/5992` — every ROM frame, right duration. It is usually the smaller file too:
-at 2&times; scale on transparency, 81 KB against GIF's 177 KB. Deflate comes from
-`CompressionStream`, so APNG adds no dependency either.
-
-With a scene background the trade flips: frames are left in place rather than disposed,
-and each one repaints the union of the previous and current text rects, which is what
-erases the old position. Only the 17 frames where the background scroll actually moves
-need a full repaint.
-
-[disasm]: https://github.com/sonicretro/skdisasm
+The decoders here are enough to build either. Neither is a file worth shipping, so the
+text is the only thing that moves.
 
 ### Compression formats implemented
 
