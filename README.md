@@ -35,21 +35,37 @@ Every constant is a slider. Change one and the readout says `modified` instead o
 `ROM stock`; push damping high enough that the spring never comes to rest and it
 says so, because the loop will visibly jump.
 
-## The background
+## The backgrounds
 
-**S3 title** swaps the transparent canvas for the actual Sonic 3 title screen and
-locks output to the Genesis frame, 320&times;224. Text sits where the ROM puts
+Two of them — **S3 title** and **S&K title** — either of which swaps the transparent
+canvas for the real thing and locks output to the Genesis frame, 320&times;224. Text sits where the ROM puts
 `& KNUCKLES` — screen y 176, from banner rest `$D4` plus the `$5C` subtitle offset,
 less the `$80` sprite-space origin — and the background scrolls up 16px across the
 first 16 frames, which is `V_scroll_value` in the original making room for the
 subtitle. It is a toggle; with it off nothing about the existing behaviour changes.
 
-The art is not a screenshot. It was decoded offline from the disassembly's own data
-— `S3 Sonic D.kos` (Kosinski, 650 tiles), `S3 BG.eni` and `S3 Sonic D.eni` (Enigma
-tilemaps, 40&times;28 each), `S3 Sonic D.bin` (palette) — then both tile planes were
-composited into a 44-colour indexed PNG and baked in like the font sheet. The banner
-and subtitle are sprites in the original rather than part of these planes, which is
-exactly the space the text drops into.
+Neither is a screenshot. Both were decoded offline from the disassembly's own data and
+composited into indexed PNGs, baked in like the font sheet. In both cases the banner is
+a sprite in the original rather than part of these tile planes, which is exactly the
+space the text drops into.
+
+**S3** is `S3 Sonic D.kos` (Kosinski, 650 tiles) plus `S3 BG.eni` and `S3 Sonic D.eni`
+(Enigma tilemaps, 40&times;28 each) with `S3 Sonic D.bin`, 44 colours.
+
+**S&K** was harder, and needed two more formats. The art is `SK Screen Background.kos`
+plus `SK Sonic Knuckles.kosm` — **moduled Kosinski**, seven 4096-byte modules, each
+starting on a 16-byte boundary measured from after the size header. Then the tiles that
+Knuckles' face and fists occupy are *placeholders* in the ROM blob: `Obj_SKTitle_HandAnim`
+DMAs over tiles 1&ndash;3, 4&ndash;44, 45&ndash;91 and 92&ndash;111 at runtime from
+`SK Sonic and Knuckles Hands.kos`. Without replaying those four DMAs you get a block of
+leftover garbage across his chest. Palette lines matter too: `Normal_palette_line_2` is
+index 1, so Knuckles' palette lands there rather than where the name suggests.
+
+Both ship the settled pose. The S&K title screen is a multi-stage sequence in the
+original — SEGA logo, Sonic falling, then the idle animation cycling `SK SonicKnux
+Frame 1-4.eni` — and the S3 one cycles its water palette. Animating either would fight
+the text for attention and multiply the file size, so what is baked in is the frame the
+sequence settles on.
 
 ## Animated export
 
@@ -92,6 +108,15 @@ erases the old position. Only the 17 frames where the background scroll actually
 need a full repaint.
 
 [disasm]: https://github.com/sonicretro/skdisasm
+
+### Compression formats implemented
+
+Four, all decoded offline in Node so nothing ships in the page but the finished PNGs:
+**Kosinski**, **moduled Kosinski**, **Enigma** and **Nemesis** (the last for reading the
+logo's `3`). Two traps worth recording: Kosinski's `NeedEarlyDescriptor` means the next
+descriptor word is fetched the instant the last bit is used, so it precedes the operand
+bytes; and `Eni_Decomp` *adds* its base value to each word rather than OR-ing it, which
+only looks equivalent while the base is pure high flag bits.
 
 ## Line spacing
 
