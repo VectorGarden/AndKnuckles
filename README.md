@@ -110,8 +110,23 @@ you type arbitrary text into. Set letter spacing to about `-3` to reproduce the 
 
 ## Character set
 
-**A–Z**, **0–9**, **&**, **^** (the triangle) and space. Punctuation is skipped, and
-the readout under the preview says which characters were dropped.
+**A–Z**, **0–9**, space, and every punctuation mark on a standard keyboard:
+
+```
+! " # $ % & ' ( ) * + , - . / : ; < = > ? @ [ \ ] _ ` { | } ~
+```
+
+Alt/option characters are not included. **^** renders the sheet's triangle rather than a
+caret — it predates the rest and the README has always described it that way. Anything
+outside the set is skipped, and the readout under the preview says what was dropped.
+
+The punctuation is drawn the same way as the digits: shapes authored against the sheet's
+own weight, then run through the shading rule. Two things constrain the designs. Glyphs
+are positioned with the glyph table's 5th field, so a period sits on the baseline and a
+quote at cap height without padding the bitmap; and **any internal gap has to clear 6px**,
+because the 2px outline eats that from both sides. That is why `#` has thin bars, `%` uses
+solid dots instead of rings, and `!` runs a 9px bar against a 3px dot — at 4/6/4 it read
+as a colon.
 
 The digits are new, and worth being clear about: **there were none to extract.** The
 ROM has no title font at all. `Map - S3 ANDKnuckles.asm` is six sprite pieces —
