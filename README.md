@@ -114,6 +114,16 @@ widths 3 to 8; the old encoder fails it 21 ways, all at the first width boundary
 that, exported GIFs are parsed back and every frame LZW-decoded against the buffer it came
 from, so a silent desync cannot come back.
 
+### Scene assets carry no transparency
+
+The two backgrounds are baked as indexed PNGs **with no `tRNS` chunk at all**. They are
+opaque by definition — they fill the frame — and reserving index 0 for transparency is
+actively wrong for them, because a scene will happily use its lowest palette slot as a
+real colour. The S&K composite did exactly that: black, for Sonic's pupils. Marking that
+index transparent punched 313 holes through the picture, which showed up in GIF, APNG and
+WebM but *not* MP4 — H.264 has no alpha, so it flattened them back to black and looked
+correct by accident.
+
 ## Spacing
 
 Both outlined defaults used to be negative — `track -2`, `lead -2` — which merged
