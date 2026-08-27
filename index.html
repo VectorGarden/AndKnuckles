@@ -490,7 +490,12 @@ function scaleFor(L){
                     state.mode === 'anim' ? ANIM_BUDGET : STILL_BUDGET);
 }
 
+/* Frame 0 of the spring is the text still off the bottom of the canvas, so a
+   paused animated view parked there shows nothing. Rest is the readable pose:
+   that is where the player sits whenever it is not running, and Play rewinds. */
 const player = { playing:false, frame:0, raf:0, acc:0, last:0 };
+const restFrame = () => Math.max(0, motion().frames.length - 1);
+function showRest(){ player.frame = restFrame(); }
 
 function render(){
   if(!ready) return;
@@ -551,6 +556,8 @@ function tick(ts){
 }
 function play(){
   if(player.playing) return;
+  if(player.frame >= restFrame()) player.frame = 0;   // replay from the top
+
   player.playing = true; player.last = 0; player.acc = 0;
   el('play').textContent = 'Pause';
   player.raf = requestAnimationFrame(tick);
@@ -1248,7 +1255,12 @@ function supports(mime){
 }
 
 /* ---------- wiring ---------- */
-el('text').addEventListener('input', e=>{ state.text = e.target.value; render(); });
+el('text').addEventListener('input', e=>{
+  state.text = e.target.value;
+  // typing while paused should show what you typed, not a mid-entry frame
+  if(state.mode === 'anim' && !player.playing) showRest();
+  render();
+});
 
 document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',()=>{
   state.text = b.dataset.preset; el('text').value = state.text; render(); el('text').focus();
@@ -1304,10 +1316,8 @@ el('mode').addEventListener('click', e=>{
   [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   document.body.classList.toggle('anim', state.mode === 'anim');
   pause();
-  player.frame = 0;
+  showRest();
   render();
-  // never autoplay for readers who asked for reduced motion
-  if(state.mode === 'anim' && !REDUCED && state.text.trim()) play();
 });
 
 el('timebase').addEventListener('click', e=>{
@@ -1327,6 +1337,7 @@ el('scene').addEventListener('click', e=>{
   [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   document.body.classList.toggle('scene', sceneOn());
   curveCache.key = '';
+  if(!player.playing) showRest();
   render();
 });
 el('sceneY').addEventListener('input', e=>{
@@ -1350,7 +1361,7 @@ MOTION.forEach(([id,out,fmt])=>{
   el(id).addEventListener('input', e=>{
     state[id] = +e.target.value;
     el(out).textContent = fmt(+e.target.value);
-    if(player.frame >= motion().frames.length) player.frame = 0;
+    if(player.frame >= motion().frames.length) showRest();
     render();
   });
 });
@@ -1358,7 +1369,7 @@ MOTION.forEach(([id,out,fmt])=>{
 el('romReset').addEventListener('click', ()=>{
   Object.assign(state, ROM, {amp:100, head:-1});
   MOTION.forEach(([id,out,fmt])=>{ el(id).value = state[id]; el(out).textContent = fmt(state[id]); });
-  player.frame = 0;
+  if(!player.playing) showRest(); else player.frame = 0;
   render();
 });
 
