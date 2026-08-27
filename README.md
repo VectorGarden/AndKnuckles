@@ -89,8 +89,18 @@ tiles at runtime. At 1&times; scale that takes the GIF from 319&nbsp;KB to 729&n
 roughly double, not the 3&times; the longer duration would suggest, because the frames
 outside that region are unchanged and cost almost nothing.
 
-It is a toggle. The S3 background stays static: its motion is a water palette cycle,
-which has no equivalent cheap representation and would repaint most of the frame.
+It is a toggle, and it is **off by default** — the settled screen is the one worth
+looking at. The S3 background stays static too: its motion is a water palette cycle, which
+has no equivalent cheap representation and would repaint most of the frame.
+
+**The full intro is deliberately absent.** Sonic dropping in from the top is a separate
+multi-stage sequence — `Obj_SKTitle_SonicFall` falling 218 frames at 1px each, then a
+camera scrolling 8px a frame while Plane&nbsp;A swaps through all four tilemaps as he
+lands. Because the camera moves, every frame is a whole-screen repaint rather than a small
+region, and a full 320×224 frame costs 13&ndash;33&nbsp;KB depending on scale. That puts the
+intro at roughly **4.1&nbsp;MB of GIF at 1×** and **10.2&nbsp;MB at 2×**, against 796&nbsp;KB
+for the idle loop. It is buildable with the decoders already here; it is just not a file
+anyone would want to share.
 
 ## Animated export
 

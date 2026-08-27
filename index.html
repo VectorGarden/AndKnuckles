@@ -290,14 +290,18 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
     <div class="ctl" id="bgMotionCtl" style="grid-column:1/-1;border-right:0">
       <span class="lbl">Background motion</span>
       <div class="seg" id="bgMotion" role="group" aria-label="Background motion">
-        <button data-bgm="off" aria-pressed="false">Still</button>
-        <button data-bgm="on" aria-pressed="true">Animated</button>
+        <button data-bgm="off" aria-pressed="true">Still</button>
+        <button data-bgm="on" aria-pressed="false">Animated</button>
       </div>
-      <span class="note">Only the S&amp;K title has one. Knuckles cracks his knuckles: two
-      channels whose art states resync every <b>315 frames</b>, so an animated export runs
-      5.26s and loops cleanly — the text settles at frame 100 and he keeps going. His face
-      and finger-tap are held at rest, because all four channels only realign after
-      <b>14490 frames</b>, about four minutes.</span>
+      <span class="note">Off by default. Only the S&amp;K title has motion: Knuckles cracks his
+      knuckles, two channels whose art states resync every <b>315 frames</b>, so an animated
+      export runs 5.26s and loops cleanly — the text settles at frame 100 and he keeps going.
+      His face and finger-tap hold at rest, because all four channels only realign after
+      <b>14490 frames</b>, about four minutes.<br>
+      The full intro — Sonic dropping in from the top — is not here on purpose. It scrolls the
+      camera, so every one of its ~320 frames is a whole-screen repaint rather than a small
+      region: <b>4.1&nbsp;MB</b> of GIF at 1&times; and 10.2&nbsp;MB at 2&times;, against 796&nbsp;KB
+      for this.</span>
     </div>
     <div class="ctl" style="grid-column:1/-1;border-bottom:0;border-right:0">
       <span class="lbl">Text position <b id="sceneYVal">176</b></span>
@@ -413,7 +417,7 @@ const SUP = { webp:true, avif:true };
 const state = {
   text:'', style:'outline', scale:4, track:0, lead:0, pad:0,
   align:'center', bg:'none', touchedTrack:false, touchedLead:false,
-  mode:'still', timebase:'pal', scene:'off', sceneY:176, bgMotion:true,
+  mode:'still', timebase:'pal', scene:'off', sceneY:176, bgMotion:false,
   dist:96, vel0:4, accel:0.25, damp:0.5, amp:100, head:-1
 };
 
