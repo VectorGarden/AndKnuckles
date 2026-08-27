@@ -828,10 +828,13 @@ function lzwEncode(px, minCodeSize){
     if(hit !== undefined){ prefix = hit; continue; }
     emit(prefix);
     dict.set(key, next++);
-    if(next === (1 << codeSize)){
-      if(codeSize < 12) codeSize++;
-      else { emit(clear); reset(); }
-    }
+    // The decoder builds its table one entry behind the encoder, so it must
+    // widen one code later than a naive reading of the spec suggests. Growing
+    // at (1<<codeSize) desyncs every real decoder at the first width change;
+    // (1<<codeSize)+1 is what they actually expect. Emitted codes are always
+    // < next, so they still fit the current width.
+    if(next === (1 << codeSize) + 1 && codeSize < 12) codeSize++;
+    else if(next > 4095){ emit(clear); reset(); }   // table full
     prefix = k;
   }
   emit(prefix);
