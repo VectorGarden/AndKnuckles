@@ -148,6 +148,24 @@
   .btn[disabled]:active{transform:none;box-shadow:var(--drop)}
   .status{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold)}
 
+  /* ---- transport / animation ---- */
+  .transport{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:14px 0 0}
+  .transport .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;flex:1;min-width:260px}
+  body:not(.anim) .anim-only{display:none !important}
+  body.anim .still-only{display:none !important}
+  body:not(.scene) .scene-only{display:none !important}
+  .transport input[type=range]{flex:1;min-width:110px;max-width:260px}
+  .btn.sm{padding:7px 14px;font-size:11px;box-shadow:none;border-width:2px;min-width:74px}
+  .lbl.inline{display:inline-block;margin:0;white-space:nowrap}
+  .lbl.inline b{float:none;margin-left:5px}   /* .lbl b floats right in the grid panels */
+  .lbl b.ok{color:var(--gold)}
+  .lbl b.warn{color:var(--ember)}
+  #animCtl{margin-top:14px}
+  .note{
+    display:block;font-family:var(--mono);font-size:10px;line-height:1.8;letter-spacing:.08em;
+    text-transform:uppercase;color:#7E6FBC;margin-top:10px;
+  }
+
   footer{
     margin-top:44px;padding-top:18px;border-top:2px solid var(--edge);
     font-family:var(--mono);font-size:11px;line-height:1.9;letter-spacing:.04em;color:#7E6FBC;
@@ -186,6 +204,25 @@
     <span id="skipped" class="warn"></span>
   </div>
 
+  <div class="transport">
+    <div class="seg" id="mode" role="group" aria-label="Output mode">
+      <button data-mode="still" aria-pressed="true">Still</button>
+      <button data-mode="anim" aria-pressed="false">Animated</button>
+    </div>
+    <div class="seg" id="scene" role="group" aria-label="Background">
+      <button data-scene="off" aria-pressed="true">No BG</button>
+      <button data-scene="s3" aria-pressed="false">S3 title</button>
+      <button data-scene="sk" aria-pressed="false">S&amp;K title</button>
+    </div>
+    <div class="row anim-only">
+      <button class="btn ghost sm" id="play">Play</button>
+      <input type="range" id="scrub" min="0" max="99" step="1" value="0" aria-label="Frame">
+      <span class="lbl inline">Frame <b id="frameOut">1/100</b></span>
+      <span class="lbl inline">Gif <b id="sizeOut"></b></span>
+      <span class="lbl inline">Motion <b id="romFlag" class="ok">ROM stock</b></span>
+    </div>
+  </div>
+
   <div class="field">
     <label for="text">Your text — line breaks make new lines</label>
     <textarea id="text" maxlength="240" spellcheck="false" placeholder="&amp; knuckles"></textarea>
@@ -222,13 +259,13 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
     </div>
 
     <div class="ctl">
-      <span class="lbl">Letter spacing <b id="trackVal">-2</b></span>
-      <input type="range" id="track" aria-label="Letter spacing" min="-8" max="16" step="1" value="-2">
+      <span class="lbl">Letter spacing <b id="trackVal">0</b></span>
+      <input type="range" id="track" aria-label="Letter spacing" min="-8" max="16" step="1" value="0">
     </div>
 
     <div class="ctl">
-      <span class="lbl">Line spacing <b id="leadVal">-2</b></span>
-      <input type="range" id="lead" aria-label="Line spacing" min="-8" max="24" step="1" value="-2">
+      <span class="lbl">Line spacing <b id="leadVal">0</b></span>
+      <input type="range" id="lead" aria-label="Line spacing" min="-8" max="24" step="1" value="0">
     </div>
 
     <div class="ctl">
@@ -249,28 +286,111 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
     </div>
   </div>
 
+  <div class="controls scene-only" id="sceneCtl">
+    <div class="ctl" style="grid-column:1/-1;border-bottom:0;border-right:0">
+      <span class="lbl">Text position <b id="sceneYVal">176</b></span>
+      <input type="range" id="sceneY" aria-label="Text vertical position" min="0" max="223" step="1" value="176">
+      <span class="note">Output locks to the Genesis frame, 320&times;224, and the background
+      colour swatches no longer apply. 176 is where the ROM puts <b>&amp; KNUCKLES</b> — banner rest
+      $D4 plus the $5C subtitle offset, less the $80 sprite-space origin. The background also
+      scrolls up 16px over the first 16 frames, which is <b>V_scroll_value</b> in the original
+      making room for the subtitle.</span>
+    </div>
+  </div>
+
+  <div class="controls anim-only" id="animCtl">
+    <div class="ctl">
+      <span class="lbl">Entry distance <b id="distVal">96</b></span>
+      <input type="range" id="dist" aria-label="Entry distance" min="0" max="256" step="1" value="96">
+    </div>
+    <div class="ctl">
+      <span class="lbl">Initial velocity <b id="vel0Val">4</b></span>
+      <input type="range" id="vel0" aria-label="Initial velocity" min="0.25" max="16" step="0.25" value="4">
+    </div>
+    <div class="ctl">
+      <span class="lbl">Acceleration <b id="accelVal">0.25</b></span>
+      <input type="range" id="accel" aria-label="Acceleration" min="0.05" max="2" step="0.05" value="0.25">
+    </div>
+    <div class="ctl">
+      <span class="lbl">Bounciness <b id="dampVal">0.5</b></span>
+      <input type="range" id="damp" aria-label="Bounciness" min="0.1" max="0.95" step="0.05" value="0.5">
+    </div>
+    <div class="ctl">
+      <span class="lbl">Amplitude <b id="ampVal">100%</b></span>
+      <input type="range" id="amp" aria-label="Amplitude" min="10" max="200" step="5" value="100">
+    </div>
+    <div class="ctl">
+      <span class="lbl">Headroom <b id="headVal">auto</b></span>
+      <input type="range" id="head" aria-label="Headroom" min="-1" max="128" step="1" value="-1">
+    </div>
+    <div class="ctl" style="grid-column:1/-1;border-right:0">
+      <span class="lbl">Timebase</span>
+      <div class="seg" id="timebase" role="group" aria-label="Timebase">
+        <button data-tb="pal" aria-pressed="true">PAL · 50 Hz</button>
+        <button data-tb="ntsc" aria-pressed="false">NTSC · 59.92 Hz</button>
+      </div>
+      <span class="note">GIF delays are whole centiseconds, so it can hit PAL exactly
+      (100 frames at 2cs = 2.00s) but can only approximate NTSC by resampling to 83 frames
+      (1.66s). APNG delays are a fraction, so it expresses 59.92 Hz exactly as 100/5992 —
+      pick APNG if the timing matters. Video is a real-time capture and is approximate either way.</span>
+    </div>
+    <div class="ctl" style="grid-column:1/-1;border-bottom:0;border-right:0">
+      <button class="btn ghost sm" id="romReset" style="min-width:0">Reset to ROM values</button>
+      <span class="note">Defaults are read from Obj_TitleBanner_Main in the Sonic&nbsp;3 &amp; Knuckles
+      disassembly: 96px entry, 4px/frame initial velocity, 0.25px/frame² spring, velocity halved
+      on each zero crossing. Stock values settle in 100 frames.</span>
+    </div>
+  </div>
+
   <div class="export">
-    <button class="btn" id="dlPng">Download PNG</button>
-    <button class="btn ghost" id="dlWebp">WebP</button>
-    <button class="btn ghost" id="dlAvif">AVIF</button>
-    <button class="btn ghost" id="copy">Copy image</button>
+    <button class="btn still-only" id="dlPng">Download PNG</button>
+    <button class="btn ghost still-only" id="dlWebp">WebP</button>
+    <button class="btn ghost still-only" id="dlAvif">AVIF</button>
+    <button class="btn ghost still-only" id="copy">Copy image</button>
+    <button class="btn anim-only" id="dlGif">Download GIF</button>
+    <button class="btn ghost anim-only" id="dlApng">APNG</button>
+    <button class="btn ghost anim-only" id="dlWebm">WebM</button>
+    <button class="btn ghost anim-only" id="dlMp4">MP4</button>
+    <span class="note anim-only" style="flex-basis:100%;margin-top:2px">GIF and APNG are exact and
+    lossless. WebM and MP4 are lossy real-time captures — WebM keeps transparency, MP4 does not
+    (H.264 has no alpha, so transparent areas go black; pick a background colour first).</span>
     <span class="status" id="status"></span>
   </div>
 
   <footer>
     Sprite sheet ripped by <b>DarkNic the Half Demon1234</b> — credit kept as asked.<br>
     Sonic the Hedgehog 3 &amp; Sonic &amp; Knuckles are © <b>Sega</b>. This is an unofficial fan tool; the artwork belongs to them.<br>
-    Character set: <b>A–Z, &amp;, ^ (the triangle), space</b>. The sheet has no digits or punctuation, so anything else is skipped.
+    Character set: <b>A–Z, 0–9, &amp;, ^ (the triangle), space</b>. Punctuation is skipped.<br>
+    The ROM has no font at all — it stores &amp; KNUCKLES as a flat 168&times;24 bitmap — so only
+    <b>&amp; C E K L N S U</b> trace to real game pixels. The rest of the alphabet was reconstructed by
+    the ripper; the digits were built here from the sheet's own shading rules.
   </footer>
 
 </div>
 
 <script>
-const FONT = {"plain":{"rowh":18,"glyphs":{"A":[10,8,24,18,0],"B":[40,8,15,18,0],"C":[61,8,17,18,0],"D":[84,8,17,18,0],"E":[107,8,15,18,0],"F":[128,8,15,18,0],"G":[149,8,17,18,0],"H":[172,8,20,18,0],"I":[198,8,7,18,0],"J":[211,8,10,18,0],"K":[227,8,18,18,0],"M":[251,8,26,18,0],"N":[283,8,20,18,0],"L":[309,8,15,18,0],"O":[10,34,18,18,0],"P":[34,34,16,18,0],"Q":[56,34,20,18,0],"R":[82,34,16,18,0],"S":[104,34,16,18,0],"T":[127,34,15,18,0],"U":[148,34,17,18,0],"V":[171,34,26,18,0],"W":[203,34,44,18,0],"X":[253,34,16,18,0],"Y":[275,34,15,18,0],"Z":[296,34,17,18,0],"&":[319,39,18,13,5],"^":[343,34,16,18,0]}},"outline":{"rowh":22,"glyphs":{"A":[8,62,28,22,0],"B":[38,62,19,22,0],"C":[59,62,21,22,0],"D":[82,62,21,22,0],"E":[105,62,19,22,0],"F":[126,62,19,22,0],"G":[147,62,21,22,0],"H":[170,62,24,22,0],"I":[196,62,11,22,0],"J":[209,62,14,22,0],"K":[225,62,22,22,0],"M":[249,62,30,22,0],"N":[281,62,24,22,0],"L":[307,62,19,22,0],"O":[8,88,22,22,0],"P":[32,88,20,22,0],"Q":[54,88,24,22,0],"R":[80,88,20,22,0],"S":[102,88,20,22,0],"T":[125,88,19,22,0],"U":[146,88,21,22,0],"V":[169,88,30,22,0],"W":[201,88,48,22,0],"X":[251,88,20,22,0],"Y":[273,88,19,22,0],"Z":[294,88,21,22,0],"&":[317,93,22,17,5],"^":[341,88,20,22,0]}}};
-const ATLAS_SRC = "data:image/png;base64,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";
+const FONT = {"plain":{"rowh":18,"glyphs":{"0":[2,140,18,18,0],"1":[22,140,16,18,0],"2":[40,140,16,18,0],"3":[58,140,16,18,0],"4":[76,140,16,18,0],"5":[94,140,16,18,0],"6":[112,140,16,18,0],"7":[130,140,16,18,0],"8":[148,140,16,18,0],"9":[166,140,16,18,0],"A":[10,8,24,18,0],"B":[40,8,15,18,0],"C":[61,8,17,18,0],"D":[84,8,17,18,0],"E":[107,8,15,18,0],"F":[128,8,15,18,0],"G":[149,8,17,18,0],"H":[172,8,20,18,0],"I":[198,8,7,18,0],"J":[211,8,10,18,0],"K":[227,8,18,18,0],"M":[251,8,26,18,0],"N":[283,8,20,18,0],"L":[309,8,15,18,0],"O":[10,34,18,18,0],"P":[34,34,16,18,0],"Q":[56,34,20,18,0],"R":[82,34,16,18,0],"S":[104,34,16,18,0],"T":[127,34,15,18,0],"U":[148,34,17,18,0],"V":[171,34,26,18,0],"W":[203,34,44,18,0],"X":[253,34,16,18,0],"Y":[275,34,15,18,0],"Z":[296,34,17,18,0],"&":[319,39,18,13,5],"^":[343,34,16,18,0]}},"outline":{"rowh":22,"glyphs":{"0":[2,114,22,22,0],"1":[26,114,20,22,0],"2":[48,114,20,22,0],"3":[70,114,20,22,0],"4":[92,114,20,22,0],"5":[114,114,20,22,0],"6":[136,114,20,22,0],"7":[158,114,20,22,0],"8":[180,114,20,22,0],"9":[202,114,20,22,0],"A":[8,62,28,22,0],"B":[38,62,19,22,0],"C":[59,62,21,22,0],"D":[82,62,21,22,0],"E":[105,62,19,22,0],"F":[126,62,19,22,0],"G":[147,62,21,22,0],"H":[170,62,24,22,0],"I":[196,62,11,22,0],"J":[209,62,14,22,0],"K":[225,62,22,22,0],"M":[249,62,30,22,0],"N":[281,62,24,22,0],"L":[307,62,19,22,0],"O":[8,88,22,22,0],"P":[32,88,20,22,0],"Q":[54,88,24,22,0],"R":[80,88,20,22,0],"S":[102,88,20,22,0],"T":[125,88,19,22,0],"U":[146,88,21,22,0],"V":[169,88,30,22,0],"W":[201,88,48,22,0],"X":[251,88,20,22,0],"Y":[273,88,19,22,0],"Z":[294,88,21,22,0],"&":[317,93,22,17,5],"^":[341,88,20,22,0]}}};
+const ATLAS_SRC = "data:image/png;base64,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";
+
+/* Sonic 3 title screen, planes A+B composited at 320x224. Decoded offline from
+   the Sonic Retro disassembly (S3 Sonic D.kos art, S3 BG.eni + S3 Sonic D.eni
+   tilemaps, S3 Sonic D.bin palette) -- Kosinski + Enigma, 650 tiles, 44 colours.
+   The banner and & KNUCKLES are sprites in the original, not part of these
+   planes, which is exactly the space our text goes into. */
+const SCENES = {
+  s3: { label:"S3 title",  y:176, src:"data:image/png;base64,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" },
+  sk: { label:"S&K title", y:176, src:"data:image/png;base64,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" },
+};
+const BG_W = 320, BG_H = 224;
+const BG_SCROLL = 16;   // V_scroll_value climbs 1/frame to $10 to make room
 
 const SPACE_W = 8;
-const DEFAULTS = { outline:{track:-2, lead:-2}, plain:{track:2, lead:4} };
+// Both outlined defaults used to be negative, which merged neighbouring glyphs
+// and rows into one continuous navy mass. The ROM's own "& KNUCKLES" bitmap is
+// packed even tighter than that -- 168px against our 180 at -2 -- so the tight
+// look is authentic, but it reads as overlap. 0 lets the outlines touch while
+// each glyph and line stays its own; -3 or so reproduces the ROM spacing.
+const DEFAULTS = { outline:{track:0, lead:0}, plain:{track:2, lead:4} };
 
 const el = id => document.getElementById(id);
 const canvas = el('preview'), ctx = canvas.getContext('2d');
@@ -279,9 +399,24 @@ let ready = false;
 
 const SUP = { webp:true, avif:true };
 const state = {
-  text:'', style:'outline', scale:4, track:-2, lead:-2, pad:0,
-  align:'center', bg:'none', touchedTrack:false, touchedLead:false
+  text:'', style:'outline', scale:4, track:0, lead:0, pad:0,
+  align:'center', bg:'none', touchedTrack:false, touchedLead:false,
+  mode:'still', timebase:'pal', scene:'off', sceneY:176,
+  dist:96, vel0:4, accel:0.25, damp:0.5, amp:100, head:-1
 };
+
+/* ---------- canvas limits ----------
+   render() used to cap on pixel AREA only; browsers also cap each AXIS, so a
+   long line at high scale produced a silently blank canvas. Cap on both. */
+const MAX_DIM = 32767;
+const STILL_BUDGET = 36e6;
+const ANIM_BUDGET  = 1e6;   // animated frames multiply, so cap harder than stills
+
+function clampScale(w0, h0, want, budget){
+  let s = Math.max(1, want);
+  while(s > 1 && (w0*s > MAX_DIM || h0*s > MAX_DIM || w0*s*h0*s > budget)) s--;
+  return s;
+}
 
 /* ---------- layout ---------- */
 function layout(){
@@ -305,14 +440,32 @@ function layout(){
 }
 
 /* ---------- draw ---------- */
-function paint(target, scale, L){
-  const pad = state.pad;
-  const W = (L.w + pad*2)*scale, H = (L.h + pad*2)*scale;
+/* Top-left of the text block in logical canvas coordinates. In scene mode the
+   block sits where the ROM puts & KNUCKLES: horizontally centred in the 320px
+   frame, vertically centred on sceneY (176 = banner rest $D4 + $5C, less the
+   $80 sprite-space origin). */
+function origin(L, G){
+  if(G.scene) return { x: Math.round((BG_W - L.w)/2), y: Math.round(state.sceneY - L.h/2) };
+  return { x: state.pad, y: G.head + state.pad };
+}
+
+function paint(target, scale, L, dy, G, scroll){
+  dy = dy||0; scroll = scroll||0;
+  G = G || geom(L);
+  const W = G.w0*scale, H = G.h0*scale;
   target.width = W; target.height = H;
   const c = target.getContext('2d');
   c.imageSmoothingEnabled = false;
   c.clearRect(0,0,W,H);
-  if(state.bg !== 'none'){ c.fillStyle = state.bg; c.fillRect(0,0,W,H); }
+  const img = sceneImg();
+  if(G.scene && img){
+    c.drawImage(img, 0, -scroll*scale, BG_W*scale, BG_H*scale);
+    if(scroll > 0)   // repeat the last row into the strip the scroll exposed
+      c.drawImage(img, 0, BG_H-1, BG_W, 1, 0, (BG_H-scroll)*scale, BG_W*scale, scroll*scale);
+  } else if(state.bg !== 'none'){
+    c.fillStyle = state.bg; c.fillRect(0,0,W,H);
+  }
+  const o = origin(L, G);
   L.lines.forEach((line,i)=>{
     let ox = 0;
     if(state.align==='center') ox = Math.round((L.w - line.w)/2);
@@ -320,36 +473,762 @@ function paint(target, scale, L){
     const oy = i*(L.rowh + state.lead);
     for(const {g,x} of line.items){
       c.drawImage(atlas, g[0],g[1],g[2],g[3],
-        (pad + ox + x)*scale, (pad + oy + g[4])*scale, g[2]*scale, g[3]*scale);
+        (o.x + ox + x)*scale, (o.y + oy + g[4] + dy)*scale, g[2]*scale, g[3]*scale);
     }
   });
   return {W,H};
 }
 
+function geom(L){
+  if(sceneOn()) return { head: 0, w0: BG_W, h0: BG_H, scene: true };
+  const head = headroom();
+  return { head, w0: L.w + state.pad*2, h0: L.h + state.pad*2 + head };
+}
+function scaleFor(L){
+  const g = geom(L);
+  return clampScale(g.w0, g.h0, state.scale,
+                    state.mode === 'anim' ? ANIM_BUDGET : STILL_BUDGET);
+}
+
+/* Frame 0 of the spring is the text still off the bottom of the canvas, so a
+   paused animated view parked there shows nothing. Rest is the readable pose:
+   that is where the player sits whenever it is not running, and Play rewinds. */
+const player = { playing:false, frame:0, raf:0, acc:0, last:0 };
+const restFrame = () => Math.max(0, motion().frames.length - 1);
+function showRest(){ player.frame = restFrame(); }
+
 function render(){
   if(!ready) return;
   const L = layout();
-  let scale = state.scale;
-  const budget = 36e6;
-  while(scale>1 && (L.w+state.pad*2)*scale*(L.h+state.pad*2)*scale > budget) scale--;
-  const {W,H} = paint(canvas, scale, L);
+  const g = geom(L);
+  const scale = scaleFor(L);
+  const anim = state.mode === 'anim';
+  const frames = anim ? motion().frames : null;
+  const span = anim ? frames.length : 0;
+  if(anim && player.frame >= span) player.frame = 0;
+  const {W,H} = paint(canvas, scale, L, anim ? frames[player.frame] : 0, g,
+                      scrollAt(anim ? player.frame : 1e9));
+
   canvas.classList.toggle('ghost', L.ghost);
   el('dims').textContent = W + ' × ' + H + ' px';
-  el('scaleOut').textContent = scale + '×';
+  el('scaleOut').textContent = scale + '×' + (scale !== state.scale ? ' (capped)' : '');
   el('skipped').textContent = L.skipped.length ? '· skipped ' + L.skipped.join(' ') : '';
-  if(scale !== state.scale) el('scaleOut').textContent = scale + '× (capped)';
+
   const has = !!state.text.trim();
   el('dlPng').disabled = !has;
   el('copy').disabled = !has;
   el('dlWebp').disabled = !has || !SUP.webp;
   el('dlAvif').disabled = !has || !SUP.avif;
+  el('dlGif').disabled  = !has || !anim;
+  el('dlApng').disabled = !has || !anim || !SUP_APNG;
+  el('dlWebm').disabled = !has || !anim || !videoMime('webm');
+  el('dlMp4').disabled  = !has || !anim || !videoMime('mp4');
+
+  if(anim){
+    const sc = el('scrub');
+    sc.max = span - 1;
+    sc.value = player.frame;
+    el('frameOut').textContent = (player.frame+1) + '/' + span;
+    const m = motion();
+    el('romFlag').textContent = !m.settled ? 'never settles — loop jumps'
+                              : isRomStock() ? 'ROM stock' : 'modified';
+    el('romFlag').className = (!m.settled || !isRomStock()) ? 'warn' : 'ok';
+    queueEstimate();
+  }
+}
+
+/* ---------- playback ---------- */
+const FRAME_MS = 20;                 // GIF delay is whole centiseconds: 2cs
+function tick(ts){
+  if(!player.playing) return;
+  const frames = motion().frames;
+  const total = frames.length;
+  if(player.last) player.acc += ts - player.last;
+  player.last = ts;
+  let stepped = false;
+  while(player.acc >= FRAME_MS){
+    player.acc -= FRAME_MS;
+    player.frame = (player.frame + 1) % total;
+    stepped = true;
+  }
+  if(stepped) render();
+  player.raf = requestAnimationFrame(tick);
+}
+function play(){
+  if(player.playing) return;
+  if(player.frame >= restFrame()) player.frame = 0;   // replay from the top
+
+  player.playing = true; player.last = 0; player.acc = 0;
+  el('play').textContent = 'Pause';
+  player.raf = requestAnimationFrame(tick);
+}
+function pause(){
+  player.playing = false;
+  cancelAnimationFrame(player.raf);
+  el('play').textContent = 'Play';
+}
+
+
+/* ---------- ROM motion ----------------------------------------------------
+   Ported from Obj_TitleBanner_Main, sonic3k.asm:6039 (sonicretro/skdisasm).
+   The title banner is a damped spring, not an eased tween: position lives in a
+   32-bit fixed-point accumulator, acceleration flips sign across rest, and the
+   velocity is halved (asr) on every zero crossing. The "& KNUCKLES" subtitle
+   has no motion of its own -- Obj_TitleANDKnuckles_Display welds it to
+   banner_y + $5C -- so the whole block travels as one rigid body.
+
+   With stock values this lands exactly on the ROM's own settle test
+   (offset 0 and y_vel == -$5B) at frame 99, giving 100 frames.             */
+const ROM = { dist:96, vel0:4, accel:0.25, damp:0.5 };
+const SETTLE_VEL = -0x5B, MAX_FRAMES = 400, SETTLE_WIN = 16;
+
+const s16 = v => { v &= 0xFFFF; return v & 0x8000 ? v - 0x10000 : v; };
+const s32 = v => { v = v|0; return v; };
+
+function springCurve(o){
+  o = o || {};
+  const dist  = o.dist  === undefined ? ROM.dist  : o.dist;
+  const vel0  = o.vel0  === undefined ? ROM.vel0  : o.vel0;
+  const accel = o.accel === undefined ? ROM.accel : o.accel;
+  const damp  = o.damp  === undefined ? ROM.damp  : o.damp;
+  const amp   = o.amp   === undefined ? 1 : o.amp;
+  // stock ROM parameters -> use the ROM's exact terminating condition
+  const isRom = dist===ROM.dist && vel0===ROM.vel0 && accel===ROM.accel && damp===ROM.damp;
+
+  let acc = s32(-dist * 65536);      // $30(a0), init $FFA00000 when dist = 96
+  let vel = s16(Math.round(vel0 * 256));  // y_vel, init $400 when vel0 = 4
+  const d1base = Math.round(accel * 256); // ±$40 when accel = 0.25
+  let flag = 0, done = false;
+  const raw = [];                          // unscaled offsets, for the settle test
+
+  for(let f = 0; f < MAX_FRAMES && !done; f++){
+    const prev = flag;                       // move.b $34(a0),d2
+    acc = s32(acc + s32(vel * 256));         // add.l d0,$30(a0)
+    const hi = s16((acc >> 16) & 0xFFFF);    // move.w $30(a0),d0 -> high word
+    flag = 0;
+    let d1 = d1base;
+    if(hi >= 0){
+      // Stock parameters land exactly on the ROM's own test. Tuned parameters
+      // may never hit it, so fall back to an envelope: once a whole window of
+      // frames stays within a pixel of rest the motion is visually over. A
+      // plain zero-run does not work -- damping near 0.7 dithers 0/-1 forever.
+      if(isRom){
+        if(hi === 0 && vel === s16(SETTLE_VEL)) done = true;
+      }else if(raw.length >= SETTLE_WIN){
+        let peak = Math.abs(hi);
+        for(let i = raw.length - SETTLE_WIN; i < raw.length; i++)
+          peak = Math.max(peak, Math.abs(raw[i]));
+        if(peak <= 1) done = true;
+      }
+      if(!done){ flag = -1; d1 = -d1base; }  // loc_48AA
+    }
+    if(!done){
+      vel = s16(vel + d1);                   // add.w d1,y_vel
+      if(prev !== flag) vel = s16(Math.floor(vel * damp)); // asr y_vel
+    }
+    raw.push(hi);
+  }
+
+  if(!isRom && done){
+    // close the loop cleanly on rest instead of on a 1px dither
+    let end = raw.length;
+    while(end > 1 && Math.abs(raw[end-1]) <= 1) end--;
+    raw.length = Math.min(raw.length, end + 2);
+    raw[raw.length-1] = 0;
+  }
+  const out = raw.map(v => Math.round(v * amp));
+  out.settled = done;                        // false => hit the guard, loop will jump
+  return out;
+}
+
+/* Screen delta from rest is -offset: +offset means higher up (smaller y). */
+const curveCache = { key:'', frames:null, head:0 };
+function motion(){
+  const k = [state.dist,state.vel0,state.accel,state.damp,state.amp].join('|');
+  if(curveCache.key !== k){
+    const off = springCurve({
+      dist:state.dist, vel0:state.vel0, accel:state.accel,
+      damp:state.damp, amp:state.amp/100
+    });
+    curveCache.key = k;
+    curveCache.frames = off.map(v => -v);          // -> downward pixel delta
+    curveCache.head = Math.max(0, ...off);         // overshoot above rest
+    curveCache.settled = off.settled;
+  }
+  return curveCache;
+}
+function headroom(){
+  if(sceneOn()) return 0;           // the 320x224 frame is the viewport; clipping is authentic
+  if(state.mode !== 'anim') return 0;
+  return state.head < 0 ? motion().head : state.head;
+}
+function isRomStock(){
+  return state.dist===ROM.dist && state.vel0===ROM.vel0 &&
+         state.accel===ROM.accel && state.damp===ROM.damp && state.amp===100 &&
+         (state.head < 0 || state.head === motion().head);
+}
+
+/* ---------- indexed atlas -------------------------------------------------
+   The sheet is 7 opaque colours with no partial alpha (a real Genesis
+   palette), so an indexed representation is lossless. GIF export needs it,
+   and palette recolouring will reuse it.                                   */
+let ATLAS_IDX = null, PALETTE = null, ATLAS_W = 0, ATLAS_H = 0;
+function buildIndexed(){
+  const c = document.createElement('canvas');
+  ATLAS_W = c.width = atlas.naturalWidth;
+  ATLAS_H = c.height = atlas.naturalHeight;
+  const x = c.getContext('2d', {willReadFrequently:true});
+  x.drawImage(atlas, 0, 0);
+  const d = x.getImageData(0, 0, ATLAS_W, ATLAS_H).data;
+  const seen = new Map();
+  PALETTE = [[0,0,0]];                       // index 0 reserved: transparent
+  ATLAS_IDX = new Uint8Array(ATLAS_W * ATLAS_H);
+  for(let i = 0, p = 0; i < d.length; i += 4, p++){
+    if(d[i+3] < 128) continue;               // stays 0
+    const k = (d[i]<<16) | (d[i+1]<<8) | d[i+2];
+    let idx = seen.get(k);
+    if(idx === undefined){
+      idx = PALETTE.length;
+      PALETTE.push([d[i], d[i+1], d[i+2]]);
+      seen.set(k, idx);
+    }
+    ATLAS_IDX[p] = idx;
+  }
+}
+
+/* Bounding box of the text block, in output pixels, for a given frame offset.
+   Frames use GIF disposal 2 (restore to background), so each frame only has to
+   carry the rectangle the block actually occupies -- the rest is cleared for
+   us. Vertical travel makes that a large saving. */
+function frameRect(L, scale, dy, G, W, H){
+  const o = origin(L, G);
+  let lo = Infinity, hi = -Infinity;
+  L.lines.forEach(line => {
+    if(!line.items.length) return;
+    let ox = 0;
+    if(state.align === 'center') ox = Math.round((L.w - line.w)/2);
+    if(state.align === 'right')  ox = L.w - line.w;
+    lo = Math.min(lo, ox); hi = Math.max(hi, ox + line.w);
+  });
+  if(lo === Infinity) return {x:0, y:0, w:1, h:1};
+  const x0 = Math.max(0, Math.min(W, (o.x + lo)*scale));
+  const x1 = Math.max(0, Math.min(W, (o.x + hi)*scale));
+  const y0 = Math.max(0, Math.min(H, (o.y + dy)*scale));
+  const y1 = Math.max(0, Math.min(H, (o.y + dy + L.h)*scale));
+  if(x1 <= x0 || y1 <= y0) return {x:0, y:0, w:1, h:1};   // fully off-canvas
+  return {x:x0, y:y0, w:x1-x0, h:y1-y0};
+}
+
+/* The background shares one palette with the font so a single indexed frame can
+   hold both. Font colours keep indices 1-7; background colours append after. */
+const bgImgs = {}, bgIdxs = {};
+const sceneOn  = () => state.scene !== 'off';
+const sceneImg = () => bgImgs[state.scene] || null;
+const sceneIdx = () => bgIdxs[state.scene] || null;
+
+
+function buildBackground(id){
+  const c = document.createElement('canvas');
+  c.width = BG_W; c.height = BG_H;
+  const x = c.getContext('2d', {willReadFrequently:true});
+  x.drawImage(bgImgs[id], 0, 0);
+  const d = x.getImageData(0, 0, BG_W, BG_H).data;
+  const seen = new Map(PALETTE.map((c,i)=>[(c[0]<<16)|(c[1]<<8)|c[2], i]));
+  seen.delete(0);                                   // index 0 stays transparent-only
+  const IDX = bgIdxs[id] = new Uint8Array(BG_W * BG_H);
+  for(let i = 0, p = 0; i < d.length; i += 4, p++){
+    if(d[i+3] < 128) continue;
+    const k = (d[i]<<16) | (d[i+1]<<8) | d[i+2];
+    let idx = seen.get(k);
+    if(idx === undefined){ idx = PALETTE.length; PALETTE.push([d[i],d[i+1],d[i+2]]); seen.set(k, idx); }
+    IDX[p] = idx;
+  }
+}
+
+/* How far the background has scrolled up on a given frame. */
+function scrollAt(frame){
+  if(!sceneOn()) return 0;
+  return state.mode === 'anim' ? Math.min(frame, BG_SCROLL) : BG_SCROLL;
+}
+
+/* Fill an index buffer rect with the scrolled background. The strip exposed at
+   the bottom by the scroll repeats the last row (it is open water there). */
+function fillBackground(buf, rect, scale, scroll){
+  const IDX = sceneIdx();
+  if(!IDX) return;
+  for(let ty = 0; ty < rect.h; ty++){
+    const sy0 = Math.floor((ty + rect.y) / scale) + scroll;
+    const sy = Math.min(BG_H - 1, sy0);
+    const srow = sy * BG_W, trow = ty * rect.w;
+    for(let tx = 0; tx < rect.w; tx++){
+      const sx = Math.floor((tx + rect.x) / scale);
+      buf[trow + tx] = sx < BG_W ? IDX[srow + sx] : 0;
+    }
+  }
+}
+
+/* Draw one frame into a palette-index buffer (0 = transparent). */
+function paintIndexed(rect, scale, L, dy, G, bgIdx, scroll){
+  const W = rect.w, H = rect.h;
+  const buf = new Uint8Array(W * H);
+  if(G.scene) fillBackground(buf, rect, scale, scroll||0);
+  else if(bgIdx) buf.fill(bgIdx);
+  const o = origin(L, G);
+  L.lines.forEach((line, i) => {
+    let ox = 0;
+    if(state.align === 'center') ox = Math.round((L.w - line.w)/2);
+    if(state.align === 'right')  ox = L.w - line.w;
+    const oy = i*(L.rowh + state.lead);
+    for(const {g, x} of line.items){
+      const dx0 = (o.x + ox + x)*scale - rect.x;
+      const dy0 = (o.y + oy + g[4] + dy)*scale - rect.y;
+      const [sx, sy, sw, sh] = g;
+      for(let yy = 0; yy < sh; yy++){
+        const srow = (sy + yy)*ATLAS_W + sx;
+        for(let ry = 0; ry < scale; ry++){
+          const ty = dy0 + yy*scale + ry;
+          if(ty < 0 || ty >= H) continue;
+          const trow = ty*W;
+          for(let xx = 0; xx < sw; xx++){
+            const v = ATLAS_IDX[srow + xx];
+            if(!v) continue;
+            const tx0 = dx0 + xx*scale;
+            for(let rx = 0; rx < scale; rx++){
+              const tx = tx0 + rx;
+              if(tx >= 0 && tx < W) buf[trow + tx] = v;
+            }
+          }
+        }
+      }
+    }
+  });
+  return buf;
+}
+
+/* ---------- GIF89a encoder ------------------------------------------------
+   Hard-edged art with a tiny palette, so 1-bit GIF transparency is lossless
+   here and the whole thing fits a 3-bit colour table.                      */
+function lzwEncode(px, minCodeSize){
+  const clear = 1 << minCodeSize, eoi = clear + 1;
+  const out = [];
+  let dict = new Map(), next = eoi + 1, codeSize = minCodeSize + 1;
+  let cur = 0, curBits = 0;
+  const emit = code => {
+    cur |= code << curBits;
+    curBits += codeSize;
+    while(curBits >= 8){ out.push(cur & 0xFF); cur >>>= 8; curBits -= 8; }
+  };
+  const reset = () => { dict = new Map(); next = eoi + 1; codeSize = minCodeSize + 1; };
+  emit(clear);
+  let prefix = px[0];
+  for(let i = 1; i < px.length; i++){
+    const k = px[i], key = (prefix << 8) | k;
+    const hit = dict.get(key);
+    if(hit !== undefined){ prefix = hit; continue; }
+    emit(prefix);
+    dict.set(key, next++);
+    if(next === (1 << codeSize)){
+      if(codeSize < 12) codeSize++;
+      else { emit(clear); reset(); }
+    }
+    prefix = k;
+  }
+  emit(prefix);
+  emit(eoi);
+  if(curBits > 0) out.push(cur & 0xFF);
+  return out;
+}
+
+function buildGif(frames, W, H, palette){
+  const b = [];
+  const str = t => { for(const ch of t) b.push(ch.charCodeAt(0)); };
+  const u16 = v => b.push(v & 0xFF, (v >> 8) & 0xFF);
+  const bits = Math.max(2, Math.ceil(Math.log2(Math.max(2, palette.length))));
+  const entries = 1 << bits;
+
+  str('GIF89a');
+  u16(W); u16(H);
+  b.push(0x80 | 0x70 | (bits - 1), 0, 0);        // GCT present, size = 2^bits
+  for(let i = 0; i < entries; i++){
+    const c = palette[i] || [0,0,0];
+    b.push(c[0], c[1], c[2]);
+  }
+  b.push(0x21, 0xFF, 11); str('NETSCAPE2.0'); b.push(3, 1, 0, 0, 0);  // loop forever
+
+  for(const f of frames){
+    const d = Math.max(1, Math.round(f.delay || 2));
+    const packed = (((f.gifDispose === undefined ? 2 : f.gifDispose) & 7) << 2) | 1;
+    b.push(0x21, 0xF9, 4, packed, d & 0xFF, (d >> 8) & 0xFF, 0, 0);
+    b.push(0x2C); u16(f.x); u16(f.y); u16(f.w); u16(f.h); b.push(0);
+    b.push(bits);
+    const data = lzwEncode(f.buf, bits);
+    for(let i = 0; i < data.length; i += 255){
+      const chunk = data.slice(i, i + 255);
+      b.push(chunk.length);
+      for(const v of chunk) b.push(v);
+    }
+    b.push(0);
+  }
+  b.push(0x3B);
+  return new Uint8Array(b);
+}
+
+/* ---------- APNG encoder ---------------------------------------------------
+   Worth having alongside GIF for one specific reason: APNG frame delays are a
+   rational number (delay_num / delay_den), not whole centiseconds. So it can
+   express 1/59.92s exactly -- true NTSC frame timing, which GIF cannot
+   represent at all. Deflate comes from CompressionStream, so still no
+   dependency.                                                              */
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for(let n = 0; n < 256; n++){
+    let c = n;
+    for(let k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(bytes){
+  let c = 0xFFFFFFFF;
+  for(let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xFF] ^ (c >>> 8);
+  return (c ^ 0xFFFFFFFF) >>> 0;
+}
+function pngChunk(type, data){
+  const out = new Uint8Array(12 + data.length);
+  const dv = new DataView(out.buffer);
+  dv.setUint32(0, data.length);
+  for(let i = 0; i < 4; i++) out[4+i] = type.charCodeAt(i);
+  out.set(data, 8);
+  dv.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
+  return out;
+}
+async function deflate(bytes){
+  const cs = new CompressionStream('deflate');            // zlib wrapper, as PNG wants
+  const w = cs.writable.getWriter();
+  w.write(bytes); w.close();
+  const parts = [], rd = cs.readable.getReader();
+  for(;;){ const {done, value} = await rd.read(); if(done) break; parts.push(value); }
+  const total = parts.reduce((a,p)=>a+p.length, 0);
+  const out = new Uint8Array(total);
+  let o = 0; for(const p of parts){ out.set(p, o); o += p.length; }
+  return out;
+}
+
+/* Pack an index buffer into filtered PNG scanlines. Adaptive None/Up per row:
+   at integer pixel scale every source row repeats, so Up zeroes most rows. */
+function pngScanlines(buf, w, h, depth){
+  const stride = depth === 4 ? ((w + 1) >> 1) : w;
+  const raw = new Uint8Array((stride + 1) * h);
+  const cur = new Uint8Array(stride), prev = new Uint8Array(stride);
+  for(let y = 0; y < h; y++){
+    cur.fill(0);
+    if(depth === 4){
+      for(let x = 0; x < w; x++){
+        const v = buf[y*w + x] & 0x0F;
+        if(x & 1) cur[x >> 1] |= v; else cur[x >> 1] = v << 4;
+      }
+    } else {
+      cur.set(buf.subarray(y*w, y*w + w));
+    }
+    let sumNone = 0, sumUp = 0;
+    for(let i = 0; i < stride; i++){
+      const n = cur[i], u = (cur[i] - prev[i]) & 0xFF;
+      sumNone += n < 128 ? n : 256 - n;
+      sumUp   += u < 128 ? u : 256 - u;
+    }
+    const useUp = sumUp < sumNone;
+    const base = y * (stride + 1);
+    raw[base] = useUp ? 2 : 0;
+    for(let i = 0; i < stride; i++)
+      raw[base + 1 + i] = useUp ? (cur[i] - prev[i]) & 0xFF : cur[i];
+    prev.set(cur);
+  }
+  return raw;
+}
+
+async function buildApng(frames, W, H, palette, delayDen){
+  const depth = palette.length <= 16 ? 4 : 8;
+  const be = (...v) => { const a = new Uint8Array(v.length*4); const d = new DataView(a.buffer);
+                         v.forEach((x,i)=>d.setUint32(i*4, x)); return a; };
+  const parts = [new Uint8Array([0x89,0x50,0x4E,0x47,0x0D,0x0A,0x1A,0x0A])];
+
+  const ihdr = new Uint8Array(13); const iv = new DataView(ihdr.buffer);
+  iv.setUint32(0, W); iv.setUint32(4, H);
+  ihdr[8] = depth; ihdr[9] = 3;                            // colour type 3 = indexed
+  parts.push(pngChunk('IHDR', ihdr));
+  parts.push(pngChunk('acTL', be(frames.length, 0)));      // 0 plays = loop forever
+
+  const plte = new Uint8Array(palette.length * 3);
+  palette.forEach((c,i)=>{ plte[i*3]=c[0]; plte[i*3+1]=c[1]; plte[i*3+2]=c[2]; });
+  parts.push(pngChunk('PLTE', plte));
+  parts.push(pngChunk('tRNS', new Uint8Array([0])));       // index 0 fully transparent
+
+  let seq = 0;
+  for(let i = 0; i < frames.length; i++){
+    const f = frames[i];
+    const fctl = new Uint8Array(26); const fv = new DataView(fctl.buffer);
+    fv.setUint32(0, seq++); fv.setUint32(4, f.w); fv.setUint32(8, f.h);
+    fv.setUint32(12, f.x);  fv.setUint32(16, f.y);
+    fv.setUint16(20, f.delayNum); fv.setUint16(22, delayDen);
+    fctl[24] = f.dispose === undefined ? 1 : f.dispose;    // 0 = leave, 1 = clear
+    fctl[25] = 0;                                          // blend: source
+    parts.push(pngChunk('fcTL', fctl));
+    const data = await deflate(pngScanlines(f.buf, f.w, f.h, depth));
+    if(i === 0){
+      parts.push(pngChunk('IDAT', data));
+    } else {
+      const fd = new Uint8Array(4 + data.length);
+      new DataView(fd.buffer).setUint32(0, seq++);
+      fd.set(data, 4);
+      parts.push(pngChunk('fdAT', fd));
+    }
+  }
+  parts.push(pngChunk('IEND', new Uint8Array(0)));
+  const total = parts.reduce((a,p)=>a+p.length, 0);
+  const out = new Uint8Array(total);
+  let o = 0; for(const p of parts){ out.set(p, o); o += p.length; }
+  return out;
 }
 
 /* ---------- export ---------- */
+/* Still exports always render the settled pose with no headroom, so PNG /
+   WebP / AVIF output is unchanged by animation settings. */
 function exportCanvas(){
   const off = document.createElement('canvas');
-  paint(off, state.scale, layout());
+  const L = layout();
+  // force zero headroom so still output is unaffected by animation settings
+  const G = sceneOn() ? geom(L)
+                        : {head:0, w0:L.w + state.pad*2, h0:L.h + state.pad*2};
+  const scale = clampScale(G.w0, G.h0, state.scale, STILL_BUDGET);
+  paint(off, scale, L, 0, G, scrollAt(1e9));
   return off;
+}
+
+/* ---------- animated export ---------- */
+function gifPalette(){
+  const pal = PALETTE.slice();
+  let bgIdx = 0;
+  if(state.bg !== 'none'){
+    const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(state.bg);
+    if(m){ bgIdx = pal.length; pal.push([parseInt(m[1],16), parseInt(m[2],16), parseInt(m[3],16)]); }
+  }
+  return {pal, bgIdx};
+}
+
+function rectUnion(a, b){
+  const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
+  return { x, y, w: Math.max(a.x+a.w, b.x+b.w) - x, h: Math.max(a.y+a.h, b.y+b.h) - y };
+}
+
+/* Frames for both containers. Without a scene the text is drawn on transparency
+   and each frame is disposed back to it, so a frame only needs its own text
+   rect. With a scene the background must persist, so frames are left in place
+   and each one repaints the union of the previous and current text rects --
+   which is what erases the old position. Any frame where the background scroll
+   moved has to be a full repaint. */
+function animFrames(kind){
+  const F = gifFrames(kind === 'gif');
+  const {W, H, pal, bgIdx, runs, offs, L, g, scale} = F;
+  const scene = !!g.scene;
+  const per = state.timebase === 'ntsc' ? 100 : 1;
+  const frames = [];
+  let prevText = null, prevScroll = -1;
+  for(let i = 0; i < runs.length; i++){
+    const r = runs[i];
+    let rect;
+    if(scene){
+      const cur = frameRect(L, scale, r.dy, g, W, H);
+      rect = (i === 0 || r.scroll !== prevScroll) ? {x:0,y:0,w:W,h:H} : rectUnion(prevText, cur);
+      prevText = cur; prevScroll = r.scroll;
+    } else if(bgIdx || (kind === 'apng' && i === 0)){
+      rect = {x:0, y:0, w:W, h:H};          // opaque bg, or APNG's mandatory full first frame
+    } else {
+      rect = frameRect(L, scale, r.dy, g, W, H);
+    }
+    frames.push(Object.assign({
+      buf: paintIndexed(rect, scale, L, r.dy, g, bgIdx, r.scroll),
+      delay: r.delay * 2,                    // GIF: centiseconds
+      delayNum: r.delay * per,               // APNG: numerator over den
+      dispose: scene ? 0 : 1,                // APNG: 0 = leave, 1 = clear
+      gifDispose: scene ? 1 : 2,             // GIF:  1 = leave, 2 = restore to bg
+    }, rect));
+  }
+  return {frames, W, H, pal, scale, runs, offs, scene,
+          den: state.timebase === 'ntsc' ? 5992 : 50};
+}
+
+/* allowResample is a GIF-only concession: GIF can't express 59.92Hz, so NTSC is
+   approximated by dropping to 83 frames. APNG expresses it exactly and must NOT
+   resample, or the two corrections compound. */
+function gifFrames(allowResample){
+  if(allowResample === undefined) allowResample = true;
+  const L = layout(), g = geom(L), scale = scaleFor(L);
+  const W = g.w0*scale, H = g.h0*scale;
+  const {pal, bgIdx} = gifPalette();
+  let offs = motion().frames;
+  if(allowResample && state.timebase === 'ntsc'){
+    // resample the ROM curve onto a 50fps grid so wall-clock matches NTSC
+    const n = Math.round(offs.length / 59.92 / (FRAME_MS/1000));
+    const src = offs;
+    offs = Array.from({length:n}, (_,i) => src[Math.min(src.length-1, Math.round(i*(src.length-1)/(n-1)))]);
+  }
+  // The spring holds still for several frames at a time near each turning point
+  // and at rest. Collapsing each run into one frame with a proportionally longer
+  // delay is exactly equivalent playback and drops roughly a third of the frames.
+  const runs = [];
+  offs.forEach((dy, i) => {
+    const scroll = scrollAt(i);
+    const last = runs[runs.length-1];
+    if(last && last.dy === dy && last.scroll === scroll) last.delay += 1;
+    else runs.push({dy, scroll, delay:1});
+  });
+  return {W, H, pal, bgIdx, offs, runs, L, g, scale};
+}
+
+function estimateGif(){
+  const F = gifFrames();
+  const {W,H,pal,bgIdx,runs,L,g,scale} = F;
+  const scene = !!g.scene;
+  const probe = [0, Math.floor(runs.length/2), runs.length-1];
+  let bytes = 0;
+  const bits = Math.max(2, Math.ceil(Math.log2(Math.max(2, pal.length))));
+  for(const i of probe){
+    const r = runs[i];
+    const rect = (scene && i) ? frameRect(L, scale, r.dy, g, W, H)
+               : (scene || bgIdx) ? {x:0,y:0,w:W,h:H}
+               : frameRect(L, scale, r.dy, g, W, H);
+    bytes += lzwEncode(paintIndexed(rect, scale, L, r.dy, g, bgIdx, r.scroll), bits).length + 18;
+  }
+  return (bytes/probe.length)*runs.length + pal.length*3 + 800;
+}
+
+let estTimer = 0;
+function queueEstimate(){
+  clearTimeout(estTimer);
+  el('sizeOut').textContent = '…';
+  estTimer = setTimeout(()=>{
+    if(state.mode !== 'anim' || !state.text.trim()){ el('sizeOut').textContent = ''; return; }
+    try{
+      const n = estimateGif();
+      el('sizeOut').textContent = '≈' + (n > 1048576 ? (n/1048576).toFixed(1)+' MB' : Math.round(n/1024)+' KB');
+    }catch(e){ el('sizeOut').textContent = ''; }
+  }, 450);
+}
+
+/* ---------- animated export: APNG ---------- */
+// NTSC is 59.92Hz. GIF cannot express that; APNG can, exactly, as 100/5992.
+const apngFrames = () => animFrames('apng');
+
+async function downloadApng(){
+  const btn = el('dlApng'); btn.disabled = true;
+  const wasPlaying = player.playing; pause();
+  try{
+    say('Rendering…');
+    await new Promise(r => setTimeout(r, 0));
+    const {frames, W, H, pal, den} = apngFrames();
+    say('Encoding…');
+    await new Promise(r => setTimeout(r, 0));
+    const bytes = await buildApng(frames, W, H, pal, den);
+    const blob = new Blob([bytes], {type:'image/apng'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName('png'); a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    say('Saved APNG · ' + frames.length + ' frames · '
+        + (state.timebase === 'ntsc' ? '59.92' : '50') + ' Hz exact · '
+        + Math.round(blob.size/1024) + ' KB');
+  }catch(err){
+    say('APNG failed — try a lower scale');
+  }finally{
+    btn.disabled = false;
+    if(wasPlaying) play();
+  }
+}
+
+/* ---------- animated export: WebM / MP4 -----------------------------------
+   MediaRecorder timestamps frames by when they actually arrive, so this is a
+   real-time capture: a 2s animation takes 2s to record and the frame timing is
+   only as good as the main thread was on the day. captureStream(0) at least
+   makes the frame *contents* deterministic -- each one is pushed explicitly
+   rather than sampled off the compositor. Lossy, and H.264 has no alpha.   */
+async function recordVideo(mime, ext, btnId){
+  const btn = el(btnId); btn.disabled = true;
+  const wasPlaying = player.playing; pause();
+  let stop = () => {};
+  try{
+    const L = layout(), g = geom(L), scale = scaleFor(L);
+    const W = g.w0*scale, H = g.h0*scale;
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const frames = motion().frames;
+    const stream = cv.captureStream(0);
+    const track = stream.getVideoTracks()[0];
+    const rec = new MediaRecorder(stream, {mimeType: mime, videoBitsPerSecond: 12e6});
+    const chunks = [];
+    rec.ondataavailable = e => e.data.size && chunks.push(e.data);
+    const done = new Promise(r => rec.onstop = r);
+    stop = () => { try{ rec.stop(); }catch(e){} };
+    rec.start();
+    const step = state.timebase === 'ntsc' ? 1000/59.92 : 20;
+    let t0 = performance.now();
+    for(let i = 0; i < frames.length; i++){
+      paint(cv, scale, L, frames[i], g, scrollAt(i));
+      if(track.requestFrame) track.requestFrame();
+      if(i % 10 === 0) say('Recording ' + Math.round(i/frames.length*100) + '%');
+      const target = t0 + (i+1)*step;
+      await new Promise(r => setTimeout(r, Math.max(0, target - performance.now())));
+    }
+    rec.stop(); await done;
+    const blob = new Blob(chunks, {type: mime.split(';')[0]});
+    if(!blob.size) throw new Error('empty recording');
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName(ext); a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    say('Saved ' + ext.toUpperCase() + ' · real-time capture · ' + Math.round(blob.size/1024) + ' KB');
+  }catch(err){
+    stop();
+    say(ext.toUpperCase() + ' failed — ' + (err.message || 'not supported here'));
+  }finally{
+    btn.disabled = false;
+    if(wasPlaying) play();
+  }
+}
+
+const VIDEO = {
+  webm: ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'],
+  mp4:  ['video/mp4;codecs=avc1.42E01E', 'video/mp4'],
+};
+function videoMime(kind){
+  if(typeof MediaRecorder === 'undefined') return null;
+  return VIDEO[kind].find(t => MediaRecorder.isTypeSupported(t)) || null;
+}
+const SUP_APNG = typeof CompressionStream !== 'undefined';
+
+async function downloadGif(){
+  const btn = el('dlGif');
+  btn.disabled = true;
+  const wasPlaying = player.playing;
+  pause();
+  try{
+    say('Rendering…');
+    await new Promise(r => setTimeout(r, 0));
+    const {frames, W, H, pal, runs, offs} = animFrames('gif');
+    say('Encoding…');
+    await new Promise(r => setTimeout(r, 0));
+    const bytes = buildGif(frames, W, H, pal);
+    const blob = new Blob([bytes], {type:'image/gif'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = fileName('gif'); a.click();
+    setTimeout(()=>URL.revokeObjectURL(url), 4000);
+    say('Saved GIF · ' + runs.length + ' frames (' + offs.length + ' ROM) · '
+        + (offs.length*FRAME_MS/1000).toFixed(2) + 's · ' + Math.round(blob.size/1024) + ' KB');
+  }catch(err){
+    say('GIF failed — try a lower scale');
+  }finally{
+    btn.disabled = false;
+    if(wasPlaying) play();
+  }
 }
 function fileName(ext){
   const base = state.text.trim().toUpperCase().replace(/&/g,'and')
@@ -376,7 +1255,12 @@ function supports(mime){
 }
 
 /* ---------- wiring ---------- */
-el('text').addEventListener('input', e=>{ state.text = e.target.value; render(); });
+el('text').addEventListener('input', e=>{
+  state.text = e.target.value;
+  // typing while paused should show what you typed, not a mid-entry frame
+  if(state.mode === 'anim' && !player.playing) showRest();
+  render();
+});
 
 document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',()=>{
   state.text = b.dataset.preset; el('text').value = state.text; render(); el('text').focus();
@@ -423,6 +1307,77 @@ el('custom').addEventListener('input', e=>{
   render();
 });
 
+/* ---------- animation wiring ---------- */
+const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+el('mode').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  state.mode = b.dataset.mode;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  document.body.classList.toggle('anim', state.mode === 'anim');
+  pause();
+  showRest();
+  render();
+});
+
+el('timebase').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  state.timebase = b.dataset.tb;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  render();
+});
+
+el('scene').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b || b.disabled) return;
+  state.scene = b.dataset.scene;
+  if(state.scene !== 'off'){
+    state.sceneY = SCENES[state.scene].y;
+    el('sceneY').value = state.sceneY; el('sceneYVal').textContent = state.sceneY;
+  }
+  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  document.body.classList.toggle('scene', sceneOn());
+  curveCache.key = '';
+  if(!player.playing) showRest();
+  render();
+});
+el('sceneY').addEventListener('input', e=>{
+  state.sceneY = +e.target.value;
+  el('sceneYVal').textContent = e.target.value;
+  render();
+});
+
+el('play').addEventListener('click', ()=> player.playing ? pause() : play());
+el('scrub').addEventListener('input', e=>{ pause(); player.frame = +e.target.value; render(); });
+
+const MOTION = [
+  ['dist','distVal',  v => String(v)],
+  ['vel0','vel0Val',  v => String(v)],
+  ['accel','accelVal',v => String(v)],
+  ['damp','dampVal',  v => String(v)],
+  ['amp','ampVal',    v => v + '%'],
+  ['head','headVal',  v => v < 0 ? 'auto' : String(v)]
+];
+MOTION.forEach(([id,out,fmt])=>{
+  el(id).addEventListener('input', e=>{
+    state[id] = +e.target.value;
+    el(out).textContent = fmt(+e.target.value);
+    if(player.frame >= motion().frames.length) showRest();
+    render();
+  });
+});
+
+el('romReset').addEventListener('click', ()=>{
+  Object.assign(state, ROM, {amp:100, head:-1});
+  MOTION.forEach(([id,out,fmt])=>{ el(id).value = state[id]; el(out).textContent = fmt(state[id]); });
+  if(!player.playing) showRest(); else player.frame = 0;
+  render();
+});
+
+el('dlGif').onclick  = downloadGif;
+el('dlApng').onclick = downloadApng;
+el('dlWebm').onclick = ()=>recordVideo(videoMime('webm'), 'webm', 'dlWebm');
+el('dlMp4').onclick  = ()=>recordVideo(videoMime('mp4'),  'mp4',  'dlMp4');
+
 el('dlPng').onclick  = ()=>download('image/png','png');
 el('dlWebp').onclick = ()=>download('image/webp','webp');
 el('dlAvif').onclick = ()=>download('image/avif','avif');
@@ -435,12 +1390,24 @@ el('copy').onclick = async ()=>{
 };
 
 atlas.onload = ()=>{
-  ready = true;
+  buildIndexed();
   SUP.webp = supports('image/webp');
   SUP.avif = supports('image/avif');
   if(!SUP.webp) el('dlWebp').title = "This browser can't encode WebP";
   if(!SUP.avif) el('dlAvif').title = "This browser can't encode AVIF";
-  render();
+  // the scene background shares the font's palette, so it must index after it
+  // both scenes share the font's palette, so they must be indexed after it
+  const ids = Object.keys(SCENES);
+  let pending = ids.length;
+  const done = ()=>{ if(--pending === 0){ ready = true; render(); } };
+  for(const id of ids){
+    const img = new Image();
+    img.onload  = ()=>{ bgImgs[id] = img; buildBackground(id); done(); };
+    img.onerror = ()=>{ const b = el('scene').querySelector(`button[data-scene="${id}"]`);
+                        if(b) b.disabled = true; done(); };
+    bgImgs[id] = img;
+    img.src = SCENES[id].src;
+  }
 };
 atlas.src = ATLAS_SRC;
 </script>
