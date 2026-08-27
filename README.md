@@ -97,6 +97,23 @@ descriptor word is fetched the instant the last bit is used, so it precedes the 
 bytes; and `Eni_Decomp` *adds* its base value to each word rather than OR-ing it, which
 only looks equivalent while the base is pure high flag bits.
 
+### The GIF encoder's LZW width
+
+A third trap, and the nastiest, because it produced files that opened without complaint
+and were still wrong. Code width has to grow **one code later than the obvious reading of
+the spec**: a decoder builds its table an entry behind the encoder, so growing at
+`next === (1<<codeSize)` desyncs every real decoder at the first width change. Everything
+before that point decodes perfectly and everything after is garbage — which is exactly why
+the files still parsed, reported the right size and frame count, and looked fine until you
+scrolled down.
+
+The round-trip test missed it for the same reason it existed. When the test decoder first
+disagreed with the encoder, the *decoder* was changed to match — so the pair agreed with
+each other and with nothing else. It now implements the standard rule and runs across code
+widths 3 to 8; the old encoder fails it 21 ways, all at the first width boundary. On top of
+that, exported GIFs are parsed back and every frame LZW-decoded against the buffer it came
+from, so a silent desync cannot come back.
+
 ## Spacing
 
 Both outlined defaults used to be negative — `track -2`, `lead -2` — which merged
