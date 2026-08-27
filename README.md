@@ -52,7 +52,8 @@ space the text drops into.
 **S3** is `S3 Sonic D.kos` (Kosinski, 650 tiles) plus `S3 BG.eni` and `S3 Sonic D.eni`
 (Enigma tilemaps, 40&times;28 each) with `S3 Sonic D.bin`, 44 colours.
 
-**S&K** was harder, and needed two more formats. The art is `SK Screen Background.kos`
+**S&K** shows Sonic and Knuckles side by side with the Death Egg behind them, and needed
+two more formats. The art is `SK Screen Background.kos`
 plus `SK Sonic Knuckles.kosm` — **moduled Kosinski**, seven 4096-byte modules, each
 starting on a 16-byte boundary measured from after the size header. Then the tiles that
 Knuckles' face and fists occupy are *placeholders* in the ROM blob: `Obj_SKTitle_HandAnim`
@@ -60,6 +61,16 @@ DMAs over tiles 1&ndash;3, 4&ndash;44, 45&ndash;91 and 92&ndash;111 at runtime f
 `SK Sonic and Knuckles Hands.kos`. Without replaying those four DMAs you get a block of
 leftover garbage across his chest. Palette lines matter too: `Normal_palette_line_2` is
 index 1, so Knuckles' palette lands there rather than where the name suggests.
+
+Plane A also has **four** candidate tilemaps, `SK SonicKnux Frame 1-4.eni`, and only
+Frame&nbsp;4 is the settled title pose with both characters — Frame&nbsp;1 is Knuckles
+alone, and Frames&nbsp;2 and&nbsp;3 reference art beyond the standing blob. Getting that
+wrong produces a screen that looks plausible until you notice Sonic is missing.
+
+Two sprites sit on top of the planes rather than in them: `Obj_SKTitle_DeathEgg` at
+`x_pos $140`, and `Obj_SKTitle_Mountain` at `$140/$1A8` less the `$100` the setup pins
+`Camera_Y_pos_P2` to. The Death Egg descends from `$B0` to `$F0` during the sequence; the
+familiar title-screen shot has it high, so `$B0` is what is baked in.
 
 ### The S&K background moves
 
