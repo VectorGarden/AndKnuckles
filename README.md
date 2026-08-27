@@ -61,11 +61,25 @@ DMAs over tiles 1&ndash;3, 4&ndash;44, 45&ndash;91 and 92&ndash;111 at runtime f
 leftover garbage across his chest. Palette lines matter too: `Normal_palette_line_2` is
 index 1, so Knuckles' palette lands there rather than where the name suggests.
 
-Both ship the settled pose. The S&K title screen is a multi-stage sequence in the
-original — SEGA logo, Sonic falling, then the idle animation cycling `SK SonicKnux
-Frame 1-4.eni` — and the S3 one cycles its water palette. Animating either would fight
-the text for attention and multiply the file size, so what is baked in is the frame the
-sequence settles on.
+### The S&K background moves
+
+Knuckles cracks his knuckles. `Obj_SKTitle_HandAnim` runs four independent channels —
+face, finger-tap and two knuckle channels — each a script of frame values that index
+tile art, DMA'd over fixed slots every 3&ndash;5 frames. Their periods are 10, 138, 45
+and 21 game frames, so **all four only realign after 14,490 frames — four minutes**.
+There is no short loop that closes all of them.
+
+So the two knuckle channels run and the other two hold at rest. Those resync every
+**315 frames**, which becomes the animated export's length: the text spring settles at
+frame 100 and Knuckles keeps going to 315, where everything lines up exactly. Only a
+128&times;64 region changes, and the two channels have three art states each, so all
+nine combinations are pre-rendered into one 3.8&nbsp;KB strip rather than composited from
+tiles at runtime. At 1&times; scale that takes the GIF from 319&nbsp;KB to 729&nbsp;KB —
+roughly double, not the 3&times; the longer duration would suggest, because the frames
+outside that region are unchanged and cost almost nothing.
+
+It is a toggle. The S3 background stays static: its motion is a water palette cycle,
+which has no equivalent cheap representation and would repaint most of the frame.
 
 ## Animated export
 
@@ -118,13 +132,16 @@ descriptor word is fetched the instant the last bit is used, so it precedes the 
 bytes; and `Eni_Decomp` *adds* its base value to each word rather than OR-ing it, which
 only looks equivalent while the base is pure high flag bits.
 
-## Line spacing
+## Spacing
 
-The outlined style used to default to a line spacing of `-2`, which made adjacent rows
-share a single navy border and read as one cramped mass. Nothing was actually lost —
-the 2px overlap is navy on navy — but it looked wrong, so the default is now `0`: the
-outlines touch, each line stays its own. The slider still goes negative if you want the
-old look.
+Both outlined defaults used to be negative — `track -2`, `lead -2` — which merged
+neighbouring glyphs and rows into one continuous navy mass. Nothing was ever lost (the
+overlap is navy on navy, measured as zero altered pixels) but it read as broken.
+
+The tight look is genuinely authentic: rendering the ROM's own `& KNUCKLES` bitmap
+comes out **168px** wide against 180px for our `-2` and 198px for `0`, so Sega packed it
+tighter still. Both defaults are nevertheless `0` now, because legibility wins for a tool
+you type arbitrary text into. Set letter spacing to about `-3` to reproduce the ROM.
 
 ## Character set
 
