@@ -184,12 +184,22 @@ step on the bottom-right edge. Deriving it means the two glyphs cannot drift apa
 
 ## Deploy
 
-The `CNAME` file pins the custom domain. On the DNS side there's one record:
+Pushes to `main` deploy through [`.github/workflows/pages.yml`](.github/workflows/pages.yml).
+Repo Settings → Pages → Source must be **GitHub Actions** for it to publish.
+
+The workflow copies `index.html` and `CNAME` into `_site` and uploads that, rather than
+uploading the repository root, so `README.md`, `.gitignore` and `.github/` are not served.
+Two guards run first: `index.html` has to be non-empty and has to contain a closing
+`</html>`, so a truncated file fails the build instead of replacing a working site.
+
+On the DNS side there's one record:
 
     CNAME   andknuckles   →   <username>.github.io.
 
-Repo Settings → Pages → Source: *Deploy from a branch* → `main` / `/ (root)`,
-then tick **Enforce HTTPS** once the certificate finishes provisioning.
+The custom domain and **Enforce HTTPS** live in the Pages settings. `CNAME` is still in the
+repo and still shipped in the artifact — under Actions deployment the domain comes from the
+settings rather than that file, but keeping it costs nothing and means a switch back to
+branch deployment would still work.
 
 ## Credits
 

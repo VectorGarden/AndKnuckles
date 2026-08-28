@@ -1,0 +1,50 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege that still lets deploy-pages mint its OIDC token.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a deployment midway; queue instead.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Assemble the site
+        # The whole site is one file. Copying explicitly keeps README.md,
+        # .github/ and .gitignore out of what gets served.
+        run: |
+          set -euo pipefail
+          test -s index.html || { echo "::error::index.html is missing or empty"; exit 1; }
+          grep -q '</html>' index.html || { echo "::error::index.html looks truncated"; exit 1; }
+          mkdir -p _site
+          cp index.html CNAME _site/
+          echo "site contents:"; ls -l _site
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v6
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v5
