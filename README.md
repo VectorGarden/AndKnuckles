@@ -29,6 +29,19 @@ array, so recolouring rewrites `PALETTE[1..7]` and the preview, PNG, GIF and APN
 follow. The preview draws from a tinted copy of the atlas, rebuilt only when the colours
 actually change.
 
+### Saving
+
+Palettes you build can be named and kept. A saved entry stores the sheet ramp **and** any
+per-line assignments, so a two-tone title comes back whole rather than as one colour you
+then have to reassign. Saved palettes also appear as options in the per-line chips.
+
+They live in `localStorage`, which means this browser only — there is no account and
+nothing leaves the page. Some origins block storage outright (a `data:` URL does, and
+private windows can), so availability is probed at load and the controls are disabled with
+an explanation rather than failing after you have typed a name. Stored data is treated as
+untrusted on read: anything not shaped like a palette is skipped and colours are clamped,
+so a corrupt or hand-edited entry cannot break startup.
+
 ### Per line
 
 Lines can each take their own palette, which is how the original logo gets a blue
