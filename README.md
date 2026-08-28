@@ -29,6 +29,18 @@ array, so recolouring rewrites `PALETTE[1..7]` and the preview, PNG, GIF and APN
 follow. The preview draws from a tinted copy of the atlas, rebuilt only when the colours
 actually change.
 
+### Per line
+
+Lines can each take their own palette, which is how the original logo gets a blue
+`SONIC &` over a red `KNUCKLES`. A row of chips appears under the palette control once
+the text has more than one line; leaving a line on **auto** follows the sheet palette.
+
+Indexed exports need a palette slot per distinct ramp, so extra ramps are appended past
+the scene colours as *banks* and each line's glyph pixels are offset by its bank base. The
+default ramp keeps slots 1&ndash;7, so a single-palette render allocates nothing extra.
+Worst case is the 12-line limit against six presets, which still lands inside a 256-entry
+GIF colour table.
+
 The catch was that the backgrounds shared those indices. Scene colours were deduped
 against the font's, so the S&K screen was drawing **6,958 pixels of Knuckles** with the
 font's red and both screens drew their whites with the font's specular — recolouring the

@@ -161,6 +161,22 @@
   .lbl b.ok{color:var(--gold)}
   .lbl b.warn{color:var(--ember)}
   #animCtl{margin-top:14px}
+  /* per-line palette chips */
+  .lines{display:flex;flex-direction:column;gap:6px;margin-top:4px}
+  .lineRow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .lineRow .who{
+    font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--dim);min-width:52px;
+  }
+  .chip2{
+    width:22px;height:22px;padding:0;cursor:pointer;border:2px solid var(--edge);
+    background-clip:padding-box;
+  }
+  .chip2[aria-pressed="true"]{border-color:var(--gold);box-shadow:inset 0 0 0 2px var(--void)}
+  .chip2.auto{
+    background:linear-gradient(135deg,#FCB400 0 50%,#2E1470 50% 100%);
+  }
+  .lineRow input[type=color]{width:22px;height:22px}
   .note{
     display:block;font-family:var(--mono);font-size:10px;line-height:1.8;letter-spacing:.08em;
     text-transform:uppercase;color:#7E6FBC;margin-top:10px;
@@ -288,6 +304,10 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
         <span class="lbl" style="margin:0 0 0 4px">Recolours the letters only, never the
         background. The custom picker derives the whole ramp — shadow, highlight, outline —
         from one face colour, snapped to the Genesis palette's 36-step channels.</span>
+      </div>
+      <div id="lineCtl" hidden>
+        <span class="lbl" style="margin:14px 0 0">Per line <b id="lineHint"></b></span>
+        <div class="lines" id="lines"></div>
       </div>
     </div>
 
@@ -418,7 +438,7 @@ let ready = false;
 
 const SUP = { webp:true, avif:true };
 const state = {
-  text:'', style:'outline', scale:4, track:0, lead:0, pad:0, palette:'classic', tint:'#FCB400',
+  text:'', style:'outline', scale:4, track:0, lead:0, pad:0, palette:'classic', tint:'#FCB400', linePalettes:[],
   align:'center', bg:'none', touchedTrack:false, touchedLead:false,
   mode:'still', timebase:'pal', scene:'off', sceneY:176,
   dist:96, vel0:4, accel:0.25, damp:0.5, amp:100, head:-1
@@ -490,8 +510,9 @@ function paint(target, scale, L, dy, G, scroll){
     if(state.align==='center') ox = Math.round((L.w - line.w)/2);
     if(state.align==='right')  ox = L.w - line.w;
     const oy = i*(L.rowh + state.lead);
+    const atlasForLine = tintedAtlas(rampForLine(i));
     for(const {g,x} of line.items){
-      c.drawImage(tintedAtlas(), g[0],g[1],g[2],g[3],
+      c.drawImage(atlasForLine, g[0],g[1],g[2],g[3],
         (o.x + ox + x)*scale, (o.y + oy + g[4] + dy)*scale, g[2]*scale, g[3]*scale);
     }
   });
@@ -532,6 +553,7 @@ function render(){
   el('dims').textContent = W + ' × ' + H + ' px';
   el('scaleOut').textContent = scale + '×' + (scale !== state.scale ? ' (capped)' : '');
   el('skipped').textContent = L.skipped.length ? '· skipped ' + L.skipped.join(' ') : '';
+  renderLineRows();
 
   const has = !!state.text.trim();
   el('dlPng').disabled = !has;
@@ -728,26 +750,61 @@ function applyPalette(cols){
   for(let i=0;i<FONT_SLOTS;i++) PALETTE[i+1] = cols[i].slice();
   tintKey = '';
 }
-let tintCanvas = null, tintKey = '';
-function tintedAtlas(){
-  const key = PALETTE.slice(1, FONT_SLOTS+1).map(c=>c.join(',')).join('|');
-  if(tintCanvas && tintKey === key) return tintCanvas;
-  if(!tintCanvas){
-    tintCanvas = document.createElement('canvas');
-    tintCanvas.width = ATLAS_W; tintCanvas.height = ATLAS_H;
-  }
-  const cx = tintCanvas.getContext('2d');
+const hexRgb = h => { const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(h);
+  return m ? [parseInt(m[1],16), parseInt(m[2],16), parseInt(m[3],16)] : null; };
+
+/* A palette selection is either a preset name or a hex face colour. */
+function rampOf(sel){
+  if(!sel) return PALETTE.slice(1, FONT_SLOTS+1);      // whatever the sheet palette is now
+  if(PALETTES[sel]) return PALETTES[sel];
+  const rgb = hexRgb(sel);
+  return rgb ? rampFrom(rgb) : PALETTE.slice(1, FONT_SLOTS+1);
+}
+/* Lines default to the sheet palette; state.linePalettes overrides per line,
+   which is how the original logo gets a blue SONIC over a red KNUCKLES. */
+const rampForLine = i => rampOf(state.linePalettes[i]);
+const rampKey = r => r.map(c=>c.join(',')).join('|');
+
+/* One tinted atlas per distinct ramp on screen, cached by that ramp. */
+const tintCache = new Map();
+function tintedAtlas(ramp){
+  ramp = ramp || PALETTE.slice(1, FONT_SLOTS+1);
+  const key = rampKey(ramp);
+  const hit = tintCache.get(key);
+  if(hit) return hit;
+  const cv = document.createElement('canvas');
+  cv.width = ATLAS_W; cv.height = ATLAS_H;
+  const cx = cv.getContext('2d');
   const img = cx.createImageData(ATLAS_W, ATLAS_H);
   const d = img.data;
   for(let p=0, o=0; p<ATLAS_IDX.length; p++, o+=4){
     const v = ATLAS_IDX[p];
     if(!v) continue;                       // index 0 stays transparent
-    const c = PALETTE[v];
+    const c = ramp[v-1];
     d[o]=c[0]; d[o+1]=c[1]; d[o+2]=c[2]; d[o+3]=255;
   }
   cx.putImageData(img, 0, 0);
-  tintKey = key;
-  return tintCanvas;
+  if(tintCache.size > 24) tintCache.clear();
+  tintCache.set(key, cv);
+  return cv;
+}
+
+/* Indexed exports need a palette slot per distinct ramp. The default ramp keeps
+   slots 1..7; any extra ramp is appended past the scene colours and its glyph
+   pixels are offset by that bank's base. */
+function paletteBanks(L){
+  const pal = PALETTE.slice();
+  const defKey = rampKey(PALETTE.slice(1, FONT_SLOTS+1));
+  const seen = new Map([[defKey, 0]]);
+  const banks = L.lines.map((_, i) => {
+    const key = rampKey(rampForLine(i));
+    if(seen.has(key)) return seen.get(key);
+    const base = pal.length - 1;           // base + v lands on the first new slot
+    for(const c of rampForLine(i)) pal.push(c.slice());
+    seen.set(key, base);
+    return base;
+  });
+  return {pal, banks};
 }
 function buildIndexed(){
   const c = document.createElement('canvas');
@@ -848,7 +905,7 @@ function fillBackground(buf, rect, scale, scroll){
 }
 
 /* Draw one frame into a palette-index buffer (0 = transparent). */
-function paintIndexed(rect, scale, L, dy, G, bgIdx, scroll){
+function paintIndexed(rect, scale, L, dy, G, bgIdx, scroll, banks){
   const W = rect.w, H = rect.h;
   const buf = new Uint8Array(W * H);
   if(G.scene) fillBackground(buf, rect, scale, scroll||0);
@@ -862,6 +919,7 @@ function paintIndexed(rect, scale, L, dy, G, bgIdx, scroll){
     for(const {g, x} of line.items){
       const dx0 = (o.x + ox + x)*scale - rect.x;
       const dy0 = (o.y + oy + g[4] + dy)*scale - rect.y;
+      const bank = banks ? banks[i] : 0;
       const [sx, sy, sw, sh] = g;
       for(let yy = 0; yy < sh; yy++){
         const srow = (sy + yy)*ATLAS_W + sx;
@@ -872,10 +930,11 @@ function paintIndexed(rect, scale, L, dy, G, bgIdx, scroll){
           for(let xx = 0; xx < sw; xx++){
             const v = ATLAS_IDX[srow + xx];
             if(!v) continue;
+            const bv = bank + v;
             const tx0 = dx0 + xx*scale;
             for(let rx = 0; rx < scale; rx++){
               const tx = tx0 + rx;
-              if(tx >= 0 && tx < W) buf[trow + tx] = v;
+              if(tx >= 0 && tx < W) buf[trow + tx] = bv;
             }
           }
         }
@@ -1088,8 +1147,8 @@ function exportCanvas(){
 }
 
 /* ---------- animated export ---------- */
-function gifPalette(){
-  const pal = PALETTE.slice();
+function gifPalette(L){
+  const pal = L ? paletteBanks(L).pal : PALETTE.slice();
   let bgIdx = 0;
   if(state.bg !== 'none'){
     const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(state.bg);
@@ -1129,7 +1188,7 @@ function animFrames(kind){
       rect = frameRect(L, scale, r.dy, g, W, H);
     }
     frames.push(Object.assign({
-      buf: paintIndexed(rect, scale, L, r.dy, g, bgIdx, r.scroll),
+      buf: paintIndexed(rect, scale, L, r.dy, g, bgIdx, r.scroll, F.banks),
       delay: r.delay * 2,                    // GIF: centiseconds
       delayNum: r.delay * per,               // APNG: numerator over den
       dispose: scene ? 0 : 1,                // APNG: 0 = leave, 1 = clear
@@ -1147,7 +1206,8 @@ function gifFrames(allowResample){
   if(allowResample === undefined) allowResample = true;
   const L = layout(), g = geom(L), scale = scaleFor(L);
   const W = g.w0*scale, H = g.h0*scale;
-  const {pal, bgIdx} = gifPalette();
+  const {pal, bgIdx} = gifPalette(L);
+  const banks = paletteBanks(L).banks;
   let offs = motion().frames;
   if(allowResample && state.timebase === 'ntsc'){
     // resample the ROM curve onto a 50fps grid so wall-clock matches NTSC
@@ -1165,12 +1225,12 @@ function gifFrames(allowResample){
     if(last && last.dy === dy && last.scroll === scroll) last.delay += 1;
     else runs.push({dy, scroll, delay:1});
   });
-  return {W, H, pal, bgIdx, offs, runs, L, g, scale};
+  return {W, H, pal, bgIdx, banks, offs, runs, L, g, scale};
 }
 
 function estimateGif(){
   const F = gifFrames();
-  const {W,H,pal,bgIdx,runs,L,g,scale} = F;
+  const {W,H,pal,bgIdx,banks,runs,L,g,scale} = F;
   const scene = !!g.scene;
   const probe = [0, Math.floor(runs.length/2), runs.length-1];
   let bytes = 0;
@@ -1180,7 +1240,7 @@ function estimateGif(){
     const rect = (scene && i) ? frameRect(L, scale, r.dy, g, W, H)
                : (scene || bgIdx) ? {x:0,y:0,w:W,h:H}
                : frameRect(L, scale, r.dy, g, W, H);
-    bytes += lzwEncode(paintIndexed(rect, scale, L, r.dy, g, bgIdx, r.scroll), bits).length + 18;
+    bytes += lzwEncode(paintIndexed(rect, scale, L, r.dy, g, bgIdx, r.scroll, banks), bits).length + 18;
   }
   return (bytes/probe.length)*runs.length + pal.length*3 + 800;
 }
@@ -1356,6 +1416,63 @@ el('style').addEventListener('click', e=>{
   const d = DEFAULTS[state.style];
   if(!state.touchedTrack){ state.track = d.track; el('track').value = d.track; el('trackVal').textContent = d.track; }
   if(!state.touchedLead){ state.lead = d.lead; el('lead').value = d.lead; el('leadVal').textContent = d.lead; }
+  render();
+});
+
+/* One row of palette chips per line of text. Rebuilt whenever the line count
+   changes, preserving whatever each line was already set to. */
+function renderLineRows(){
+  const n = layout().lines.length;
+  const box = el('lineCtl');
+  if(n < 2){ box.hidden = true; return; }
+  box.hidden = false;
+  el('lineHint').textContent = n + ' lines';
+  const host = el('lines');
+  if(+host.dataset.n === n) { syncLineChips(); return; }
+  host.dataset.n = n;
+  host.innerHTML = '';
+  for(let i = 0; i < n; i++){
+    const row = document.createElement('div');
+    row.className = 'lineRow';
+    row.innerHTML = '<span class="who">Line ' + (i+1) + '</span>';
+    const add = (sel, title, style, cls) => {
+      const b = document.createElement('button');
+      b.className = 'chip2' + (cls ? ' ' + cls : '');
+      b.title = title; b.dataset.line = i; b.dataset.sel = sel;
+      if(style) b.style.background = style;
+      row.appendChild(b);
+    };
+    add('', 'Follow the sheet palette', '', 'auto');
+    for(const name of Object.keys(PALETTES)){
+      const face = (PALETTES[name] || FONT_BASE)[1];
+      add(name, name[0].toUpperCase()+name.slice(1), 'rgb('+face.join(',')+')');
+    }
+    const pick = document.createElement('input');
+    pick.type = 'color'; pick.dataset.line = i;
+    pick.title = 'Custom colour for this line';
+    pick.value = '#FC0000';
+    row.appendChild(pick);
+    host.appendChild(row);
+  }
+  syncLineChips();
+}
+function syncLineChips(){
+  el('lines').querySelectorAll('.chip2').forEach(b=>{
+    const cur = state.linePalettes[+b.dataset.line] || '';
+    b.setAttribute('aria-pressed', String(cur === b.dataset.sel));
+  });
+}
+el('lines').addEventListener('click', e=>{
+  const b = e.target.closest('.chip2'); if(!b) return;
+  state.linePalettes[+b.dataset.line] = b.dataset.sel || undefined;
+  syncLineChips();
+  render();
+});
+el('lines').addEventListener('input', e=>{
+  const t = e.target;
+  if(t.type !== 'color') return;
+  state.linePalettes[+t.dataset.line] = t.value;
+  syncLineChips();
   render();
 });
 
