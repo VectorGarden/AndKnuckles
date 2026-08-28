@@ -273,6 +273,24 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
       <input type="range" id="pad" aria-label="Edge padding" min="0" max="32" step="1" value="0">
     </div>
 
+    <div class="ctl" style="grid-column:1/-1;border-right:0">
+      <span class="lbl">Palette</span>
+      <div class="bgrow">
+        <div class="seg" id="palette" role="group" aria-label="Palette">
+          <button data-pal="classic" aria-pressed="true">Classic</button>
+          <button data-pal="knuckles" aria-pressed="false">Knuckles</button>
+          <button data-pal="sonic" aria-pressed="false">Sonic</button>
+          <button data-pal="tails" aria-pressed="false">Tails</button>
+          <button data-pal="shadow" aria-pressed="false">Shadow</button>
+          <button data-pal="emerald" aria-pressed="false">Emerald</button>
+        </div>
+        <input type="color" id="tint" value="#FCB400" title="Custom face colour">
+        <span class="lbl" style="margin:0 0 0 4px">Recolours the letters only, never the
+        background. The custom picker derives the whole ramp — shadow, highlight, outline —
+        from one face colour, snapped to the Genesis palette's 36-step channels.</span>
+      </div>
+    </div>
+
     <div class="ctl" style="grid-column:1/-1;border-bottom:0;border-right:0">
       <span class="lbl">Background</span>
       <div class="bgrow">
@@ -400,7 +418,7 @@ let ready = false;
 
 const SUP = { webp:true, avif:true };
 const state = {
-  text:'', style:'outline', scale:4, track:0, lead:0, pad:0,
+  text:'', style:'outline', scale:4, track:0, lead:0, pad:0, palette:'classic', tint:'#FCB400',
   align:'center', bg:'none', touchedTrack:false, touchedLead:false,
   mode:'still', timebase:'pal', scene:'off', sceneY:176,
   dist:96, vel0:4, accel:0.25, damp:0.5, amp:100, head:-1
@@ -473,7 +491,7 @@ function paint(target, scale, L, dy, G, scroll){
     if(state.align==='right')  ox = L.w - line.w;
     const oy = i*(L.rowh + state.lead);
     for(const {g,x} of line.items){
-      c.drawImage(atlas, g[0],g[1],g[2],g[3],
+      c.drawImage(tintedAtlas(), g[0],g[1],g[2],g[3],
         (o.x + ox + x)*scale, (o.y + oy + g[4] + dy)*scale, g[2]*scale, g[3]*scale);
     }
   });
@@ -674,6 +692,63 @@ function isRomStock(){
    palette), so an indexed representation is lossless. GIF export needs it,
    and palette recolouring will reuse it.                                   */
 let ATLAS_IDX = null, PALETTE = null, ATLAS_W = 0, ATLAS_H = 0;
+
+/* The sheet is seven opaque colours, and they form a ramp with fixed roles:
+   accent, face, shadow, specular, highlight, soft highlight, outline. Swapping
+   those seven is the whole recolouring feature -- every glyph, both styles and
+   every export path take their colours from PALETTE, so rewriting it in place
+   is enough. FONT_BASE keeps the originals for Classic and for derived ramps. */
+const FONT_SLOTS = 7;
+let FONT_BASE = null;
+
+// Genesis palette entries are 3 bits per channel, so legal values are multiples
+// of 36. Snapping keeps derived ramps in the same colour space as the artwork.
+const gsnap = v => Math.max(0, Math.min(252, Math.round(v/36)*36));
+const shade = (c, f) => c.map(v => gsnap(v*f));
+const tint  = (c, f) => c.map(v => gsnap(v + (252-v)*f));
+
+/* Build a full ramp from one face colour, following the sheet's own roles. */
+function rampFrom(face){
+  return [shade(face,0.45), face.map(gsnap), shade(face,0.72), [252,252,252],
+          tint(face,0.45), tint(face,0.72), shade(face,0.22)];
+}
+
+const PALETTES = {
+  classic:  null,                                    // filled from FONT_BASE at load
+  knuckles: [[144,0,0],[252,0,0],[180,0,0],[252,252,252],[252,108,108],[252,180,180],[72,0,36]],
+  sonic:    [[0,0,144],[0,72,252],[0,0,216],[252,252,252],[108,180,252],[180,216,252],[0,0,72]],
+  tails:    [[144,72,0],[252,144,0],[216,108,0],[252,252,252],[252,216,108],[252,252,180],[72,36,0]],
+  shadow:   [[252,0,0],[108,108,108],[72,72,72],[252,252,252],[180,180,180],[216,216,216],[0,0,0]],
+  emerald:  [[0,108,0],[0,216,72],[0,144,36],[252,252,252],[108,252,144],[180,252,216],[0,36,0]],
+};
+
+/* Recolouring rewrites PALETTE[1..7]; the tinted atlas and every indexed export
+   path pick the change up from there. */
+function applyPalette(cols){
+  for(let i=0;i<FONT_SLOTS;i++) PALETTE[i+1] = cols[i].slice();
+  tintKey = '';
+}
+let tintCanvas = null, tintKey = '';
+function tintedAtlas(){
+  const key = PALETTE.slice(1, FONT_SLOTS+1).map(c=>c.join(',')).join('|');
+  if(tintCanvas && tintKey === key) return tintCanvas;
+  if(!tintCanvas){
+    tintCanvas = document.createElement('canvas');
+    tintCanvas.width = ATLAS_W; tintCanvas.height = ATLAS_H;
+  }
+  const cx = tintCanvas.getContext('2d');
+  const img = cx.createImageData(ATLAS_W, ATLAS_H);
+  const d = img.data;
+  for(let p=0, o=0; p<ATLAS_IDX.length; p++, o+=4){
+    const v = ATLAS_IDX[p];
+    if(!v) continue;                       // index 0 stays transparent
+    const c = PALETTE[v];
+    d[o]=c[0]; d[o+1]=c[1]; d[o+2]=c[2]; d[o+3]=255;
+  }
+  cx.putImageData(img, 0, 0);
+  tintKey = key;
+  return tintCanvas;
+}
 function buildIndexed(){
   const c = document.createElement('canvas');
   ATLAS_W = c.width = atlas.naturalWidth;
@@ -734,8 +809,12 @@ function buildBackground(id){
   const x = c.getContext('2d', {willReadFrequently:true});
   x.drawImage(bgImgs[id], 0, 0);
   const d = x.getImageData(0, 0, BG_W, BG_H).data;
-  const seen = new Map(PALETTE.map((c,i)=>[(c[0]<<16)|(c[1]<<8)|c[2], i]));
-  seen.delete(0);                                   // index 0 stays transparent-only
+  // Only dedupe against other scene colours. Indices 1..FONT_SLOTS belong to
+  // the font and get rewritten by palette recolouring -- a scene sharing one
+  // would be repainted along with the text, and they genuinely do share several
+  // (S&K uses the font's red across 6958 pixels of Knuckles).
+  const seen = new Map();
+  PALETTE.forEach((c,i)=>{ if(i > FONT_SLOTS) seen.set((c[0]<<16)|(c[1]<<8)|c[2], i); });
   const IDX = bgIdxs[id] = new Uint8Array(BG_W * BG_H);
   for(let i = 0, p = 0; i < d.length; i += 4, p++){
     if(d[i+3] < 128) continue;
@@ -1280,6 +1359,22 @@ el('style').addEventListener('click', e=>{
   render();
 });
 
+el('palette').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  state.palette = b.dataset.pal;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  applyPalette(PALETTES[state.palette]);
+  render();
+});
+el('tint').addEventListener('input', e=>{
+  state.tint = e.target.value;
+  state.palette = 'custom';
+  el('palette').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed','false'));
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(e.target.value);
+  if(m) applyPalette(rampFrom([parseInt(m[1],16), parseInt(m[2],16), parseInt(m[3],16)]));
+  render();
+});
+
 el('align').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.align = b.dataset.align;
@@ -1395,6 +1490,8 @@ el('copy').onclick = async ()=>{
 
 atlas.onload = ()=>{
   buildIndexed();
+  FONT_BASE = PALETTE.slice(1, FONT_SLOTS+1).map(c=>c.slice());
+  PALETTES.classic = FONT_BASE;
   SUP.webp = supports('image/webp');
   SUP.avif = supports('image/avif');
   if(!SUP.webp) el('dlWebp').title = "This browser can't encode WebP";
