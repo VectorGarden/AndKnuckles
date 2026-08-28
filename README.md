@@ -15,6 +15,27 @@ The sprite sheet is baked in as a base64 PNG and sliced per glyph at runtime;
 rendering is `drawImage` with image smoothing off, so output is pixel-exact at
 any integer scale. The favicon is embedded as a data URI too.
 
+## Palette
+
+The sheet is seven opaque colours and they are a ramp with fixed roles — accent, face,
+shadow, specular, highlight, soft highlight, outline. Recolouring is just swapping those
+seven, so there are presets (**Knuckles**, **Sonic**, **Tails**, **Shadow**, **Emerald**)
+plus a colour picker that derives a whole ramp from one face colour. Derived values are
+snapped to multiples of 36, because Genesis palette entries are 3 bits a channel — that
+keeps a custom ramp in the same colour space as the original artwork.
+
+Every glyph, both styles and every export path take their colours from one `PALETTE`
+array, so recolouring rewrites `PALETTE[1..7]` and the preview, PNG, GIF and APNG all
+follow. The preview draws from a tinted copy of the atlas, rebuilt only when the colours
+actually change.
+
+The catch was that the backgrounds shared those indices. Scene colours were deduped
+against the font's, so the S&K screen was drawing **6,958 pixels of Knuckles** with the
+font's red and both screens drew their whites with the font's specular — recolouring the
+text would have repainted the background with it. Indices 1&ndash;7 are now reserved for
+the font and scenes dedupe only among themselves, which costs two extra palette entries
+and keeps the two completely independent.
+
 ## The animation
 
 Animated mode reproduces the motion of the real title screen, taken from
