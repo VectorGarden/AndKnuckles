@@ -177,6 +177,25 @@
     background:linear-gradient(135deg,#FCB400 0 50%,#2E1470 50% 100%);
   }
   .lineRow input[type=color]{width:22px;height:22px}
+  /* saved palettes */
+  .saved{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}
+  .savedChip{display:flex;align-items:center;border:2px solid var(--edge);background:transparent}
+  .savedChip button{
+    font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    background:transparent;color:var(--paper);border:0;padding:5px 8px;cursor:pointer;
+    display:flex;align-items:center;gap:6px;
+  }
+  .savedChip button:hover{color:var(--gold)}
+  .savedChip i{width:12px;height:12px;display:block}
+  .savedChip .del{
+    color:var(--dim);padding:5px 7px;border-left:2px solid var(--edge);font-size:12px;
+  }
+  .savedChip .del:hover{color:var(--alert)}
+  #saveName{
+    font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    background:var(--panel);color:var(--flare);border:2px solid var(--edge);
+    padding:5px 8px;width:130px;
+  }
   .note{
     display:block;font-family:var(--mono);font-size:10px;line-height:1.8;letter-spacing:.08em;
     text-transform:uppercase;color:#7E6FBC;margin-top:10px;
@@ -305,6 +324,16 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
         background. The custom picker derives the whole ramp — shadow, highlight, outline —
         from one face colour, snapped to the Genesis palette's 36-step channels.</span>
       </div>
+      <div class="saved">
+        <span class="lbl" style="margin:0">Saved</span>
+        <div class="saved" id="savedList" style="margin:0"></div>
+        <input id="saveName" maxlength="24" placeholder="name" aria-label="Preset name">
+        <button class="btn ghost sm" id="savePal" style="min-width:0">Save</button>
+        <span class="lbl" id="saveMsg" style="margin:0;color:var(--gold)"></span>
+        <span class="note" id="saveNote" hidden style="flex-basis:100%">Saving keeps the sheet
+        palette and any per-line assignments together, in this browser only.</span>
+      </div>
+
       <div id="lineCtl" hidden>
         <span class="lbl" style="margin:14px 0 0">Per line <b id="lineHint"></b></span>
         <div class="lines" id="lines"></div>
@@ -754,8 +783,47 @@ const hexRgb = h => { const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.e
   return m ? [parseInt(m[1],16), parseInt(m[2],16), parseInt(m[3],16)] : null; };
 
 /* A palette selection is either a preset name or a hex face colour. */
+/* Saved palettes live in localStorage. A saved entry keeps the sheet ramp and,
+   if there were any, the per-line assignments -- so a two-tone title like the
+   real logo comes back whole rather than as one colour you then reassign.
+   Selectors for them are prefixed so a saved "sonic" cannot shadow the built-in. */
+const SAVE_KEY = 'andknuckles.palettes.v1';
+const SAVED_PREFIX = '*';
+let SAVED = {};
+
+function loadSaved(){
+  try{
+    const raw = localStorage.getItem(SAVE_KEY);
+    const o = raw ? JSON.parse(raw) : {};
+    SAVED = {};
+    for(const [name, v] of Object.entries(o)){
+      // tolerate anything that is not shaped like a palette rather than throwing
+      if(!v || !Array.isArray(v.ramp) || v.ramp.length !== FONT_SLOTS) continue;
+      const ramp = v.ramp.map(c => Array.isArray(c) && c.length === 3
+        ? c.map(n => Math.max(0, Math.min(255, n|0))) : [0,0,0]);
+      SAVED[name] = {ramp, lines: Array.isArray(v.lines) ? v.lines : []};
+    }
+  }catch(e){ SAVED = {}; }          // private mode, quota, corrupt JSON
+}
+function persistSaved(){
+  try{ localStorage.setItem(SAVE_KEY, JSON.stringify(SAVED)); return true; }
+  catch(e){ return false; }
+}
+/* Storage is unavailable on some origins -- a data: URL disables it outright,
+   and private windows can too. Better to say so up front than to let someone
+   name a preset and only then find out it cannot be kept. */
+const STORAGE_OK = (() => {
+  try{ localStorage.setItem(SAVE_KEY + '.probe', '1');
+       localStorage.removeItem(SAVE_KEY + '.probe'); return true; }
+  catch(e){ return false; }
+})();
+
 function rampOf(sel){
   if(!sel) return PALETTE.slice(1, FONT_SLOTS+1);      // whatever the sheet palette is now
+  if(sel[0] === SAVED_PREFIX){
+    const hit = SAVED[sel.slice(1)];
+    return hit ? hit.ramp : PALETTE.slice(1, FONT_SLOTS+1);
+  }
   if(PALETTES[sel]) return PALETTES[sel];
   const rgb = hexRgb(sel);
   return rgb ? rampFrom(rgb) : PALETTE.slice(1, FONT_SLOTS+1);
@@ -1447,6 +1515,10 @@ function renderLineRows(){
       const face = (PALETTES[name] || FONT_BASE)[1];
       add(name, name[0].toUpperCase()+name.slice(1), 'rgb('+face.join(',')+')');
     }
+    for(const name of Object.keys(SAVED).sort()){
+      const face = SAVED[name].ramp[1];
+      add(SAVED_PREFIX+name, name, 'rgb('+face.join(',')+')');
+    }
     const pick = document.createElement('input');
     pick.type = 'color'; pick.dataset.line = i;
     pick.title = 'Custom colour for this line';
@@ -1474,6 +1546,67 @@ el('lines').addEventListener('input', e=>{
   state.linePalettes[+t.dataset.line] = t.value;
   syncLineChips();
   render();
+});
+
+/* Saved palettes: chips that apply, plus a delete on each. */
+function renderSaved(){
+  const host = el('savedList');
+  host.innerHTML = '';
+  const names = Object.keys(SAVED).sort();
+  if(!names.length){
+    host.innerHTML = '<span class="lbl" style="margin:0;color:#6A5AA8">none yet</span>';
+    return;
+  }
+  for(const name of names){
+    const face = SAVED[name].ramp[1];
+    const wrap = document.createElement('span');
+    wrap.className = 'savedChip';
+    const apply = document.createElement('button');
+    apply.dataset.apply = name;
+    apply.title = 'Apply ' + name;
+    apply.innerHTML = '<i style="background:rgb(' + face.join(',') + ')"></i>' +
+                      name.replace(/[<>&]/g, '');
+    const del = document.createElement('button');
+    del.className = 'del'; del.dataset.del = name;
+    del.title = 'Delete ' + name; del.textContent = '\u00d7';
+    wrap.append(apply, del);
+    host.appendChild(wrap);
+  }
+}
+function flash(msg){
+  el('saveMsg').textContent = msg;
+  clearTimeout(flash.t); flash.t = setTimeout(()=>el('saveMsg').textContent='', 2600);
+}
+el('savePal').addEventListener('click', ()=>{
+  const name = el('saveName').value.trim();
+  if(!name){ flash('name it first'); el('saveName').focus(); return; }
+  SAVED[name] = {
+    ramp: PALETTE.slice(1, FONT_SLOTS+1).map(c=>c.slice()),
+    lines: state.linePalettes.slice(0, layout().lines.length),
+  };
+  if(!persistSaved()){ delete SAVED[name]; flash('could not save here'); return; }
+  el('saveName').value = '';
+  renderSaved(); renderLineRows();
+  flash('saved ' + name);
+});
+el('savedList').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  if(b.dataset.del){
+    delete SAVED[b.dataset.del];
+    persistSaved();
+    renderSaved(); renderLineRows();
+    flash('deleted ' + b.dataset.del);
+    return;
+  }
+  const name = b.dataset.apply; if(!name) return;
+  const entry = SAVED[name];
+  applyPalette(entry.ramp);
+  state.linePalettes = entry.lines.slice();
+  state.palette = SAVED_PREFIX + name;
+  el('palette').querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed','false'));
+  renderLineRows(); syncLineChips();
+  render();
+  flash('loaded ' + name);
 });
 
 el('palette').addEventListener('click', e=>{
@@ -1607,6 +1740,15 @@ el('copy').onclick = async ()=>{
 
 atlas.onload = ()=>{
   buildIndexed();
+  loadSaved();
+  renderSaved();
+  el('saveNote').hidden = false;
+  if(!STORAGE_OK){
+    el('savePal').disabled = true;
+    el('saveName').disabled = true;
+    el('saveNote').textContent = 'This page is running from an origin where the browser '
+      + 'blocks local storage, so presets cannot be kept here. It works on the deployed site.';
+  }
   FONT_BASE = PALETTE.slice(1, FONT_SLOTS+1).map(c=>c.slice());
   PALETTES.classic = FONT_BASE;
   SUP.webp = supports('image/webp');
