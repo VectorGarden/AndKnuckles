@@ -11,9 +11,23 @@ as GIF, APNG, WebM or MP4.
 
 ## How it works
 
-Everything is in `index.html` — one file, no build step, no dependencies.
-The artwork is decoded from the disassembly offline and pasted in as base64; that
-pipeline lives in [`tools/`](tools/) and is not needed to run or deploy the page.
+The site is one static file. `index.html` is self-contained — no server, no requests,
+no dependencies — which is what GitHub Pages serves and what lets it run from a
+`file://` URL. That file is committed, so nothing has to be built to deploy it.
+
+It is **assembled** from [`src/`](src/), though, because keeping the sources in one
+file meant half of it was base64:
+
+    src/index.html            markup, with a slot for the style and the script
+    src/style.css             ->  <style>
+    src/generated/assets.js   ->  <script>, first — the four asset constants
+    src/app.js                ->  <script>, after — all hand-written, no base64
+
+Those four generated constants are 100 KB of the 198 KB, and they used to sit above
+every line of real code. Now `app.js` is 1,650 lines of nothing else. Rebuild with
+`node tools/build-all.mjs`; CI checks the committed page still matches. See
+[`tools/README.md`](tools/README.md).
+
 The sprite sheet is baked in as a base64 PNG and sliced per glyph at runtime;
 rendering is `drawImage` with image smoothing off, so output is pixel-exact at
 any integer scale. The favicon is embedded as a data URI too.
