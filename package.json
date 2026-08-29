@@ -1,0 +1,14 @@
+{
+  "name": "andknuckles",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.mjs",
+    "test:dom": "node --test test/dom/*.test.mjs",
+    "build": "node tools/build-all.mjs",
+    "check": "node tools/build-all.mjs --check"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
+}

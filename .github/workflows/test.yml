@@ -14,22 +14,37 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
+  unit:
+    name: unit
     runs-on: ubuntu-latest
     steps:
-      - name: Check out
-        uses: actions/checkout@v7
-
-      - name: Set up Node
-        uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
 
-      - name: Run tests
-        # node's own runner; there is nothing to install. The tests read the
-        # functions they cover out of src/app.js, so they exercise the shipped
-        # source rather than a copy of it.
-        #
-        # Files, not the directory: passing `test/` only works on newer Node,
-        # where it is discovered. Node 22 tries to run it as a module and fails.
+      - name: Run unit tests
+        # Node's own runner, no install step. Name the files rather than the
+        # directory: `node --test test/` only works on newer Node.
         run: node --test test/*.test.mjs
+
+  dom:
+    name: dom
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Install Chromium
+        # only the one browser; the tests load index.html over file://, so there
+        # is nothing else to provision
+        run: npx playwright install --with-deps chromium
+
+      - name: Run DOM tests
+        run: node --test test/dom/*.test.mjs
