@@ -337,7 +337,27 @@ the atlas and every scene at load, so it is always 69 entries and `buildApng` al
 8-bit depth — **the 4-bit branch is unreachable from the app**. A mutation that swapped the
 nibble order was invisible until this test existed.
 
-**Still not covered:** the UI wiring.
+[`test/dom/ui.test.mjs`](test/dom/ui.test.mjs) covers the controls: that each one reaches
+the canvas, and that the parts of the UI which appear conditionally appear under the right
+conditions and not otherwise — the motion controls only in animated mode, the scene controls
+only with a scene, the intro toggle only for animated S&K, the per-line chips only past one
+line. Also the regression that started all this: 240 characters at 16&times; must clamp
+rather than silently produce a dead 132,504px canvas, and say it was capped.
+
+[`test/dom/storage.test.mjs`](test/dom/storage.test.mjs) covers saved palettes, which are
+the only state kept between visits. A palette survives a reload, loads back with its
+per-line assignments, and deletes cleanly. The paths worth having are the defensive ones,
+both reachable in normal use: **storage that throws** — a private window blocks it outright —
+must disable saving and leave the rest of the page working; and **stored data that is not
+shaped like a palette** — the key is plain JSON anyone can edit — must be skipped rather than
+break startup. Seven shapes are tried, from `this is not json` to channels of `NaN`.
+
+Every suite here has been mutation-tested, and twice that turned up a gap rather than a
+confirmation: a swapped 4-bit nibble order was invisible because the app can never reach
+that branch, and a broken codec table made the video test skip itself rather than fail.
+Both are covered now. It is worth running mutations through something that refuses to
+apply a no-op — three times in this project a mutation quietly matched nothing and reported
+a reassuring zero failures.
 
 ## Spacing
 
