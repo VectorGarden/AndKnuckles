@@ -158,10 +158,15 @@ scrolled down.
 
 The round-trip test missed it for the same reason it existed. When the test decoder first
 disagreed with the encoder, the *decoder* was changed to match — so the pair agreed with
-each other and with nothing else. It now implements the standard rule and runs across code
-widths 3 to 8; the old encoder fails it 21 ways, all at the first width boundary. On top of
-that, exported GIFs are parsed back and every frame LZW-decoded against the buffer it came
-from, so a silent desync cannot come back.
+each other and with nothing else.
+
+[`test/lzw.test.mjs`](test/lzw.test.mjs) round-trips the encoder against a decoder written
+from the spec, over seven code widths and seven input patterns. The guard against bending
+the decoder again is a second test: the old, wrong rule is reimplemented and asserted to
+**fail**, on exactly those inputs where the two encoders emit different bytes — an input
+that compresses too well to reach a width boundary cannot tell them apart, and is skipped
+rather than asserted on. If someone quietly reconciles the decoder with the encoder, that
+test starts passing when it should not.
 
 ### Scene assets carry no transparency
 
@@ -264,6 +269,34 @@ An earlier draft of this file put the channels at 10, 138, 45 and 21 and claimed
 realign after 14,490 frames, about four minutes, using that to argue the animation could
 not be looped at all. Both numbers were wrong: the real periods give **945 frames, 15.75s
 NTSC**, and the smile is not a loop to close in the first place.
+
+## Tests
+
+```bash
+node --test test/
+```
+
+Node's own runner, nothing to install. The tests read the functions they cover **out of
+`src/app.js`**, so they exercise the shipped source rather than a copy — rename a function
+and the extractor throws instead of silently testing nothing.
+
+- [`test/lzw.test.mjs`](test/lzw.test.mjs) — the GIF encoder's LZW, described above.
+- [`test/spring.test.mjs`](test/spring.test.mjs) — the banner's damped spring against the
+  ROM's numbers: 100 frames, −92 entry, +38 at frame 32, −13 at 59, +4 at 74, terminating
+  on the ROM's own `y_vel == -$5B` test rather than a guard. Also that tuned parameters
+  still close on rest, and that damping which never dissipates is *reported* rather than
+  hanging.
+
+They were checked by breaking the code on purpose: widening the LZW width one step early
+fails 41 assertions, damping 0.5→0.6 fails 5, acceleration 0.25→0.26 fails 4, and shifting
+`SETTLE_VEL` by one fails 2.
+
+**What is not covered:** everything that needs a DOM. That is most of `src/app.js` — the
+compositing, the scene layers, the export paths. Those invariants are real and have caught
+real bugs (sub-rectangle frames must composite to the same pixels as a full repaint; the
+canvas preview must match the indexed exporter), but they are checked by hand in a browser
+rather than in CI. `tools/build-all.mjs --check` covers the asset pipeline end to end,
+which is a different thing.
 
 ## Spacing
 
