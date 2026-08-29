@@ -87,6 +87,15 @@ every vertical one, flare a pixel in from the left, and an L-shaped glint at the
 top-left corner. Fed the real **I**'s outline that rule reproduces the real **I**
 pixel for pixel, which is what made it safe to point at shapes the game never drew.
 
+That holds best for uprights. Against the sheet's own glyphs the rule matches M 84%,
+A 75%, X 73%, W 68% and V 66% — the artist hand-placed the rim light on diagonals. So the
+build redraws **W** (44px, now 36) and **X** (16px, now 22) but leaves **V** alone, since a
+redrawn diagonal does not sit quite like its neighbours.
+
+W shrinks, so it goes back in its own slot. X grows, so it cannot: at 22 plain it would abut
+Y and at 26 outline it would overlap it. It is appended below the punctuation instead and its
+old slot cleared, which is what the size guard in `redraw()` is there to catch.
+
 `'0'` is not drawn at all: it is the real **O**'s own mask, so the two cannot
 disagree. `'9'` is `'6'` rotated 180&deg; in `masks.mjs` for the same reason.
 
