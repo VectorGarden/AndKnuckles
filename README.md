@@ -276,7 +276,14 @@ readout under the preview says what was dropped.
 **^** used to render the sheet's decorative triangle — the one key whose glyph did not
 match its label — and is now a drawn caret. **@** used to be a closed ring with a floating
 bar inside, which reads as a circled dot rather than an at sign; it now opens at the lower
-right and has a tail. **W** was **44px** against M's 26, and is redrawn at 36.
+right and has a tail.
+
+**W** was **44px** against M's 26, and is redrawn at 36. **X** was **16px**, the narrowest
+diagonal in the set, and squeezed that far its strokes had nowhere to go — the interior
+notch measured 0px on 15 of its 18 rows, making it a filled bowtie that read as an X only
+from its outer silhouette. With 8px strokes the notch is `width - 16`, so it is redrawn at
+**22**: the narrowest that opens a 6px counter, which is the minimum that survives the
+outline's 2px-a-side dilation.
 
 The punctuation is drawn the same way as the digits: shapes authored against the sheet's
 own weight, then run through the shading rule. Two things constrain the designs. Glyphs
@@ -303,7 +310,8 @@ never drew. That claim only goes so far, though: **I** is a vertical bar, the ea
 Measured against the sheet's own glyphs the rule matches **M 84%, A 75%, X 73%, W 68%,
 V 66%** — on diagonals the artist hand-placed the rim light and the rule only approximates
 it. So a redrawn diagonal will not sit quite like its neighbours, which is why **V** is
-left at 26 and only **W**, the outlier at 44, was redrawn. Curves are looser (**B** 87%, **O** 75%) because the artist hand-placed rim
+left at 26 — it is only two pixels wider than M — and only **W** and **X**, the two
+outliers, were redrawn. Curves are looser (**B** 87%, **O** 75%) because the artist hand-placed rim
 light there.
 
 The letterforms follow the **Sonic 3 logo**, not a generic rounded face: flat
