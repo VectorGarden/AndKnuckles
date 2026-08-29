@@ -8,10 +8,11 @@ rebuilt, checked, or changed.
 ```bash
 node tools/build-sk-assets.mjs      # rom/ -> out/  (17 PNGs + intro-meta.json)
 node tools/build-s3-assets.mjs      # rom/ -> out/  (background + banner sheet)
+node tools/build-font.mjs           # font/ -> out/ (sprite font atlas + glyph table)
 node tools/embed-assets.mjs         # out/  -> index.html
 ```
 
-`embed` writes nothing when the result is byte-identical, so running all three is
+`embed` writes nothing when the result is byte-identical, so running all four is
 also a check that the committed page still matches the pipeline.
 
 ## What build-sk does
@@ -47,6 +48,38 @@ terminals and 45° chamfers come from.
 Neither background carries a `tRNS` chunk. They are opaque by definition and will
 happily use their lowest palette slot as a real colour; reserving index 0 for
 transparency punches holes in them. It did exactly that to Sonic's pupils once.
+
+## What build-font does
+
+The one build here that is **not** a decode. The ROM has no title font at all:
+`Map - S3 ANDKnuckles.asm` is six sprite pieces making a flat 168&times;24 bitmap of
+the phrase, so only **& C E K L N S U** trace to real game pixels. The other twenty
+letters were reconstructed by the ripper, and the digits and punctuation were drawn
+for this project.
+
+So `font/base/` is **source data, not something regenerable** — the ripped sheet,
+28 glyphs, credited in the root README. The build is additive on top of it:
+
+| stage | source | glyphs |
+|---|---|---|
+| ripped sheet | `font/base/` | 28 |
+| + digits | `font/masks.mjs` | 38 |
+| + keyboard punctuation | `font/punct.mjs` | 68 |
+
+Both generated sets are authored as `#` masks at plain size and run through the
+same shading rule in `lib/shade.mjs`, so they cannot drift from the sheet's own
+weight — gold body, ember on the right of every horizontal run and the bottom of
+every vertical one, flare a pixel in from the left, and an L-shaped glint at the
+top-left corner. Fed the real **I**'s outline that rule reproduces the real **I**
+pixel for pixel, which is what made it safe to point at shapes the game never drew.
+
+`'0'` is not drawn at all: it is the real **O**'s own mask, so the two cannot
+disagree. `'9'` is `'6'` rotated 180&deg; in `masks.mjs` for the same reason.
+
+The build asserts what the layout depends on: every glyph's height matches its
+style's row height, and no glyph overflows its row band once its `yOffset` is
+applied. Both are how a period ends up on the baseline and a quote at cap height
+without padding the bitmap.
 
 ## What embed preserves
 
