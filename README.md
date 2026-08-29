@@ -228,9 +228,21 @@ standing art, re-rendering Plane&nbsp;A and keeping only the pixels that changed
 | knuckle 2 | 3 | 7 | 21 | 20 |
 
 The smile is the odd one: it terminates with `$FE`, which rewinds a single step rather than
-restarting, so it plays once and holds — and it does not fire at all until `3*60` frames
-after the title settles. The tail is sized to reach it, which is why the loop runs on past
-where the text lands.
+restarting, so it plays once and holds.
+
+These tables were written for a screen that sits there for a quarter of an hour, and this
+loop is 165 frames, so two of them need help to be seen at all. Both knobs are per-channel
+values in the scene spec, and neither touches the tables themselves — the frames and their
+rate are the ROM's.
+
+**`delay`** is the smile's wait before it fires, `3*60` in `Obj_SKTitle_HandAnim`. At that
+value it lands on the last few frames of the loop; it is 60 here.
+
+**`phase`** is how far into its own table a channel starts. The finger idles for **32 of
+its 45 steps** before wagging, so at ROM phase only **4 of the wag's 39 frames** fall inside
+the loop, and Sonic reads as not animating at all. Starting it 22 steps into that idle run
+puts the wag in the middle. The two fist channels need nothing — their periods are 45 and
+21 frames, so they cycle two to five times over the loop on their own.
 
 An earlier draft of this file put the channels at 10, 138, 45 and 21 and claimed they only
 realign after 14,490 frames, about four minutes, using that to argue the animation could
