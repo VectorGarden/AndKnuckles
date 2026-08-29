@@ -319,7 +319,25 @@ They were checked by breaking the code on purpose, each mutation reproducing a b
 actually happened: dropping the V_scroll from `introRect`, removing a plane's edge strips,
 and dropping the mountain from the indexed path. All four fail the suite.
 
-**Still not covered:** the APNG, WebM and MP4 export paths, and the UI wiring.
+[`test/dom/apng.test.mjs`](test/dom/apng.test.mjs) does the same for APNG: chunk CRCs
+checked against an independent implementation, then every frame inflated and un-filtered
+back to palette indices. It also holds the things a reader would not notice were wrong —
+`acTL` frame count and infinite loop, the first frame covering the whole canvas because it
+is the `IDAT`, and the `fcTL`/`fdAT` sequence numbers being one unbroken run.
+
+[`test/dom/video.test.mjs`](test/dom/video.test.mjs) drives the WebM and MP4 buttons.
+There is no byte round-trip to do — the frames go through a lossy codec — so it checks what
+can be checked: that the buttons' enabled state matches what `MediaRecorder` actually
+supports, that clicking one produces a file, that the container is the one requested, and
+that the result decodes back with the right dimensions and a non-zero duration.
+
+[`test/png-scanlines.test.mjs`](test/png-scanlines.test.mjs) covers the PNG row packer
+directly, because the APNG round-trip cannot reach half of it. The palette is built from
+the atlas and every scene at load, so it is always 69 entries and `buildApng` always picks
+8-bit depth — **the 4-bit branch is unreachable from the app**. A mutation that swapped the
+nibble order was invisible until this test existed.
+
+**Still not covered:** the UI wiring.
 
 ## Spacing
 
