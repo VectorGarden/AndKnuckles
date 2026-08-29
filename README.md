@@ -6,7 +6,8 @@ sprite font, and download it as PNG, WebP or AVIF.
 **Live:** https://andknuckles.reizu.dev
 
 Or switch to **Animated** for the title-screen bounce, optionally over the real
-Sonic 3 title screen, exported as GIF, APNG, WebM or MP4.
+Sonic 3 title screen — or over the full S&K opening, Death Egg and all — exported
+as GIF, APNG, WebM or MP4.
 
 ## How it works
 
@@ -114,25 +115,11 @@ alone, and Frames&nbsp;2 and&nbsp;3 reference art beyond the standing blob. Gett
 wrong produces a screen that looks plausible until you notice Sonic is missing.
 
 Two sprites sit on top of the planes rather than in them: `Obj_SKTitle_DeathEgg` at
-`x_pos $140`, and `Obj_SKTitle_Mountain` at `$140/$1A8` less the `$100` the setup pins
-`Camera_Y_pos_P2` to. The Death Egg descends from `$B0` to `$F0` during the sequence; the
-familiar title-screen shot has it high, so `$B0` is what is baked in.
+`x_pos $140`, and `Obj_SKTitle_Mountain`, whose comment explains itself — *"the top of the
+mountain is a sprite so it can cover the Death Egg"*. Both are positioned from
+`Camera_Y_pos_P2`, which is the detail the intro turns on.
 
-Both ship the **settled pose**, static. Neither title screen animates here, and for the
-S&K one that is a deliberate call rather than a gap.
-
-Its idle motion is `Obj_SKTitle_HandAnim`, four independent channels whose periods are
-10, 138, 45 and 21 game frames — they only realign after **14,490 frames, about four
-minutes**, so no short loop closes all of them. The full intro is worse: `Obj_SKTitle_SonicFall`
-drops 218 frames at 1px each, then a camera scrolls 8px a frame while Plane&nbsp;A swaps
-through all four tilemaps as he lands. Because the camera moves, nothing can be encoded as
-a sub-rectangle — every one of roughly 320 frames is a whole-screen repaint. Measured
-through this project's own encoders, a full 320&times;224 frame costs 13&ndash;33&nbsp;KB
-depending on scale, putting the intro at about **4.1&nbsp;MB of GIF at 1&times;** and
-**10.2&nbsp;MB at 2&times;**.
-
-The decoders here are enough to build either. Neither is a file worth shipping, so the
-text is the only thing that moves.
+The S3 screen ships as the **settled pose**, static. The S&K one plays its opening.
 
 ### Compression formats implemented
 
@@ -169,6 +156,73 @@ real colour. The S&K composite did exactly that: black, for Sonic's pupils. Mark
 index transparent punched 313 holes through the picture, which showed up in GIF, APNG and
 WebM but *not* MP4 — H.264 has no alpha, so it flattened them back to black and looked
 correct by accident.
+
+## The S&K intro
+
+On by default once you pick the S&K background in animated mode, and still a toggle — off
+leaves every existing path untouched. It reproduces the opening
+sequence: the Death Egg comes down onto the volcano, Sonic falls in after it, Knuckles and
+the ground rise into frame, and then the text springs in on the same damped spring as ever.
+
+The whole thing hangs on **`Camera_Y_pos_P2`**, and it runs in two phases:
+
+**Phase 1** — `Obj_SKTitle_DeathEggMain` drops the egg `$B0` &rarr; `$F0` at `$8000` a
+frame (half a pixel) while the camera climbs `0` &rarr; `$80` at one. Plane B is positioned
+from that camera, so the island rises into frame as the egg descends and the two meet at
+the summit.
+
+**Phase 2** — `Obj_SKTitle_DeathEggShake` finishes the camera `$80` &rarr; `$100` and walks
+the egg up by the same amount, `subi.l #$8000,$32(a0)`, commented *"move Death Egg backwards
+to keep up with scroll"*. It lands on `$F0 - 128 = $70` — exactly the value the
+fast-forward path writes as the egg's *"proper position"*. From touchdown the egg is stuck
+to the terrain and the whole scene rides up together into the title framing.
+
+That arithmetic closing on `$70` to the byte is what makes the model checkable, and getting
+it wrong is what kept the mountain adrift through several attempts. It sits at `$1A8` minus
+that same camera, so **any model where the plane and the sprite disagree about the camera
+leaves it floating** — over open grass, in the version before this one. Pinning the camera
+at its final `$100` and stopping the egg at `$F0` put the two 128px apart, which no amount
+of nudging a constant was going to fix.
+
+Sonic is `Obj_SKTitle_SonicFall`, `$16` &rarr; `$F0` at a pixel a frame — twice the egg's
+rate, so it lands well before he does. Plane A carries the SEGA logo through all of this
+(omitted here); the character frames only arrive afterwards, and they **rise from the
+bottom** as `Copy_Map_Line_To_VRAM` fills each newly exposed line. They do not appear in
+place — Knuckles and the ground he stands on slide up together.
+
+The landing shakes. `SKTitle_ShakeOffsets` is read as an *overlapping* `(y,x)` pair at
+`frame & $3F` — consecutive frames start one byte apart, not two — and applied to both
+scroll values and to both sprites. Falling Sonic is not shaken; his routine is the one that
+doesn't subtract it. Only the vertical component is used here: the horizontal is 0&ndash;3px
+and would need edge replication on both render paths to stay pixel-identical for nothing
+visible.
+
+Because the pan and the shake move whole-screen content, those frames go out as full
+repaints and the rest as sub-rectangles. The result is **133 frames, 3.3s, 864&nbsp;KB at
+1&times;** — against the 4.1&nbsp;MB this README once estimated for a naive whole-screen
+encode of the full-length sequence.
+
+Three invariants are checked rather than eyeballed, because the two render paths are
+separate code: the canvas preview and the indexed exporter are compared pixel-for-pixel
+across the timeline; every sub-rectangle frame is composited and compared against a full
+repaint of the same frame; and the intro's last frame is compared against the static scene,
+which has to be identical or the handoff to the text phase pops. The third one caught the
+static scene itself having the Death Egg baked at `$B0` — its position *before* the
+descent — which is why the still and the intro could never agree until it was rebuilt
+at `$70`.
+
+The idle hand animation is not in this yet. `Obj_SKTitle_HandAnim` runs four channels off
+`SKTitle_AnimateHands`, each a `[duration, frame..., terminator]` table DMA'd over fixed
+tile slots: Sonic's **smile** (5-frame duration, 3 frames, `$FE` rewind — a one-shot that
+holds, and it does not start until 180 frames after the title settles), his **finger**
+(3&times;45 = 135), and Knuckles' two fists (3&times;15 = 45 and 3&times;7 = 21). The three
+looping channels realign after **945 frames, 15.75s NTSC**.
+
+An earlier draft of this file put that at 14,490 frames and about four minutes, and used it
+to argue the animation could not be looped. That was wrong — it came from mistaken periods
+of 10 and 138 — and it is the reason the idle motion was written off rather than built. A
+16-second cycle is long for a GIF but perfectly closable, and the four channels only touch
+3, 41, 47 and 20 tiles, so the frames between changes are cheap sub-rectangles.
 
 ## Spacing
 
