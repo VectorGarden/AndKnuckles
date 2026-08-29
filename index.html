@@ -358,8 +358,8 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
     <div class="ctl anim-only intro-only" id="introCtl" style="grid-column:1/-1;border-right:0">
       <span class="lbl">Intro</span>
       <div class="seg" id="intro" role="group" aria-label="Intro">
-        <button data-intro="off" aria-pressed="true">Off</button>
-        <button data-intro="on" aria-pressed="false">Sonic drops in</button>
+        <button data-intro="off" aria-pressed="false">Off</button>
+        <button data-intro="on" aria-pressed="true">Full opening</button>
       </div>
       <span class="note">Plays the S&amp;K opening ahead of the text. The Death Egg comes down
       onto the volcano while the island rises to meet it, Sonic falls in after, then Knuckles and
@@ -484,7 +484,7 @@ const SUP = { webp:true, avif:true };
 const state = {
   text:'', style:'outline', scale:4, track:0, lead:0, pad:0, palette:'classic', tint:'#FCB400', linePalettes:[],
   align:'center', bg:'none', touchedTrack:false, touchedLead:false,
-  mode:'still', timebase:'pal', scene:'off', sceneY:176, intro:false,
+  mode:'still', timebase:'pal', scene:'off', sceneY:176, intro:true,
   dist:96, vel0:4, accel:0.25, damp:0.5, amp:100, head:-1
 };
 
@@ -604,7 +604,11 @@ function scaleFor(L){
    paused animated view parked there shows nothing. Rest is the readable pose:
    that is where the player sits whenever it is not running, and Play rewinds. */
 const player = { playing:false, frame:0, raf:0, acc:0, last:0 };
-const restFrame = () => Math.max(0, motion().frames.length - 1);
+// Rest is the last frame of the whole timeline, intro included -- using just the
+// spring's length parked the preview mid-bounce and, because play() rewinds only
+// from rest, left Play resuming past the intro so the opening never showed.
+const restFrame = () => Math.max(0, motion().frames.length - 1
+                                    + (introOn() ? introLen() : 0));
 function showRest(){ player.frame = restFrame(); }
 
 function render(){

@@ -159,7 +159,8 @@ correct by accident.
 
 ## The S&K intro
 
-Toggleable, and off leaves every existing path untouched. It reproduces the opening
+On by default once you pick the S&K background in animated mode, and still a toggle — off
+leaves every existing path untouched. It reproduces the opening
 sequence: the Death Egg comes down onto the volcano, Sonic falls in after it, Knuckles and
 the ground rise into frame, and then the text springs in on the same damped spring as ever.
 
