@@ -37,6 +37,48 @@ const atlas = new Uint8Array(fs.readFileSync(BASE + 'atlas.idx'));
 if(atlas.length !== meta.w * meta.h)
   throw new Error(`base sheet is ${atlas.length} px, expected ${meta.w}x${meta.h}`);
 
+// ---- 0. narrow W ---------------------------------------------------------
+// The sheet's W is 44px against M's 26. It is built as its own V twice, and the
+// two coincide exactly: the second V's left stroke lands on the first's right
+// stroke, and that coincidence is the middle peak. Overlapping them any tighter
+// smears the pair into one band and the peak disappears, so W cannot be narrowed
+// by reusing V's pixels -- it has to be redrawn from a narrower V.
+//
+// That costs some fidelity. The shading rule reproduces the real I pixel for
+// pixel, but I is a vertical bar; on the sheet's diagonals it only matches about
+// two thirds of the artist's hand-placed rim light (V 66%, W 68%, X 73%, A 75%).
+// V is left alone for that reason. W is redrawn because 44px is the outlier.
+const W_WIDTH = 36, STROKE = 8;
+const vMask = (w, h, s) => {                 // two strokes converging to a point
+  const m = new Uint8Array(w*h), shift = (w - s)/2;
+  for(let y = 0; y < h; y++){
+    const t = y/(h - 1);
+    const l = Math.round(t*shift), r = Math.round(w - s - t*shift);
+    for(let x = 0; x < s; x++){ m[y*w + l + x] = 1; m[y*w + r + x] = 1; }
+  }
+  return m;
+};
+const wMask = (w, h, s) => {                 // two of those sharing the middle peak
+  const vw = (w + s)/2, v = vMask(vw, h, s), m = new Uint8Array(w*h);
+  for(let y = 0; y < h; y++) for(let x = 0; x < vw; x++) if(v[y*vw + x]){
+    m[y*w + x] = 1; m[y*w + x + (vw - s)] = 1;
+  }
+  return m;
+};
+{
+  const wp = shade(wMask(W_WIDTH, 18, STROKE), W_WIDTH, 18);
+  const wo = outline(wp, W_WIDTH, 18);
+  const put = (style, buf, bw, bh) => {
+    const g = FONT[style].glyphs['W'];
+    if(bw > g[2] || bh > g[3]) throw new Error(`W ${style} would grow to ${bw}x${bh} from ${g[2]}x${g[3]}`);
+    for(let y = 0; y < g[3]; y++) for(let x = 0; x < g[2]; x++) atlas[(g[1]+y)*meta.w + g[0]+x] = 0;
+    for(let y = 0; y < bh; y++) for(let x = 0; x < bw; x++) atlas[(g[1]+y)*meta.w + g[0]+x] = buf[y*bw + x];
+    g[2] = bw;
+  };
+  put('plain',   wp,      W_WIDTH,   18);
+  put('outline', wo.buf,  wo.w,      wo.h);
+}
+
 const maskOf = (rows, name) => {
   const w = rows[0].length;
   if(rows.some(r => r.length !== w)) throw new Error(name + ': ragged rows');

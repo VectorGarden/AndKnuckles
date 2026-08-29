@@ -270,9 +270,13 @@ you type arbitrary text into. Set letter spacing to about `-3` to reproduce the 
 ! " # $ % & ' ( ) * + , - . / : ; < = > ? @ [ \ ] _ ` { | } ~
 ```
 
-Alt/option characters are not included. **^** renders the sheet's triangle rather than a
-caret — it predates the rest and the README has always described it that way. Anything
-outside the set is skipped, and the readout under the preview says what was dropped.
+Alt/option characters are not included. Anything outside the set is skipped, and the
+readout under the preview says what was dropped.
+
+**^** used to render the sheet's decorative triangle — the one key whose glyph did not
+match its label — and is now a drawn caret. **@** used to be a closed ring with a floating
+bar inside, which reads as a circled dot rather than an at sign; it now opens at the lower
+right and has a tail. **W** was **44px** against M's 26, and is redrawn at 36.
 
 The punctuation is drawn the same way as the digits: shapes authored against the sheet's
 own weight, then run through the shading rule. Two things constrain the designs. Glyphs
@@ -295,7 +299,11 @@ is regular: gold body, ember on the right of every horizontal run and the bottom
 every vertical one, flare one pixel in from the left, and an L-shaped glint of
 `4,4,6,6,5` at the top-left corner. Fed the real **I**'s outline, that rule reproduces
 the real **I** pixel-for-pixel — which is what made it safe to point at shapes the game
-never drew. Curves are looser (**B** 87%, **O** 75%) because the artist hand-placed rim
+never drew. That claim only goes so far, though: **I** is a vertical bar, the easiest case.
+Measured against the sheet's own glyphs the rule matches **M 84%, A 75%, X 73%, W 68%,
+V 66%** — on diagonals the artist hand-placed the rim light and the rule only approximates
+it. So a redrawn diagonal will not sit quite like its neighbours, which is why **V** is
+left at 26 and only **W**, the outlier at 44, was redrawn. Curves are looser (**B** 87%, **O** 75%) because the artist hand-placed rim
 light there.
 
 The letterforms follow the **Sonic 3 logo**, not a generic rounded face: flat
