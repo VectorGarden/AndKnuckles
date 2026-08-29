@@ -1,3 +1,6 @@
 .idea/
 .DS_Store
 .claude/
+
+# built assets — regenerate with tools/build-sk-assets.mjs
+tools/out/

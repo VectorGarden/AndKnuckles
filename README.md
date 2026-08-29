@@ -12,6 +12,8 @@ as GIF, APNG, WebM or MP4.
 ## How it works
 
 Everything is in `index.html` — one file, no build step, no dependencies.
+The artwork is decoded from the disassembly offline and pasted in as base64; that
+pipeline lives in [`tools/`](tools/) and is not needed to run or deploy the page.
 The sprite sheet is baked in as a base64 PNG and sliced per glyph at runtime;
 rendering is `drawImage` with image smoothing off, so output is pixel-exact at
 any integer scale. The favicon is embedded as a data URI too.
