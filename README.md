@@ -273,12 +273,13 @@ NTSC**, and the smile is not a loop to close in the first place.
 ## Tests
 
 ```bash
-node --test test/*.test.mjs
+node --test test/*.test.mjs       # unit — no install
+npm ci && npx playwright install chromium
+node --test test/dom/*.test.mjs   # DOM — headless Chromium
 ```
 
-Node's own runner, nothing to install. Name the files rather than the directory —
-`node --test test/` only works on newer Node; older versions try to run `test/` as a
-module. The tests read the functions they cover **out of
+Name the files rather than the directory — `node --test test/` only works on newer Node;
+older versions try to run `test/` as a module. The tests read the functions they cover **out of
 `src/app.js`**, so they exercise the shipped source rather than a copy — rename a function
 and the extractor throws instead of silently testing nothing.
 
@@ -293,12 +294,32 @@ They were checked by breaking the code on purpose: widening the LZW width one st
 fails 41 assertions, damping 0.5→0.6 fails 5, acceleration 0.25→0.26 fails 4, and shifting
 `SETTLE_VEL` by one fails 2.
 
-**What is not covered:** everything that needs a DOM. That is most of `src/app.js` — the
-compositing, the scene layers, the export paths. Those invariants are real and have caught
-real bugs (sub-rectangle frames must composite to the same pixels as a full repaint; the
-canvas preview must match the indexed exporter), but they are checked by hand in a browser
-rather than in CI. `tools/build-all.mjs --check` covers the asset pipeline end to end,
-which is a different thing.
+### The DOM tests
+
+[`test/dom/`](test/dom/) loads the real `index.html` in headless Chromium and asserts the
+compositing invariants. It loads over `file://` — the page is self-contained, so there is
+no server and no fixture, and what is under test is exactly the file that deploys.
+
+- **Sub-rectangle frames composite to a full repaint.** Each frame is a delta against the
+  one before it; this replays them the way a GIF player would, honouring disposal, and
+  compares against a full repaint. Run for four scene and intro combinations.
+- **The canvas preview matches the indexed exporter**, pixel for pixel. These are separate
+  code paths and have drifted apart more than once.
+- **The intro's last frame equals the static scene**, or the handoff to the text pops.
+- Every glyph renders in both styles; no glyph box escapes the atlas or overlaps another.
+- [`test/dom/gif.test.mjs`](test/dom/gif.test.mjs) exports a real GIF and decodes it back —
+  structure, frame rects, and every frame's LZW payload against the buffer the encoder was
+  handed. That is the whole-file version of the unit round-trip.
+
+A headless browser rather than jsdom because jsdom has no canvas at all: the usual patch is
+`node-canvas`, whose rasteriser is not the one that ships, so a pass there would not mean
+the browser agrees. These assertions are about pixels, so the renderer has to be real.
+
+They were checked by breaking the code on purpose, each mutation reproducing a bug that
+actually happened: dropping the V_scroll from `introRect`, removing a plane's edge strips,
+and dropping the mountain from the indexed path. All four fail the suite.
+
+**Still not covered:** the APNG, WebM and MP4 export paths, and the UI wiring.
 
 ## Spacing
 

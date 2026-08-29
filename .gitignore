@@ -4,3 +4,6 @@
 
 # built assets — regenerate with tools/build-sk-assets.mjs
 tools/out/
+
+# the only dependency is playwright, for the DOM tests
+node_modules/
