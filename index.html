@@ -1440,12 +1440,14 @@ function rectUnion(a, b){
    and each one repaints the union of the previous and current text rects --
    which is what erases the old position. Any frame where the background scroll
    moved has to be a full repaint. */
-function animFrames(kind){
-  const F = gifFrames(kind === 'gif');
-  const {W, H, pal, bgIdx, runs, offs, L, g, scale} = F;
+/* The dirty rectangle each run gets. Stateful -- a frame is a delta against the
+   one before it -- so it has to walk the whole list in order. animFrames and the
+   size estimate both go through here; when the estimate had its own simpler copy
+   of this it never saw the intro's full repaints and read about 3x low. */
+function frameRects(F, kind){
+  const {W, H, bgIdx, runs, L, g, scale} = F;
   const scene = !!g.scene;
-  const per = state.timebase === 'ntsc' ? 100 : 1;
-  const frames = [];
+  const out = [];
   let prevText = null, prevScroll = -1, prevIntro = null, prevF = null;
   for(let i = 0; i < runs.length; i++){
     const r = runs[i];
@@ -1471,6 +1473,20 @@ function animFrames(kind){
     } else {
       rect = frameRect(L, scale, r.dy, g, W, H);
     }
+    out.push(rect);
+  }
+  return out;
+}
+
+function animFrames(kind){
+  const F = gifFrames(kind === 'gif');
+  const {W, H, pal, bgIdx, runs, offs, L, g, scale} = F;
+  const scene = !!g.scene;
+  const per = state.timebase === 'ntsc' ? 100 : 1;
+  const rects = frameRects(F, kind);
+  const frames = [];
+  for(let i = 0; i < runs.length; i++){
+    const r = runs[i], rect = rects[i];
     frames.push(Object.assign({
       buf: paintIndexed(rect, scale, L, r.dy, g, bgIdx, r.scroll, F.banks, r.frame),
       delay: r.delay * 2,                    // GIF: centiseconds
@@ -1523,18 +1539,22 @@ function gifFrames(allowResample){
 function estimateGif(){
   const F = gifFrames();
   const {W,H,pal,bgIdx,banks,runs,L,g,scale} = F;
-  const scene = !!g.scene;
-  const probe = [0, Math.floor(runs.length/2), runs.length-1];
-  let bytes = 0;
+  const rects = frameRects(F, 'gif');
   const bits = Math.max(2, Math.ceil(Math.log2(Math.max(2, pal.length))));
+  // Sample a few frames for a bytes-per-pixel rate, then scale by the total area
+  // actually being encoded. Weighting by frame count instead badly misreads a
+  // timeline that mixes whole-screen repaints with small text rects.
+  const probe = [...new Set([0, runs.length>>2, runs.length>>1, runs.length-1])]
+                  .filter(i => i >= 0 && i < runs.length);
+  let bytes = 0, px = 0;
   for(const i of probe){
-    const r = runs[i];
-    const rect = (scene && i) ? frameRect(L, scale, r.dy, g, W, H)
-               : (scene || bgIdx) ? {x:0,y:0,w:W,h:H}
-               : frameRect(L, scale, r.dy, g, W, H);
-    bytes += lzwEncode(paintIndexed(rect, scale, L, r.dy, g, bgIdx, r.scroll, banks, r.frame), bits).length + 18;
+    const r = runs[i], rect = rects[i];
+    bytes += lzwEncode(paintIndexed(rect, scale, L, r.dy, g, bgIdx, r.scroll, banks, r.frame), bits).length;
+    px += rect.w * rect.h;
   }
-  return (bytes/probe.length)*runs.length + pal.length*3 + 800;
+  const perPx = px ? bytes / px : 0;
+  const total = rects.reduce((a, q) => a + q.w * q.h, 0);
+  return perPx * total + runs.length * 18 + pal.length * 3 + 800;
 }
 
 let estTimer = 0;
