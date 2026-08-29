@@ -273,10 +273,12 @@ NTSC**, and the smile is not a loop to close in the first place.
 ## Tests
 
 ```bash
-node --test test/
+node --test test/*.test.mjs
 ```
 
-Node's own runner, nothing to install. The tests read the functions they cover **out of
+Node's own runner, nothing to install. Name the files rather than the directory —
+`node --test test/` only works on newer Node; older versions try to run `test/` as a
+module. The tests read the functions they cover **out of
 `src/app.js`**, so they exercise the shipped source rather than a copy — rename a function
 and the extractor throws instead of silently testing nothing.
 
