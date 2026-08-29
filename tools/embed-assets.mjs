@@ -1,5 +1,5 @@
-/* Pastes the built assets into index.html's SCENES.sk entry.
-   Run it with:  node tools/embed-sk-assets.mjs [outDir]
+/* Pastes the built assets into index.html's SCENES entries.
+   Run it with:  node tools/embed-assets.mjs [outDir]
 
    Only the artwork and the geometry that comes with it are replaced. Every
    timing value in the spec -- the camera phases, the shake, the reveal, the
@@ -15,10 +15,28 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const OUT  = (process.argv[2] ? path.resolve(process.argv[2]) : path.join(HERE, 'out')) + path.sep;
 const HTML = path.join(HERE, '..', 'index.html');
 
-const meta = JSON.parse(fs.readFileSync(OUT + 'intro-meta.json', 'utf8'));
-const b64  = f => 'data:image/png;base64,' + fs.readFileSync(OUT + f).toString('base64');
+const b64 = f => 'data:image/png;base64,' + fs.readFileSync(OUT + f).toString('base64');
+const has = f => fs.existsSync(OUT + f);
 
-const html = fs.readFileSync(HTML, 'utf8');
+let html = fs.readFileSync(HTML, 'utf8');
+const before = html;
+
+// ---- S3: one flat background, so only its src moves ----
+if(has('s3-back.png')){
+  const l = html.match(/^  s3: \{ label:"S3 title".*$/m);
+  if(!l) throw new Error('SCENES.s3 entry not found in index.html');
+  const head = l[0].slice(0, l[0].indexOf('src:"') + 5);
+  const tail = l[0].slice(l[0].lastIndexOf('"'));
+  html = html.slice(0, l.index) + head + b64('s3-back.png') + tail + html.slice(l.index + l[0].length);
+}
+
+// ---- S&K: layers, geometry and the hand channels ----
+if(!has('intro-meta.json')){
+  if(html === before) console.log('nothing to embed -- run the build scripts first');
+  else { fs.writeFileSync(HTML, html); console.log('index.html updated (S3 only)'); }
+  process.exit(0);
+}
+const meta = JSON.parse(fs.readFileSync(OUT + 'intro-meta.json', 'utf8'));
 const line = html.match(/^  sk: \{ label:"S&K title".*$/m);
 if(!line) throw new Error('SCENES.sk entry not found in index.html');
 const entry = line[0];
@@ -42,7 +60,7 @@ const next = `  sk: { label:"S&K title", y:${old.y ?? 176}, intro:${JSON.stringi
   .replace(`y:${old.y ?? 176}, `, entry.match(/y:\d+, /)[0]);
 const updated = html.slice(0, line.index) + next + html.slice(line.index + entry.length);
 
-if(updated === html){ console.log('index.html already matches the pipeline — nothing written'); }
+if(updated === before){ console.log('index.html already matches the pipeline — nothing written'); }
 else {
   fs.writeFileSync(HTML, updated);
   console.log('index.html updated (' + (updated.length - html.length) + ' bytes)');
