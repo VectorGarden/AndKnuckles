@@ -21,7 +21,8 @@ The steps underneath, if you want to run one on its own:
 node tools/build-sk-assets.mjs      # rom/ -> out/  (17 PNGs + intro-meta.json)
 node tools/build-s3-assets.mjs      # rom/ -> out/  (background + banner sheet)
 node tools/build-font.mjs           # font/ -> out/ (sprite font atlas + glyph table)
-node tools/embed-assets.mjs         # out/  -> index.html
+node tools/embed-assets.mjs         # out/  -> src/generated/assets.js
+node tools/build-page.mjs           # src/  -> index.html
 ```
 
 Reach for `build-all` by default. `embed` only touches scenes whose files are in
@@ -103,6 +104,16 @@ The build asserts what the layout depends on: every glyph's height matches its
 style's row height, and no glyph overflows its row band once its `yOffset` is
 applied. Both are how a period ends up on the baseline and a quote at cap height
 without padding the bitmap.
+
+## What build-page does
+
+Inlines `src/style.css`, `src/generated/assets.js` and `src/app.js` into
+`src/index.html` and writes `index.html`. The deployed site stays a single
+self-contained file; the split is only so the sources can be read and edited.
+
+It refuses to run if `src/app.js` contains base64 — generated data belongs in
+`src/generated/` — and checks the assembled page has a closing `</html>`, which is
+one of the two guards the Pages deploy applies. Better to fail here than there.
 
 ## What embed preserves
 

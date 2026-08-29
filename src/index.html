@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" type="image/png" sizes="32x32" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgBAMAAACBVGfHAAAAMFBMVEX8+Xr85zX8zi/8tAz8tADsoBfvhAj8bACmbCveUxCmQSt/Sz6JJjpSJ12VADMkAGxHdtzrAAABGUlEQVR42q2RIU8DQRBG306vTS6YPWoJbLvBFy4NtqIagcOC4g8gUBhEA0Ej4A8gsKRQcLiSXDWhXYXkkAXaW8SVa1CEhFGTl8zLzDfK87OEP4MAYJj3dQC8976FiqL2Xuq99wJ0B9SiRZz7HulTrQNZ4bAxWD2XTocgsQY9A0/nFtVsFHu8HwhM3+aLPSeqMALibx3S4LIAGUrbLTM6gW7Y6TjBiY5ind1Bf3zcc+IH2h5Vds1kk2l7raRn11pGn70ErA5yUDavkw6UmkbUurm5gO0UoNlCUJr+ME9EagaVnV3xCMRAcA2lw5UkHYdhGFFeTl8elgJ0ZHKxWXA9NgIqO/dVANn/OAUdwOqgmgdRjkGrf/jc7+AL0ApRwxpJP5IAAAAASUVORK5CYII=">
+<link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAALQAAAC0BAMAAADP4xsBAAAAElBMVEX8/Pz8/Ej8tAD8bAD8AAAkAGwdQs/yAAABU0lEQVR42u2ZzY3CMBSExwkF4K0AuQIkatkqt5ZIVBDRgdMAMRc78k9gc9k9JN+7kcCnaMRo3jjmW381nUCDBg0aNGjQoEFvn9P65edd0pg+2fyWOaenutS30Br0IS0zSApTtMNikHaCxzKgsUx0QTD11Q/eQWvQh7XM/Ij7WGkQm9YwtAaNZdb3sXK8pB6tQYNOlgnT23AJUwqgUZJDa9BYJhV5STI2by4urWo+fWeQ1F/rs4L5UZ8V9Fe0Br17y1hJpmkunYsBtMTNc5B0y3c245rig9agj1H/34xTfFPjU5QMuUGWWbIJrUHv2zKm+OOPkrq5bi79TdKPpO68CmpP1dAa9L4t44vWPyp7+1/EzYckQmvQR7KMLeqJ3fBUl9xWQxFJ1H/Q++8yLu/4v43Nm0v7K+o/6IPU/zJutnpHX2gNGjRo0KBBgwYNGjTo/0W/AI7sPqAXWNoGAAAAAElFTkSuQmCC">
+<meta name="theme-color" content="#24006C">
+<title>Title Screen Type — Sonic 3 &amp; Knuckles font generator</title>
+<meta name="description" content="Type anything and render it in the Sonic 3 &amp; Knuckles title-screen sprite font. Download as PNG, WebP or AVIF.">
+<style>
+/*{{STYLE}}*/
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <span class="eyebrow">Title screen type</span>
+    <h1>Sonic 3 &amp; Knuckles sprite font <span>— type it, scale it, save it</span></h1>
+  </header>
+
+  <div class="stage checker" id="stage">
+    <canvas id="preview" role="img" aria-label="Preview of your text in the Sonic 3 and Knuckles font" width="10" height="10"></canvas>
+  </div>
+  <div class="readout">
+    <span>Output <b id="dims">—</b></span>
+    <span>·</span>
+    <span>Scale <b id="scaleOut">4×</b></span>
+    <span id="skipped" class="warn"></span>
+  </div>
+
+  <div class="transport">
+    <div class="seg" id="mode" role="group" aria-label="Output mode">
+      <button data-mode="still" aria-pressed="true">Still</button>
+      <button data-mode="anim" aria-pressed="false">Animated</button>
+    </div>
+    <div class="seg" id="scene" role="group" aria-label="Background">
+      <button data-scene="off" aria-pressed="true">No BG</button>
+      <button data-scene="s3" aria-pressed="false">S3 title</button>
+      <button data-scene="sk" aria-pressed="false">S&amp;K title</button>
+    </div>
+    <div class="row anim-only">
+      <button class="btn ghost sm" id="play">Play</button>
+      <input type="range" id="scrub" min="0" max="99" step="1" value="0" aria-label="Frame">
+      <span class="lbl inline">Frame <b id="frameOut">1/100</b></span>
+      <span class="lbl inline">Gif <b id="sizeOut"></b></span>
+      <span class="lbl inline">Motion <b id="romFlag" class="ok">ROM stock</b></span>
+    </div>
+  </div>
+
+  <div class="field">
+    <label for="text">Your text — line breaks make new lines</label>
+    <textarea id="text" maxlength="240" spellcheck="false" placeholder="&amp; knuckles"></textarea>
+    <div class="presets">
+      <button class="chip" data-preset="&amp; KNUCKLES">&amp; KNUCKLES</button>
+      <button class="chip" data-preset="SONIC">SONIC</button>
+      <button class="chip" data-preset="THE
+HEDGEHOG">THE ⏎ HEDGEHOG</button>
+      <button class="chip" data-preset="GAME OVER">GAME OVER</button>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="ctl">
+      <span class="lbl">Letter style</span>
+      <div class="seg" id="style" role="group" aria-label="Letter style">
+        <button data-style="outline" aria-pressed="true">Outlined</button>
+        <button data-style="plain" aria-pressed="false">Plain</button>
+      </div>
+    </div>
+
+    <div class="ctl">
+      <span class="lbl">Pixel scale <b id="scaleVal">4×</b></span>
+      <input type="range" id="scale" aria-label="Pixel scale" min="1" max="16" step="1" value="4">
+    </div>
+
+    <div class="ctl">
+      <span class="lbl">Alignment</span>
+      <div class="seg" id="align" role="group" aria-label="Alignment">
+        <button data-align="left" aria-pressed="false">Left</button>
+        <button data-align="center" aria-pressed="true">Center</button>
+        <button data-align="right" aria-pressed="false">Right</button>
+      </div>
+    </div>
+
+    <div class="ctl">
+      <span class="lbl">Letter spacing <b id="trackVal">0</b></span>
+      <input type="range" id="track" aria-label="Letter spacing" min="-8" max="16" step="1" value="0">
+    </div>
+
+    <div class="ctl">
+      <span class="lbl">Line spacing <b id="leadVal">0</b></span>
+      <input type="range" id="lead" aria-label="Line spacing" min="-8" max="24" step="1" value="0">
+    </div>
+
+    <div class="ctl">
+      <span class="lbl">Edge padding <b id="padVal">0</b></span>
+      <input type="range" id="pad" aria-label="Edge padding" min="0" max="32" step="1" value="0">
+    </div>
+
+    <div class="ctl" style="grid-column:1/-1;border-right:0">
+      <span class="lbl">Palette</span>
+      <div class="bgrow">
+        <div class="seg" id="palette" role="group" aria-label="Palette">
+          <button data-pal="classic" aria-pressed="true">Classic</button>
+          <button data-pal="knuckles" aria-pressed="false">Knuckles</button>
+          <button data-pal="sonic" aria-pressed="false">Sonic</button>
+          <button data-pal="tails" aria-pressed="false">Tails</button>
+          <button data-pal="shadow" aria-pressed="false">Shadow</button>
+          <button data-pal="emerald" aria-pressed="false">Emerald</button>
+        </div>
+        <input type="color" id="tint" value="#FCB400" title="Custom face colour">
+        <span class="lbl" style="margin:0 0 0 4px">Recolours the letters only, never the
+        background. The custom picker derives the whole ramp — shadow, highlight, outline —
+        from one face colour, snapped to the Genesis palette's 36-step channels.</span>
+      </div>
+      <div class="saved">
+        <span class="lbl" style="margin:0">Saved</span>
+        <div class="saved" id="savedList" style="margin:0"></div>
+        <input id="saveName" maxlength="24" placeholder="name" aria-label="Preset name">
+        <button class="btn ghost sm" id="savePal" style="min-width:0">Save</button>
+        <span class="lbl" id="saveMsg" style="margin:0;color:var(--gold)"></span>
+        <span class="note" id="saveNote" hidden style="flex-basis:100%">Saving keeps the sheet
+        palette and any per-line assignments together, in this browser only.</span>
+      </div>
+
+      <div id="lineCtl" hidden>
+        <span class="lbl" style="margin:14px 0 0">Per line <b id="lineHint"></b></span>
+        <div class="lines" id="lines"></div>
+      </div>
+    </div>
+
+    <div class="ctl" style="grid-column:1/-1;border-bottom:0;border-right:0">
+      <span class="lbl">Background</span>
+      <div class="bgrow">
+        <button class="swatch trans" data-bg="none" aria-pressed="true" title="Transparent"></button>
+        <button class="swatch" data-bg="#24006C" style="background:#24006C" title="Title navy"></button>
+        <button class="swatch" data-bg="#0D4807" style="background:#0D4807" title="Sprite-sheet green"></button>
+        <button class="swatch" data-bg="#FFFFFF" style="background:#fff" title="White"></button>
+        <input type="color" id="custom" value="#FC6C00" title="Custom colour">
+        <span class="lbl" style="margin:0 0 0 4px">Transparent stays transparent in PNG, WebP and AVIF</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="controls scene-only" id="sceneCtl">
+    <div class="ctl anim-only intro-only" id="introCtl" style="grid-column:1/-1;border-right:0">
+      <span class="lbl">Intro</span>
+      <div class="seg" id="intro" role="group" aria-label="Intro">
+        <button data-intro="off" aria-pressed="false">Off</button>
+        <button data-intro="on" aria-pressed="true">Full opening</button>
+      </div>
+      <span class="note">Plays the S&amp;K opening ahead of the text. The Death Egg comes down
+      onto the volcano while the island rises to meet it, Sonic falls in after, then Knuckles and
+      the ground slide up from the bottom and he lands — the order the ROM does it in. It all hangs
+      on <b>Camera_Y_pos_P2</b>: the background, the mountain sprite and the egg's resting place are
+      all positioned from it, so the egg settles on <b>$F0&nbsp;&minus;&nbsp;128&nbsp;=&nbsp;$70</b>
+      and stays stuck to the terrain as the scene rides up. Speeds are scaled up from the ROM's,
+      keeping their ratios; adds 65 frames ahead of the text.</span>
+    </div>
+    <div class="ctl" style="grid-column:1/-1;border-bottom:0;border-right:0">
+      <span class="lbl">Text position <b id="sceneYVal">176</b></span>
+      <input type="range" id="sceneY" aria-label="Text vertical position" min="0" max="223" step="1" value="176">
+      <span class="note">Output locks to the Genesis frame, 320&times;224, and the background
+      colour swatches no longer apply. 176 is where the ROM puts <b>&amp; KNUCKLES</b> — banner rest
+      $D4 plus the $5C subtitle offset, less the $80 sprite-space origin. The background also
+      scrolls up 16px over the first 16 frames, which is <b>V_scroll_value</b> in the original
+      making room for the subtitle.</span>
+    </div>
+  </div>
+
+  <div class="controls anim-only" id="animCtl">
+    <div class="ctl">
+      <span class="lbl">Entry distance <b id="distVal">96</b></span>
+      <input type="range" id="dist" aria-label="Entry distance" min="0" max="256" step="1" value="96">
+    </div>
+    <div class="ctl">
+      <span class="lbl">Initial velocity <b id="vel0Val">4</b></span>
+      <input type="range" id="vel0" aria-label="Initial velocity" min="0.25" max="16" step="0.25" value="4">
+    </div>
+    <div class="ctl">
+      <span class="lbl">Acceleration <b id="accelVal">0.25</b></span>
+      <input type="range" id="accel" aria-label="Acceleration" min="0.05" max="2" step="0.05" value="0.25">
+    </div>
+    <div class="ctl">
+      <span class="lbl">Bounciness <b id="dampVal">0.5</b></span>
+      <input type="range" id="damp" aria-label="Bounciness" min="0.1" max="0.95" step="0.05" value="0.5">
+    </div>
+    <div class="ctl">
+      <span class="lbl">Amplitude <b id="ampVal">100%</b></span>
+      <input type="range" id="amp" aria-label="Amplitude" min="10" max="200" step="5" value="100">
+    </div>
+    <div class="ctl">
+      <span class="lbl">Headroom <b id="headVal">auto</b></span>
+      <input type="range" id="head" aria-label="Headroom" min="-1" max="128" step="1" value="-1">
+    </div>
+    <div class="ctl" style="grid-column:1/-1;border-right:0">
+      <span class="lbl">Timebase</span>
+      <div class="seg" id="timebase" role="group" aria-label="Timebase">
+        <button data-tb="pal" aria-pressed="true">PAL · 50 Hz</button>
+        <button data-tb="ntsc" aria-pressed="false">NTSC · 59.92 Hz</button>
+      </div>
+      <span class="note">GIF delays are whole centiseconds, so it can hit PAL exactly
+      (100 frames at 2cs = 2.00s) but can only approximate NTSC by resampling to 83 frames
+      (1.66s). APNG delays are a fraction, so it expresses 59.92 Hz exactly as 100/5992 —
+      pick APNG if the timing matters. Video is a real-time capture and is approximate either way.</span>
+    </div>
+    <div class="ctl" style="grid-column:1/-1;border-bottom:0;border-right:0">
+      <button class="btn ghost sm" id="romReset" style="min-width:0">Reset to ROM values</button>
+      <span class="note">Defaults are read from Obj_TitleBanner_Main in the Sonic&nbsp;3 &amp; Knuckles
+      disassembly: 96px entry, 4px/frame initial velocity, 0.25px/frame² spring, velocity halved
+      on each zero crossing. Stock values settle in 100 frames.</span>
+    </div>
+  </div>
+
+  <div class="export">
+    <button class="btn still-only" id="dlPng">Download PNG</button>
+    <button class="btn ghost still-only" id="dlWebp">WebP</button>
+    <button class="btn ghost still-only" id="dlAvif">AVIF</button>
+    <button class="btn ghost still-only" id="copy">Copy image</button>
+    <button class="btn anim-only" id="dlGif">Download GIF</button>
+    <button class="btn ghost anim-only" id="dlApng">APNG</button>
+    <button class="btn ghost anim-only" id="dlWebm">WebM</button>
+    <button class="btn ghost anim-only" id="dlMp4">MP4</button>
+    <span class="note anim-only" style="flex-basis:100%;margin-top:2px">GIF and APNG are exact and
+    lossless. WebM and MP4 are lossy real-time captures — WebM keeps transparency, MP4 does not
+    (H.264 has no alpha, so transparent areas go black; pick a background colour first).</span>
+    <span class="status" id="status"></span>
+  </div>
+
+  <footer>
+    Sprite sheet ripped by <b>DarkNic the Half Demon1234</b> — credit kept as asked.<br>
+    Sonic the Hedgehog 3 &amp; Sonic &amp; Knuckles are © <b>Sega</b>. This is an unofficial fan tool; the artwork belongs to them.<br>
+    Character set: <b>A–Z, 0–9, space</b> and <b>! &quot; # $ % &amp; &#39; ( ) * + , - . / : ; &lt; = &gt; ? @ [ \ ] _ ` { | } ~</b>
+    — everything on a standard keyboard. <b>^</b> is the sheet's triangle rather than a caret.<br>
+    The ROM has no font at all — it stores &amp; KNUCKLES as a flat 168&times;24 bitmap — so only
+    <b>&amp; C E K L N S U</b> trace to real game pixels. The rest of the alphabet was reconstructed by
+    the ripper; the digits were built here from the sheet's own shading rules.
+  </footer>
+
+</div>
+
+<script>
+//{{SCRIPT}}
+</script>
+</body>
+</html>
