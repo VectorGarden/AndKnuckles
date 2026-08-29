@@ -1,0 +1,36 @@
+name: Assets match the pipeline
+
+# index.html has the artwork baked into it as base64, so it is possible to hand-edit
+# a glyph table or paste an asset and leave the page and tools/ disagreeing. Nothing
+# at runtime would notice: the page still works, it is just no longer what the
+# pipeline produces, and the next person to rebuild gets a diff they did not make.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: assets-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      - name: Set up Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Rebuild the assets and compare
+        # --check restores index.html to whatever it found and exits non-zero on a
+        # mismatch. No dependencies to install -- the decoders are all first-party
+        # and the only import outside tools/ is node:zlib.
+        run: node tools/build-all.mjs --check

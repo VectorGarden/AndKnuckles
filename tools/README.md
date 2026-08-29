@@ -11,8 +11,9 @@ node tools/build-all.mjs --check    # verify without changing anything
 ```
 
 `--check` restores whatever it found and exits non-zero if the pipeline and the
-committed `index.html` disagree, so it is safe to run against a dirty tree and is
-the useful form for CI.
+committed `index.html` disagree, so it is safe to run against a dirty tree. It runs
+on every pull request via [`.github/workflows/assets.yml`](../.github/workflows/assets.yml),
+so the page and `tools/` cannot drift apart without the check failing.
 
 The steps underneath, if you want to run one on its own:
 
