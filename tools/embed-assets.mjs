@@ -30,6 +30,17 @@ if(has('s3-back.png')){
   html = html.slice(0, l.index) + head + b64('s3-back.png') + tail + html.slice(l.index + l[0].length);
 }
 
+// ---- font: the atlas and the glyph table ----
+if(has('font-atlas.png') && has('font-table.json')){
+  const a = html.match(/^const ATLAS_SRC = "data:image\/png;base64,[^"]*";$/m);
+  if(!a) throw new Error('ATLAS_SRC not found in index.html');
+  html = html.slice(0, a.index) + `const ATLAS_SRC = "${b64('font-atlas.png')}";` + html.slice(a.index + a[0].length);
+  const f = html.match(/^const FONT = \{.*\};$/m);
+  if(!f) throw new Error('FONT table not found in index.html');
+  const table = fs.readFileSync(OUT + 'font-table.json', 'utf8').trim();
+  html = html.slice(0, f.index) + `const FONT = ${table};` + html.slice(f.index + f[0].length);
+}
+
 // ---- S&K: layers, geometry and the hand channels ----
 if(!has('intro-meta.json')){
   if(html === before) console.log('nothing to embed -- run the build scripts first');
