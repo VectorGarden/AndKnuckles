@@ -24,7 +24,7 @@ file meant half of it was base64:
     src/app.js                ->  <script>, after — all hand-written, no base64
 
 Those four generated constants are 100 KB of the 198 KB, and they used to sit above
-every line of real code. Now `app.js` is 1,650 lines of nothing else. Rebuild with
+every line of real code. Now `app.js` is 1,644 lines of nothing else. Rebuild with
 `node tools/build-all.mjs`; CI checks the committed page still matches. See
 [`tools/README.md`](tools/README.md).
 
@@ -219,7 +219,7 @@ and would need edge replication on both render paths to stay pixel-identical for
 visible.
 
 Because the pan and the shake move whole-screen content, those frames go out as full
-repaints and the rest as sub-rectangles. The result is **133 frames, 3.3s, 864&nbsp;KB at
+repaints and the rest as sub-rectangles. The result is **140 frames, 3.3s, 1,076&nbsp;KB at
 1&times;** — against the 4.1&nbsp;MB this README once estimated for a naive whole-screen
 encode of the full-length sequence.
 
@@ -289,6 +289,11 @@ and the extractor throws instead of silently testing nothing.
   on the ROM's own `y_vel == -$5B` test rather than a guard. Also that tuned parameters
   still close on rest, and that damping which never dissipates is *reported* rather than
   hanging.
+- [`test/png-scanlines.test.mjs`](test/png-scanlines.test.mjs) — the PNG row packer, which
+  needs its own test because the APNG round-trip cannot reach half of it. The palette is
+  built from the atlas and every scene at load, so it is always 69 entries and `buildApng`
+  always picks 8-bit depth: **the 4-bit branch is unreachable from the app**. A mutation
+  that swapped the nibble order was invisible until this test existed.
 
 They were checked by breaking the code on purpose: widening the LZW width one step early
 fails 41 assertions, damping 0.5→0.6 fails 5, acceleration 0.25→0.26 fails 4, and shifting
@@ -316,8 +321,8 @@ A headless browser rather than jsdom because jsdom has no canvas at all: the usu
 the browser agrees. These assertions are about pixels, so the renderer has to be real.
 
 They were checked by breaking the code on purpose, each mutation reproducing a bug that
-actually happened: dropping the V_scroll from `introRect`, removing a plane's edge strips,
-and dropping the mountain from the indexed path. All four fail the suite.
+actually happened: dropping the V_scroll from `introRect`, removing the edge strips from
+either plane, and dropping the mountain from the indexed path. All four fail the suite.
 
 [`test/dom/apng.test.mjs`](test/dom/apng.test.mjs) does the same for APNG: chunk CRCs
 checked against an independent implementation, then every frame inflated and un-filtered
@@ -330,12 +335,6 @@ There is no byte round-trip to do — the frames go through a lossy codec — so
 can be checked: that the buttons' enabled state matches what `MediaRecorder` actually
 supports, that clicking one produces a file, that the container is the one requested, and
 that the result decodes back with the right dimensions and a non-zero duration.
-
-[`test/png-scanlines.test.mjs`](test/png-scanlines.test.mjs) covers the PNG row packer
-directly, because the APNG round-trip cannot reach half of it. The palette is built from
-the atlas and every scene at load, so it is always 69 entries and `buildApng` always picks
-8-bit depth — **the 4-bit branch is unreachable from the app**. A mutation that swapped the
-nibble order was invisible until this test existed.
 
 [`test/dom/ui.test.mjs`](test/dom/ui.test.mjs) covers the controls: that each one reaches
 the canvas, and that the parts of the UI which appear conditionally appear under the right
@@ -439,7 +438,8 @@ Pushes to `main` deploy through [`.github/workflows/pages.yml`](.github/workflow
 Repo Settings → Pages → Source must be **GitHub Actions** for it to publish.
 
 The workflow copies `index.html` and `CNAME` into `_site` and uploads that, rather than
-uploading the repository root, so `README.md`, `.gitignore` and `.github/` are not served.
+uploading the repository root — so nothing else is served: not the sources it was assembled
+from, not `tools/`, `test/` or `node_modules/`, and not the ROM data under `tools/rom/`.
 Two guards run first: `index.html` has to be non-empty and has to contain a closing
 `</html>`, so a truncated file fails the build instead of replacing a working site.
 
@@ -455,8 +455,9 @@ branch deployment would still work.
 ## Credits
 
 Sprite sheet ripped by **DarkNic the Half Demon1234** — credit kept as asked.
-Background art decoded from the [Sonic Retro disassembly][disasm]; the Kosinski and
-Enigma formats were implemented against [flamewing/mdcomp][mdcomp].
+Background art decoded from the [Sonic Retro disassembly][disasm], whose compressed source
+data is vendored under [`tools/rom/`](tools/rom/); the Kosinski, Enigma and Nemesis formats
+were implemented against [flamewing/mdcomp][mdcomp].
 
 Sonic the Hedgehog 3 and Sonic & Knuckles are © **Sega**. This is an unofficial
 fan tool; all of the artwork belongs to them.
