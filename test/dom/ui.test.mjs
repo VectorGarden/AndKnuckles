@@ -179,6 +179,18 @@ test('a still title card exports the whole screen, at rest', async () => {
   assert.deepEqual(r, {w: 640, h: 448}, 'the card is laid out on the 320x224 screen');
 });
 
+test('each banner is its own art, and the choice changes only the banner', async () => {
+  await setup(page, {style: 'card', text: 'ANGEL ISLAND', mode: 'still'});
+  const r = await page.evaluate(() => {
+    const ink = () => { const c = exportCanvas(), d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+      let h = 0; for(let i = 0; i < d.length; i++) h = (h * 31 + d[i]) | 0; return h; };
+    const out = {};
+    for(const b of ['s3', 'sk', 's3k']){ document.querySelector(`#cardBanner button[data-banner="${b}"]`).click(); out[b] = ink(); }
+    return out;
+  });
+  assert.equal(new Set(Object.values(r)).size, 3, 'the three banners should draw three different cards');
+});
+
 test('the title card swaps the spring controls for its own', async () => {
   await setup(page, {mode: 'anim', style: 'outline'});
   assert.equal(await shown(page, '#cardCtl'), false, 'card options without the card style');

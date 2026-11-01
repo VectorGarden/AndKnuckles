@@ -551,7 +551,13 @@ pins the numbers: the act lands on frame 28, the exits start on 121, 123, 125 an
 Every zone-name frame ends at x +128 from its origin, so names are right-aligned there, and
 so is yours. Extra lines stack *above* it, so the last line sits where a zone name does.
 **ZONE** and the act number (1, 2, or none) are options, since not every zone has them —
-Sky Sanctuary and the Doomsday have no act. The banner, ZONE, ACT and both numbers are the
+Sky Sanctuary and the Doomsday have no act. Those are the only two act numbers the game has.
+
+The **banner** is an option too, because its emblem changes with the game. It comes from
+whatever is loaded at tile `$510` over the Red ACT art: S3&K loads its own file there
+(*SONIC 3 & KNUCKLES*), S&K on its own loads another (*SONIC & KNUCKLES*), and Sonic 3 on
+its own loads nothing, so Red ACT's own tiles show — *SONIC 3*, with a yellow zigzag under
+it. ZONE is the same in all three. The banner, ZONE, ACT and both numbers are the
 game's own art, decoded from the same title-card files. The spring's sliders hide while
 this style is on; they do not drive it.
 
@@ -583,8 +589,13 @@ build stops if one ever does not.
   face colour and the two anti-aliasing tints. Run along V's own stroke it reproduces V
   pixel for pixel, and the build checks that it still does.
 
-There are no digits or punctuation — the title card never drew any beyond the act number,
-which is a different design. Anything outside A–Z is skipped and named under the preview.
+The title card never drew punctuation either, so **& . , ' " ! ? : -** are drawn too, from a
+segment, a box and an elliptical arc at the same weight and cut-offs — the arc, run as a
+whole ellipse, matches the real O to within one shade on all but 36 of its 576 pixels, and
+the build checks it still does. The **&** follows the style's habit of keeping features small
+and high: a little loop above the bar, a tall bowl, and a leg out to the bottom right.
+There are no digits; the act number is a different design. Anything else is skipped and
+named under the preview.
 
 The card keeps the game's colours — it is drawn in Sonic's palette line — including the
 dark bar behind each letter's lower two-thirds, which runs to the glyph's right edge so a
