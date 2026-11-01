@@ -15,6 +15,7 @@ import {fileURLToPath} from 'url';
 import {kosDecode, kosMDecode} from './lib/kosinski.mjs';
 import {eniDecode} from './lib/enigma.mjs';
 import {encodeIndexedPng} from './lib/png.mjs';
+import {parseMap as parseMapText, drawSprite} from './lib/sprite.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const D    = path.join(HERE, 'rom') + path.sep;
@@ -50,8 +51,7 @@ const praw=Buffer.concat([fs.readFileSync(D+'SK_Sonic.bin'),fs.readFileSync(D+'S
                           fs.readFileSync(D+'SK_SegaBG.bin').subarray(32,96)]);
 const PAL=[]; for(let i=0;i<64;i++){const w=(praw[i*2]<<8)|praw[i*2+1];
   PAL.push([((w>>1)&7)*36,((w>>5)&7)*36,((w>>9)&7)*36]);}
-const parseMap=f=>[...fs.readFileSync(D+f,'utf8').matchAll(/dc\.b\s+([^\n]+)/g)]
-  .map(m=>m[1].split(',').map(t=>{t=t.trim();return t.startsWith('$')?parseInt(t.slice(1),16):parseInt(t,10);}));
+const parseMap=f=>parseMapText(fs.readFileSync(D+f,'utf8'));
 const deMap=parseMap('SK_DeathEgg_map.asm'), mtMap=parseMap('SK_Mountain_map.asm'), fallMap=parseMap('SK_SonicFall_map.asm');
 
 // ---- 4. compose ------------------------------------------------------------
@@ -68,23 +68,7 @@ function plane(px,map,opaque){
     }
   }
 }
-function sprite(px,map,art,objX,objY,line){
-  for(const [yy,size,th,tl,xh,xl] of map){
-    let Y=yy>127?yy-256:yy, X=(xh<<8)|xl; if(X>32767) X-=65536;
-    const pw=((size>>2)&3)+1, ph=(size&3)+1, word=(th<<8)|tl;
-    let t=word&0x7FF; const hf=!!(word&0x800), vf=!!(word&0x1000);
-    const L = line !== undefined ? line : ((word>>13)&3);
-    for(let cx=0;cx<pw;cx++) for(let cy=0;cy<ph;cy++){
-      for(let y=0;y<8;y++) for(let x=0;x<8;x++){
-        const sx=hf?7-x:x, sy=vf?7-y:y;
-        const b=art[t*32+sy*4+(sx>>1)], idx=(sx&1)?(b&0x0F):(b>>4);
-        if(!idx) continue;
-        const gx=objX-128+X+(hf?(pw-1-cx):cx)*8+x, gy=objY-128+Y+(vf?(ph-1-cy):cy)*8+y;
-        if(gx>=0&&gx<W&&gy>=0&&gy<H) px[gy*W+gx]=L*16+idx;
-      } t++;
-    }
-  }
-}
+const sprite=(px,map,art,objX,objY,line)=>drawSprite(px,W,H,map,art,objX,objY,line);
 function bbox(px){ let x0=W,y0=H,x1=-1,y1=-1;
   for(let y=0;y<H;y++) for(let x=0;x<W;x++) if(px[y*W+x]!==EMPTY){
     if(x<x0)x0=x; if(x>x1)x1=x; if(y<y0)y0=y; if(y>y1)y1=y; }

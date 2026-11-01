@@ -76,10 +76,6 @@ function paint(target, scale, L, dy, G, scroll, frame){
   c.clearRect(0,0,W,H);
   const img = sceneImg();
   if(G.scene && introOn()){
-    // note: not L -- that is the text layout, and shadowing it here is how the
-    // wrapper object ended up passed to drawImage instead of the image
-    const IL = introLayers[state.scene], st = introState(frame||0);
-    const bo = st.bgOff - st.shakeY, mo = st.mtnOff - st.shakeY;
     const put = (lay, ox, oy) => c.drawImage(lay.img, ox*scale, (oy - scroll)*scale,
                                              lay.w*scale, lay.h*scale);
     // Full-plane layer with its edge rows repeated into whatever the camera or
@@ -92,20 +88,10 @@ function paint(target, scale, L, dy, G, scroll, frame){
       if(bot < BG_H) c.drawImage(lay.img, 0, lay.h-1, lay.w, 1,
                                  0, bot*scale, lay.w*scale, (BG_H-bot)*scale);
     };
-    plane(IL.back, bo);
-    put(IL.egg, IL.egg.x, IL.egg.y + (st.eggY - IL.egg.anchorY) - st.shakeY);
-    put(IL.mtn, IL.mtn.x, IL.mtn.y + mo);
-    const slide = st.f ? 0 : Math.round((1 - st.reveal) * BG_H);
-    if(st.reveal > 0){
-      if(slide === 0) plane(IL.front[st.f], bo);
-      else put(IL.front[st.f], 0, slide + bo);
+    for(const d of introDraws(frame||0)){
+      if(d.clamp) plane(d.lay, d.y);
+      else put(d.lay, d.x, d.fixed ? d.y + scroll : d.y);
     }
-    const hs = handStates(frame||0);
-    if(hs) hs.forEach((v, i) => {
-      const q = IL.hands[i][v];
-      if(q) put(q, q.x, q.y);
-    });
-    if(st.falling) put(IL.sonic, IL.sonic.x, IL.sonic.y + (st.sonicY - IL.sonic.anchorY));
   } else if(G.scene && img){
     c.drawImage(img, 0, -scroll*scale, BG_W*scale, BG_H*scale);
     if(scroll > 0)   // repeat the last row into the strip the scroll exposed
@@ -198,7 +184,9 @@ const FRAME_MS = 20;                 // GIF delay is whole centiseconds: 2cs
 function tick(ts){
   if(!player.playing) return;
   const frames = motion().frames;
-  const total = frames.length + (introOn() ? introLen() : 0);
+  // the idle tail too -- without it playback wrapped before the S&K smile fired
+  // and before Tails ever reached the screen, though both are in the export
+  const total = frames.length + (introOn() ? introLen() : 0) + introTail();
   if(player.last) player.acc += ts - player.last;
   player.last = ts;
   let stepped = false;
@@ -514,15 +502,16 @@ const sceneImg = () => bgImgs[state.scene] || null;
 const sceneIdx = () => bgIdxs[state.scene] || null;
 
 
-/* The S&K intro is composed from layers rather than one flat image, because the
+/* The intros are composed from layers rather than one flat image. On S&K the
    Death Egg descends *behind* the mountain: back plane, egg, then mountain and
-   characters, then the falling Sonic on top. Each layer is indexed into the
-   shared palette the same way a scene is. */
+   characters, then the falling Sonic on top. On S3 Tails' plane flies between
+   the two planes. Each layer is indexed into the shared palette the same way a
+   scene is, and gets an id so a frame's layer list can be compared cheaply. */
 const introLayers = {};
+let layerIds = 0;
 function buildIntro(id){
-  const spec = SCENES[id].intro; if(!spec) return;
-  const L = introLayers[id] = {front: []};
-  const index = (img, opaqueLayer) => {
+  const spec = SCENES[id].intro; if(!spec || !INTROS[id]) return;
+  const index = img => {
     const c = document.createElement('canvas');
     c.width = img.naturalWidth; c.height = img.naturalHeight;
     const x = c.getContext('2d', {willReadFrequently:true});
@@ -538,15 +527,21 @@ function buildIntro(id){
       if(v === undefined){ v = PALETTE.length; PALETTE.push([d[i],d[i+1],d[i+2]]); seen.set(k, v); }
       idx[p] = v;
     }
-    return {img, idx, w: c.width, h: c.height};
+    return {img, idx, w: c.width, h: c.height, id: layerIds++};
   };
-  L.back = index(spec.back.img);
-  for(const f of spec.front) L.front.push(index(f.img));
-  L.egg   = Object.assign(index(spec.egg.img),   {x:spec.egg.x,   y:spec.egg.y,   anchorY:spec.egg.anchorY});
-  L.sonic = Object.assign(index(spec.sonic.img), {x:spec.sonic.x, y:spec.sonic.y, anchorY:spec.sonic.anchorY});
-  L.mtn   = Object.assign(index(spec.mtn.img),   {x:spec.mtn.x,   y:spec.mtn.y});
-  L.hands = (spec.hands || []).map(h => h.patches.map(q =>
-    q ? Object.assign(index(q.img), {x:q.x, y:q.y}) : null));
+  introLayers[id] = INTROS[id].build(spec, index);
+}
+/* Every artwork part of an intro spec -- anything carrying a src -- so the
+   loader can decode them all before buildIntro indexes them. */
+function introParts(spec){
+  const out = [];
+  const walk = v => {
+    if(!v || typeof v !== 'object') return;
+    if(typeof v.src === 'string'){ out.push(v); return; }
+    for(const k in v) walk(v[k]);
+  };
+  walk(spec);
+  return out;
 }
 
 const sceneIntro = () => (SCENES[state.scene] || {}).intro || null;
@@ -576,16 +571,17 @@ const SHAKE = [1,2,1,3,1,2,2,1,2,3,1,2,1,2,0,0, 2,0,3,2,2,3,2,2,1,3,0,0,1,0,1,3,
    about the camera leaves it floating. */
 function sonicFall(){ const s = sceneIntro(); return Math.ceil((s.sonicY1 - s.sonicY0) / s.fallPx); }
 function introLen(){
-  const s = sceneIntro(); if(!s) return 0;
-  return sonicFall() + s.hold2 + s.hold3;
+  const s = sceneIntro(), drv = INTROS[state.scene];
+  return s && drv ? drv.len(s) : 0;
 }
-/* Obj_SKTitle_HandAnim is set up once the title is assembled, so the idle
-   channels run from the moment the pose settles -- through the text spring and
-   on past it. The tail is however much longer they need than the spring does;
-   without it the smile, which waits 3*60 frames before it fires, never shows. */
+/* The title objects -- Obj_SKTitle_HandAnim, or S3's finger, wink and Tails --
+   are set up once the screen is assembled, so they run from the moment the pose
+   settles, through the text spring and on past it. The tail is however much
+   longer they need than the spring does: without it the S&K smile, which waits
+   3*60 frames before it fires, never shows, and Tails never arrives. */
 function introTail(){
   const s = sceneIntro();
-  if(!introOn() || !s || !s.hands) return 0;
+  if(!introOn() || !s) return 0;
   return Math.max(0, (s.idle || 0) - motion().frames.length);
 }
 /* Which state each hand channel is showing on timeline frame t, or null before
@@ -649,6 +645,119 @@ function introState(t){
           falling: t < sLand, reveal, bgOff, mtnOff, shakeY};
 }
 
+/* Where an animation table stands k frames in: steps are [frame, duration]
+   pairs, looping. Both S3 title objects run 168-frame loops. */
+function stepAt(steps, k){
+  const period = steps.reduce((a, s) => a + s[1], 0);
+  let m = ((k % period) + period) % period;
+  for(const [f, d] of steps){ if(m < d) return f; m -= d; }
+  return steps[steps.length-1][0];
+}
+
+/* Obj_TitleTailsPlane on object frame k: a pixel a frame right from x0 to the
+   turn, then mirrored and lower on the way back. Null while it is off-screen,
+   which keeps those frames identical so the export collapses them. */
+function tailsAt(k){
+  const T = sceneIntro().tails, IL = introLayers.s3;
+  const span = 2*T.turn;
+  const p = ((k + 1 + T.x0) % span + span) % span;    // x = k+1: it moves before it draws
+  const back = p >= T.turn;
+  const q = IL.tails[Math.floor(k / T.dur) % IL.tails.length][back ? 1 : 0];
+  const x = (back ? span - p : p) - 0x80 + q.dx;
+  const y = (back ? T.yBack : T.yOut) - 0x80 + q.dy;
+  if(x >= BG_W || x + q.w <= 0) return null;
+  return {key:'tails', lay:q, x, y, fixed:true};
+}
+
+/* One driver per scene that has an opening. draws(t) is the whole picture on
+   timeline frame t, bottom to top, and everything else -- the preview, the
+   indexed export, the dirty rects and the frame collapsing -- works from it.
+
+     key    identity across frames, for working out what moved
+     clamp  a full-plane layer: repeat its edge rows into whatever the camera
+            or the V_scroll exposes -- sky above, land below
+     plane  moving it moves full-frame content, so there is no sub-rect to send
+     fixed  not shifted by the V_scroll                                       */
+const INTROS = {
+  sk: {
+    build(spec, index){
+      const L = {front: []};
+      L.back = index(spec.back.img);
+      for(const f of spec.front) L.front.push(index(f.img));
+      L.egg   = Object.assign(index(spec.egg.img),   {x:spec.egg.x,   y:spec.egg.y,   anchorY:spec.egg.anchorY});
+      L.sonic = Object.assign(index(spec.sonic.img), {x:spec.sonic.x, y:spec.sonic.y, anchorY:spec.sonic.anchorY});
+      L.mtn   = Object.assign(index(spec.mtn.img),   {x:spec.mtn.x,   y:spec.mtn.y});
+      L.hands = (spec.hands || []).map(h => h.patches.map(q =>
+        q ? Object.assign(index(q.img), {x:q.x, y:q.y}) : null));
+      return L;
+    },
+    len(s){ return sonicFall() + s.hold2 + s.hold3; },
+    draws(t){
+      const IL = introLayers.sk, st = introState(t);
+      const bo = st.bgOff - st.shakeY, mo = st.mtnOff - st.shakeY;
+      const d = [
+        {key:'back', lay:IL.back, x:0, y:bo, clamp:true, plane:true},
+        {key:'egg',  lay:IL.egg,  x:IL.egg.x, y:IL.egg.y + (st.eggY - IL.egg.anchorY) - st.shakeY},
+        {key:'mtn',  lay:IL.mtn,  x:IL.mtn.x, y:IL.mtn.y + mo},
+      ];
+      // plane A rises from the bottom as Copy_Map_Line_To_VRAM fills each line
+      const slide = st.f ? 0 : Math.round((1 - st.reveal) * BG_H);
+      if(st.reveal > 0)
+        d.push({key:'front', lay:IL.front[st.f], x:0, y:slide + bo, clamp:slide === 0, plane:true});
+      const hs = handStates(t);
+      if(hs) hs.forEach((v, i) => {
+        const q = IL.hands[i][v];
+        if(q) d.push({key:'hand' + i, lay:q, x:q.x, y:q.y});
+      });
+      if(st.falling)
+        d.push({key:'sonic', lay:IL.sonic, x:IL.sonic.x, y:IL.sonic.y + (st.sonicY - IL.sonic.anchorY)});
+      return d;
+    },
+  },
+
+  /* Title_Screen's S3 branch. The opening is a run of full-screen pictures --
+     the SEGA logo, its fade, eleven page-flipped frames of Sonic coming out of
+     it, and a white flash -- each with its ROM duration. `hold` is extra time
+     on the logo. Then the settled screen, with Tails' plane between the planes
+     and the finger and wink sprites over plane A. */
+  s3: {
+    build(spec, index){
+      const patches = ps => Object.fromEntries(Object.entries(ps).map(([f, q]) =>
+        [f, Object.assign(index(q.img), {x:q.x, y:q.y})]));
+      return {
+        seq:    spec.seq.map(q => index(q.img)),
+        back:   index(spec.back.img),
+        front:  index(spec.front.img),
+        finger: patches(spec.finger.patches),
+        wink:   patches(spec.wink.patches),
+        tails:  spec.tails.frames.map(p => p.map(q => Object.assign(index(q.img), {dx:q.dx, dy:q.dy}))),
+      };
+    },
+    len(s){ return s.hold + s.seq.reduce((a, q) => a + q.dur, 0); },
+    draws(t){
+      const s = sceneIntro(), IL = introLayers.s3;
+      let end = s.hold;
+      for(let i = 0; i < s.seq.length; i++){
+        end += s.seq[i].dur;
+        if(t < end) return [{key:'seq', lay:IL.seq[i], x:0, y:0, clamp:true, plane:true}];
+      }
+      const k = t - end;
+      const d = [{key:'back', lay:IL.back, x:0, y:0, clamp:true, plane:true}];
+      const tp = tailsAt(k);
+      if(tp) d.push(tp);
+      d.push({key:'front', lay:IL.front, x:0, y:0, clamp:true, plane:true});
+      for(const name of ['finger', 'wink']){
+        const q = IL[name][stepAt(s[name].steps, k)];
+        if(q) d.push({key:name, lay:q, x:q.x, y:q.y});
+      }
+      return d;
+    },
+  },
+};
+const introDraws = t => INTROS[state.scene].draws(t);
+/* What a frame shows, as a string: equal strings are identical pictures. */
+const introSig = t => introDraws(t).map(d => d.key + ':' + d.lay.id + ':' + d.x + ':' + d.y).join('|');
+
 function buildBackground(id){
   const c = document.createElement('canvas');
   c.width = BG_W; c.height = BG_H;
@@ -700,22 +809,8 @@ function blitLayer(buf, rect, scale, lay, ox, oy, scroll, clampEdges){
   }
 }
 function fillIntro(buf, rect, scale, scroll, frame){
-  const L = introLayers[state.scene], st = introState(frame||0);
-  const bo = st.bgOff - st.shakeY, mo = st.mtnOff - st.shakeY;
-  blitLayer(buf, rect, scale, L.back, 0, bo, scroll, true);
-  blitLayer(buf, rect, scale, L.egg, L.egg.x,
-            L.egg.y + (st.eggY - L.egg.anchorY) - st.shakeY, scroll);
-  blitLayer(buf, rect, scale, L.mtn, L.mtn.x, L.mtn.y + mo, scroll);
-  const slide = st.f ? 0 : Math.round((1 - st.reveal) * BG_H);
-  if(st.reveal > 0)
-    blitLayer(buf, rect, scale, L.front[st.f], 0, slide + bo, scroll, slide === 0);
-  const hs = handStates(frame||0);
-  if(hs) hs.forEach((v, i) => {
-    const q = L.hands[i][v];
-    if(q) blitLayer(buf, rect, scale, q, q.x, q.y, scroll);
-  });
-  if(st.falling)
-    blitLayer(buf, rect, scale, L.sonic, L.sonic.x, L.sonic.y + (st.sonicY - L.sonic.anchorY), scroll);
+  for(const d of introDraws(frame||0))
+    blitLayer(buf, rect, scale, d.lay, d.x, d.y, d.fixed ? 0 : scroll, d.clamp);
 }
 
 function fillBackground(buf, rect, scale, scroll){
@@ -986,45 +1081,36 @@ function gifPalette(L){
   return {pal, bgIdx};
 }
 
-/* Only the Death Egg and the falling Sonic move during the intro, so a frame
-   needs the union of where they were and where they are -- not a full repaint. */
+/* Only what moved since the previous frame: each layer that changed, at both
+   where it was and where it is, so the old pixels get painted over. Anything
+   that moves full-frame content -- the camera pan, the shake, a sliding plane,
+   a page flip -- has no sub-rect to send. Null when nothing moved. */
 function introRect(t, scale, W, H){
-  const L = introLayers[state.scene]; if(!L) return {x:0,y:0,w:W,h:H};
-  const st = introState(t), pv = introState(Math.max(0, t-1));
-  // Every layer is drawn shifted up by the V_scroll, so the rects have to be too.
-  // The egg and Sonic only move while it is still 0, which hid this until the
-  // hand patches started stepping during the text phase, where it is 16.
+  if(!introLayers[state.scene]) return {x:0,y:0,w:W,h:H};
+  // Layers are drawn shifted up by the V_scroll, so the rects have to be too.
+  // A scroll change is a full repaint anyway, so t's scroll does for t-1.
   const sc = scrollAt(t) * scale;
-  const box = (lay, oy) => ({x: lay.x*scale, y: (lay.y + oy)*scale - sc,
-                             w: lay.w*scale, h: lay.h*scale});
-  // Only what actually moved. The egg is still for the whole text phase, and
-  // including it there cost a full egg-sized rect on every one of those frames.
-  // The caller unions the previous rect in, so the erase is still covered.
+  const box = d => ({x: d.x*scale, y: d.y*scale - (d.fixed ? 0 : sc),
+                     w: d.lay.w*scale, h: d.lay.h*scale});
+  const was = new Map(introDraws(Math.max(0, t-1)).map(d => [d.key, d]));
+  const now = new Map(introDraws(t).map(d => [d.key, d]));
   let r = null;
-  const add = q => { r = r ? rectUnion(r, q) : q; };
-  // The camera pan, the shake and the sliding plane all move full-frame content,
-  // so there is no sub-rect to send while any of them is running.
-  if(st.bgOff !== pv.bgOff || st.mtnOff !== pv.mtnOff || st.shakeY !== pv.shakeY)
-    return {x:0, y:0, w:W, h:H};
-  if(st.reveal !== pv.reveal && st.f === 0) return {x:0, y:0, w:W, h:H};
-  if(t === 0 || st.eggY !== pv.eggY) add(box(L.egg, st.eggY - L.egg.anchorY));
-  if(st.falling) add(box(L.sonic, st.sonicY - L.sonic.anchorY));
-  // A hand channel that stepped this frame: both the state it left and the one
-  // it arrived at, so the old pixels get painted over.
-  const hs = handStates(t), hp = handStates(Math.max(0, t-1));
-  if(hs && hp) hs.forEach((v, i) => {
-    if(v === hp[i]) return;
-    for(const w of [v, hp[i]]){
-      const q = L.hands[i][w];
-      if(q) add({x: q.x*scale, y: q.y*scale - sc, w: q.w*scale, h: q.h*scale});
-    }
-  });
-  if(!r) return null;                      // nothing moved -- not a 1x1 at the
-                                           // origin, which would drag the union
-                                           // all the way up from the text band
-  const x0 = Math.max(0, Math.min(W, r.x)), y0 = Math.max(0, Math.min(H, r.y));
-  const x1 = Math.max(0, Math.min(W, r.x + r.w)), y1 = Math.max(0, Math.min(H, r.y + r.h));
-  return (x1<=x0 || y1<=y0) ? {x:0,y:0,w:1,h:1} : {x:x0, y:y0, w:x1-x0, h:y1-y0};
+  // clipped one at a time: Tails' rect runs off the edge, and an empty one
+  // must not drag the union up to the origin
+  const add = q => {
+    const x0 = Math.max(0, q.x), y0 = Math.max(0, q.y);
+    const x1 = Math.min(W, q.x + q.w), y1 = Math.min(H, q.y + q.h);
+    if(x1 > x0 && y1 > y0) r = r ? rectUnion(r, {x:x0, y:y0, w:x1-x0, h:y1-y0})
+                                 : {x:x0, y:y0, w:x1-x0, h:y1-y0};
+  };
+  for(const key of new Set([...was.keys(), ...now.keys()])){
+    const p = was.get(key), c = now.get(key);
+    if(p && c && p.lay === c.lay && p.x === c.x && p.y === c.y) continue;
+    if((p && p.plane) || (c && c.plane)) return {x:0, y:0, w:W, h:H};
+    if(p) add(box(p));
+    if(c) add(box(c));
+  }
+  return r;
 }
 
 function rectUnion(a, b){
@@ -1046,7 +1132,7 @@ function frameRects(F, kind){
   const {W, H, bgIdx, runs, L, g, scale} = F;
   const scene = !!g.scene;
   const out = [];
-  let prevText = null, prevScroll = -1, prevIntro = null, prevF = null, prevDy = null;
+  let prevText = null, prevScroll = -1, prevDy = null;
   for(let i = 0; i < runs.length; i++){
     const r = runs[i];
     let rect;
@@ -1062,12 +1148,8 @@ function frameRects(F, kind){
         // up the frame produced a tall rect for every step of the animation.
         if(r.dy !== prevDy) add(rectUnion(prevText, cur));
         if(introOn()){
-          const ir = introRect(r.frame, scale, W, H);
-          // union in the old position too, so whatever moved gets erased
-          const moved = (ir && prevIntro) ? rectUnion(prevIntro, ir) : (ir || prevIntro);
-          if(moved) add(moved);
-          if(prevF !== null && introState(r.frame).f !== prevF) rect = {x:0,y:0,w:W,h:H};
-          prevIntro = ir; prevF = introState(r.frame).f;
+          const ir = introRect(r.frame, scale, W, H);   // old and new positions both
+          if(ir) add(ir);
         }
         if(!rect) rect = rectUnion(prevText, cur);
       }
@@ -1131,11 +1213,7 @@ function gifFrames(allowResample){
   const runs = [];
   offs.forEach((dy, i) => {
     const scroll = scrollAt(i);
-    const st = introOn() ? introState(i) : null;
-    const sig = st ? st.f + ':' + st.eggY + ':' + (st.falling ? st.sonicY : -1)
-                     + ':' + Math.round(st.reveal * BG_H)
-                     + ':' + st.bgOff + ':' + st.mtnOff + ':' + st.shakeY
-                     + ':' + (handStates(i) || []).join(',') : '';
+    const sig = introOn() ? introSig(i) : '';
     const last = runs[runs.length-1];
     if(last && last.dy === dy && last.scroll === scroll && last.sig === sig) last.delay += 1;
     else runs.push({dy, scroll, sig, delay:1, frame:i});
@@ -1623,8 +1701,7 @@ atlas.onload = ()=>{
   for(const id of ids){
     const spec = SCENES[id].intro;
     if(spec){
-      const parts = [spec.back, ...spec.front, spec.egg, spec.sonic, spec.mtn];
-      for(const h of spec.hands || []) for(const q of h.patches) if(q) parts.push(q);
+      const parts = introParts(spec);
       let left = parts.length;
       pending++;
       for(const part of parts){
