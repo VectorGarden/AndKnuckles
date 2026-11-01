@@ -154,7 +154,10 @@ two names, or if a word's letters do not exactly fill its pieces.
 J, Q, W and X are derived at the end of the file, and the anti-aliasing rule used for the
 drawn strokes is checked against the real V on every build. Writes `card-atlas.png`, in the
 title card's own colours (Sonic's palette line, which the card is drawn in), and
-`card-table.json`, the same shape as the main font's table.
+`card-table.json`, the same shape as the main font's table plus two extras: `parts`, the
+offsets of the rest of the card (the banner, ZONE and both act numbers, written as
+`card-banner.png`, `card-zone.png`, `card-act1.png` and `card-act2.png`), and `card`, the
+elements' start and rest positions, speeds, hold and exit order from `ObjArray_TtlCard`.
 
 ## What build-page does
 

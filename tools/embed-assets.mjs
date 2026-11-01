@@ -78,8 +78,10 @@ if(has('aiz-meta.json')){
 
 // ---- the title-card lettering: its own atlas and table ----
 if(has('card-atlas.png') && has('card-table.json')){
-  const table = fs.readFileSync(OUT + 'card-table.json', 'utf8').trim();
-  const lines = `const CARD_FONT = ${table};\nconst CARD_SRC = "${b64('card-atlas.png')}";`;
+  // the banner, ZONE and act-number parts ride along in the table, as data URIs
+  const t = JSON.parse(fs.readFileSync(OUT + 'card-table.json', 'utf8'));
+  for(const [name, part] of Object.entries(t.parts || {})) part.src = b64(`card-${name}.png`);
+  const lines = `const CARD_FONT = ${JSON.stringify(t)};\nconst CARD_SRC = "${b64('card-atlas.png')}";`;
   const cur = html.match(/^const CARD_FONT = .*;\nconst CARD_SRC = "[^"]*";$/m);
   if(cur) html = html.slice(0, cur.index) + lines + html.slice(cur.index + cur[0].length);
   else {

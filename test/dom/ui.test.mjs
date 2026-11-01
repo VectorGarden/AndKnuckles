@@ -173,6 +173,32 @@ test('a palette preset leaves title-card text alone, and its controls hide', asy
   assert.equal(after.sum, before.sum, 'a preset recoloured the title-card letters');
 });
 
+test('a still title card exports the whole screen, at rest', async () => {
+  await setup(page, {style: 'card', text: 'ANGEL ISLAND', scale: 2, mode: 'still'});
+  const r = await page.evaluate(() => { const c = exportCanvas(); return {w: c.width, h: c.height}; });
+  assert.deepEqual(r, {w: 640, h: 448}, 'the card is laid out on the 320x224 screen');
+});
+
+test('the title card swaps the spring controls for its own', async () => {
+  await setup(page, {mode: 'anim', style: 'outline'});
+  assert.equal(await shown(page, '#cardCtl'), false, 'card options without the card style');
+  assert.equal(await shown(page, '#dist'), true);
+  await setup(page, {mode: 'anim', style: 'card'});
+  assert.equal(await shown(page, '#cardCtl'), true, 'card options with the card style');
+  assert.equal(await shown(page, '.spring-only'), false, 'the spring sliders do not drive the card');
+  const lens = await page.evaluate(() => {
+    const n = () => cardTimeline().poses.reduce((a, p) => Math.max(a, Object.keys(p).length), 0);
+    const all = n();
+    document.querySelector('#cardAct button[data-act="0"]').click();
+    document.querySelector('#cardZone button[data-zone="off"]').click();
+    const bare = n();
+    document.querySelector('#cardAct button[data-act="1"]').click();
+    document.querySelector('#cardZone button[data-zone="on"]').click();
+    return {all, bare};
+  });
+  assert.deepEqual(lens, {all: 4, bare: 2}, 'ZONE and the act number come and go with their options');
+});
+
 test('the motion sliders report ROM stock, then modified, then reset', async () => {
   await setup(page, {mode: 'anim'});
   assert.match(await text(page, 'romFlag'), /ROM stock/);

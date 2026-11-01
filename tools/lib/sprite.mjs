@@ -87,7 +87,7 @@ export function renderFrame(pieces, art, {base = 0, line = 0, pri = 0, hflip = f
         const b=art[t*32+sy*4+(sx>>1)], idx=(sx&1)?(b&0x0F):(b>>4);
         if(!idx) continue;
         const gx=X-ox+(hf?(pw-1-cx):cx)*8+x, gy=Y-oy+(vf?(ph-1-cy):cy)*8+y;
-        px[gy*w+gx]=L*16+idx;
+        if(!px[gy*w+gx]) px[gy*w+gx]=L*16+idx;              // first piece wins, as on the VDP
       } t++;
     }
   });
@@ -103,6 +103,10 @@ export const parseMap = text => parseMapFrames(text).flat();
    `hflip` is the object's own render flag: it mirrors every piece's offset
    about the origin and toggles each piece's flip. */
 export function drawSprite(px, W, H, pieces, art, objX, objY, line, hflip){
+  // The VDP draws a frame's first piece on top, so a pixel already written by an
+  // earlier piece of this frame stays -- the title card's banner emblem sits under
+  // the red tiles in the list order and over them on screen.
+  const drawn = new Set();
   for(const [yy,size,th,tl,xh,xl] of pieces){
     let Y=yy>127?yy-256:yy, X=(xh<<8)|xl; if(X>32767) X-=65536;
     const pw=((size>>2)&3)+1, ph=(size&3)+1, word=(th<<8)|tl;
@@ -115,7 +119,7 @@ export function drawSprite(px, W, H, pieces, art, objX, objY, line, hflip){
         const b=art[t*32+sy*4+(sx>>1)], idx=(sx&1)?(b&0x0F):(b>>4);
         if(!idx) continue;
         const gx=objX-128+X+(hf?(pw-1-cx):cx)*8+x, gy=objY-128+Y+(vf?(ph-1-cy):cy)*8+y;
-        if(gx>=0&&gx<W&&gy>=0&&gy<H) px[gy*W+gx]=L*16+idx;
+        if(gx>=0&&gx<W&&gy>=0&&gy<H&&!drawn.has(gy*W+gx)){ px[gy*W+gx]=L*16+idx; drawn.add(gy*W+gx); }
       } t++;
     }
   }

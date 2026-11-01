@@ -155,6 +155,30 @@ test('every glyph in the table renders, in every style', async () => {
   }
 });
 
+// Obj_TitleCard's own timing: the act number is the last in (448px at $10 a
+// frame, so 28 frames), everything rests on its ObjArray_TtlCard target, the
+// hold is 90 frames, and the elements leave in their exit order.
+test('the title card arrives, holds and leaves the way the ROM steps it', async () => {
+  await setup(page, {mode: 'anim', style: 'card', text: 'ANGEL ISLAND'});
+  const r = await page.evaluate(() => {
+    const t = cardTimeline(), at = f => t.poses[t.frames[f]];
+    const gone = k => t.frames.findIndex((id, f) => f > t.rest && t.poses[id][k] === undefined);
+    const firstMove = k => t.frames.findIndex((id, f) => f > t.rest && t.poses[id][k] !== at(t.rest)[k]);
+    return {rest: t.rest, restPose: at(t.rest), before: at(0),
+            leave: ['banner', 'name', 'zone', 'act'].map(firstMove),
+            gone: ['banner', 'name', 'zone', 'act'].map(gone), last: at(t.frames.length - 1)};
+  });
+  assert.deepEqual(r.before, {}, 'nothing is drawn before the card is created');
+  assert.equal(r.rest, 28, 'the act number lands on frame 28');
+  assert.deepEqual(r.restPose, {name: 160, zone: 252, act: 260, banner: 64});
+  // The act's last move is frame 28 (frame 0 is before the card). Obj_TitleCardWait
+  // clears the moved flag on 29, finds it clear on 30 and moves on; Wait2 counts
+  // its 90 down on 31-120; the exit count reaches 1 on 121.
+  assert.deepEqual(r.leave, [121, 123, 125, 127], 'exit order banner, name, ZONE, act, two frames apart');
+  assert.ok(r.gone.every((g, i) => g > r.leave[i]), 'each element is deleted after it starts leaving');
+  assert.deepEqual(r.last, {}, 'the timeline ends with the card gone');
+});
+
 // The card style draws from its own atlas in the preview and its own indices in
 // the export, so it needs the same two invariants the scenes have.
 for(const opts of [{scene: 'aiz', intro: 'on'}, {scene: 'off', intro: 'off'}]){

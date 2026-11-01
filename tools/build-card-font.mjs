@@ -151,10 +151,36 @@ for(const L of order){
   table.glyphs[L] = [x, 0, g.w, H, 0];
   x += g.w + 2;
 }
-// Pal_SonicTails line 0 at the indices the letters use; the rest are unused
+// The title card is drawn in palette line 0 -- Pal_SonicTails, Sonic's line.
 const SONIC = [0x000,0xEEE,0xE66,0xC42,0x822,0x080,0x00E,0x008,0x0AE,0x08E,0x8AE,0x46A,0xECC,0xCAA,0x866,0x222];
 const pal = SONIC.map(w => [((w >> 1) & 7)*36, ((w >> 5) & 7)*36, ((w >> 9) & 7)*36]);
 fs.writeFileSync(OUT + 'card-atlas.png', encodeIndexedPng(atlas, AW, H, pal, 0));
-fs.writeFileSync(OUT + 'card-table.json', JSON.stringify(table));
 console.log(`card-atlas.png  ${AW}x${H}  ${fs.statSync(OUT + 'card-atlas.png').size}B  ${order.length} glyphs`);
+
+// ---- the rest of the card -----------------------------------------------------------
+// The red banner (frame 1), ZONE (frame 3) and the ACT number (frame 2, over Number 1
+// or Number 2 at $53D), each written as its own image with its offset from the
+// object's origin, so the page can slide them the way their objects move.
+table.parts = {};
+for(const [name, frame, number] of [['banner', 1], ['zone', 3], ['act1', 2, 1], ['act2', 2, 2]]){
+  const v = vram(null);
+  if(number) v.set(kos(`TitleCard_Number${number}.kosm`), 0x53D*32);
+  const r = renderFrame(map[frame], v);
+  for(let i = 0; i < r.px.length; i++) r.px[i] &= 15;
+  fs.writeFileSync(OUT + `card-${name}.png`, encodeIndexedPng(r.px, r.w, r.h, pal, 0));
+  table.parts[name] = {ox: r.ox, oy: r.oy, w: r.w, h: r.h};
+  console.log(`card-${name}.png`.padEnd(16) + ` ${String(r.w).padStart(3)}x${r.h}  @${r.ox},${r.oy}`);
+}
+// ObjArray_TtlCard: where each element starts and rests (screen coordinates, the
+// $80 sprite origin already taken off), and its place in the exit order -- the
+// element leaves once the card's exit counter reaches it. The name's art is ours:
+// every zone-name frame ends at x +128 from its origin, so names right-align there.
+table.card = {
+  banner: {x: 0xE0 - 0x80, from: 0x10 - 0x80, to: 0xC0 - 0x80, order: 1},   // slides down
+  name:   {y: 0xE0 - 0x80, from: 0x260 - 0x80, to: 0x120 - 0x80, order: 3, right: 128},
+  zone:   {y: 0x100 - 0x80, from: 0x2FC - 0x80, to: 0x17C - 0x80, order: 5},
+  act:    {y: 0x120 - 0x80, from: 0x344 - 0x80, to: 0x184 - 0x80, order: 7},
+  speedIn: 0x10, speedOut: 0x20, hold: 90,                                  // Obj_TitleCardElement, $2E
+};
+fs.writeFileSync(OUT + 'card-table.json', JSON.stringify(table));
 for(const L of ['J','Q','W','X']) console.log(`  ${L}: ${glyphs[L].from}`);
