@@ -10,11 +10,11 @@
    sequence numbers, which have to be a single run across the whole file. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {open, setup} from './harness.mjs';
+import {open, setup, install, check} from './harness.mjs';
 import {parseApng} from '../apng-parse.mjs';
 
 let browser, page;
-test.before(async () => ({browser, page} = await open()));
+test.before(async () => { ({browser, page} = await open()); await install(page); });
 test.after(async () => { await browser?.close(); });
 
 const build = page => page.evaluate(async () => {
@@ -23,10 +23,10 @@ const build = page => page.evaluate(async () => {
   let s = ''; const CH = 0x8000;
   for(let i = 0; i < bytes.length; i += CH)
     s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+  const px = window.__frames(F.frames);
   return {b64: btoa(s), W: F.W, H: F.H, den: F.den, palette: F.pal,
-          expect: F.frames.map(f => ({x: f.x, y: f.y, w: f.w, h: f.h,
-                                      delayNum: f.delayNum, dispose: f.dispose,
-                                      buf: Array.from(f.buf)}))};
+          expect: F.frames.map((f, i) => ({x: f.x, y: f.y, w: f.w, h: f.h,
+                                           delayNum: f.delayNum, dispose: f.dispose, ...px[i]}))};
 });
 
 const cases = [
@@ -34,6 +34,7 @@ const cases = [
   {name: 'S3 title',      opts: {mode: 'anim', scene: 's3'}},
   {name: 'S3, intro on',   opts: {mode: 'anim', scene: 's3', intro: 'on'}},
   {name: 'S&K, intro on', opts: {mode: 'anim', scene: 'sk', intro: 'on'}},
+  {name: 'AIZ intro',      opts: {mode: 'anim', scene: 'aiz', intro: 'on'}},
 ];
 
 for(const c of cases){
@@ -44,12 +45,11 @@ for(const c of cases){
 
     assert.deepEqual({w: png.hdr.w, h: png.hdr.h}, {w: got.W, h: got.H});
     assert.equal(png.hdr.colour, 3, 'colour type should be indexed');
-    // The palette is built from the atlas and every scene at load, so it is
-    // always well over 16 and this is always 8. The 4-bit branch is unreachable
-    // from the app; test/png-scanlines.test.mjs covers the packing directly.
+    // Exports compact the palette to the colours they use, so text on its own
+    // (the font's seven and transparency) packs at 4 bits and a scene at 8.
     assert.equal(png.hdr.depth, got.palette.length <= 16 ? 4 : 8,
       `${got.palette.length} palette entries should pack at ${got.palette.length <= 16 ? 4 : 8} bits`);
-    assert.equal(png.hdr.depth, 8, 'the app has never produced a 4-bit APNG');
+    if(c.opts.scene === 'off') assert.equal(png.hdr.depth, 4, 'text alone should be a 4-bit APNG');
     assert.equal(png.anim.frames, got.expect.length, 'acTL frame count');
     assert.equal(png.anim.plays, 0, 'should loop forever');
     assert.deepEqual(png.transparent, [0], 'index 0 is the transparent slot');
@@ -67,11 +67,8 @@ for(const c of cases){
                        {x: e.x, y: e.y, w: e.w, h: e.h, delayNum: e.delayNum,
                         delayDen: got.den, dispose: e.dispose === undefined ? 1 : e.dispose,
                         blend: 0}, `frame ${i} control`);
-      let at = -1;
-      for(let k = 0; k < f.px.length; k++) if(f.px[k] !== e.buf[k]){ at = k; break; }
-      assert.equal(at, -1, at < 0 ? '' :
-        `frame ${i} differs at px ${at} (${at % e.w},${(at/e.w)|0}): ` +
-        `got ${f.px[at]}, encoded ${e.buf[at]}`);
+      const bad = check(f.px, e, i);
+      assert.equal(bad, null, bad || '');
     }
   });
 }

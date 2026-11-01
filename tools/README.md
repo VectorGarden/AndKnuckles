@@ -1,7 +1,7 @@
 # Asset pipeline
 
-Everything the S&K title screen draws is decoded from the disassembly's own data
-rather than screenshotted, then pasted into `index.html` as base64 PNGs. This is
+Everything the scenes draw is decoded from the disassembly's own data rather than
+screenshotted, then pasted into `index.html` as base64 PNGs. This is
 that pipeline. Nothing here ships in the page — it exists so the artwork can be
 rebuilt, checked, or changed.
 
@@ -77,6 +77,30 @@ Neither background carries a `tRNS` chunk. They are opaque by definition and wil
 happily use their lowest palette slot as a real colour; reserving index 0 for
 transparency punches holes in them. It did exactly that to Sonic's pupils once.
 
+## What build-aiz does
+
+The Angel Island intro is a cutscene in the level engine, so this build is mostly a
+simulation. It decodes AIZ1's level the way the intro loads it — Primary tiles at 0 and
+the intro's Secondary tiles straight after (tile `$BE`), Secondary blocks appended to
+Primary's, the chunk table, the layout, and the S3-format collision with the height
+maps — then steps every object routine frame by frame and records each frame's camera,
+background scroll value, palette and sprite list. See the root README for what the
+cutscene is and how the transcription was checked.
+
+It writes palette-index layers rather than colour ones, grey level `g*4` for index `g`:
+plane A split by tile priority (`aiz-fg.png`, `aiz-fg-hi.png`), plane B (`aiz-bg.png`),
+and every sprite frame that appears, packed into `aiz-sprites.png`. Sprites with DPLCs
+(Sonic, Super Sonic, Knuckles) are assembled from the tiles each frame loads.
+`aiz-meta.json` is the timeline, run-length coded where it can be. `aiz-still.png` is
+the last frame composited with its palette, for still mode.
+
+Two guards: it throws if any emerald is still on the ground at the end (the simulation
+has drifted), and if any tile the AIZ1 tile animation rewrites from F755 is on screen
+after it (none are, so no animated tiles are needed).
+
+Mapping and DPLC files with several tables in one (`Map - Sonic.asm` has `Map_Sonic`
+and `Map_SuperSonic`) are read by `lib/sprite.mjs`, which all three scene builds share.
+
 ## What build-font does
 
 The one build here that is **not** a decode. The ROM has no title font at all:
@@ -133,7 +157,8 @@ one of the two guards the Pages deploy applies. Better to fail here than there.
 Only the artwork and the geometry that comes with it are replaced. Every timing
 value — the camera phases, the shake, the reveal, and the hand channels' `phase`
 and `delay`; on S3 the logo `hold`, the loop's `idle` and Tails' `x0` — is read back
-out of `index.html` and kept. Regenerating the art
+out of `index.html` and kept. AIZ has no hand-tuned numbers, so its entry is
+regenerated whole; only its text position is kept. Regenerating the art
 cannot silently undo tuning that was arrived at by eye.
 
 ## rom/

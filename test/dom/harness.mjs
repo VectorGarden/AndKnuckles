@@ -27,6 +27,29 @@ export async function open(){
   return {browser, page, errors};
 }
 
+/* Frame pixels, out of the page. Plain arrays are fine for a 100-frame title
+   export, but AIZ is ~1,100 mostly full-screen frames and that many numbers
+   runs Node out of heap. So: the page sends base64 when the export is small and
+   an FNV-1a hash per frame when it is not, and check() compares either. Call
+   install(page) once; the page side is window.__frames(frames). */
+export const fnv = b => { let h = 0x811c9dc5; for(let i = 0; i < b.length; i++){ h ^= b[i]; h = Math.imul(h, 0x01000193); } return h >>> 0; };
+export const install = page => page.evaluate(src => { window.__fnv = eval(src);
+  window.__frames = frames => {
+    const total = frames.reduce((a, f) => a + f.buf.length, 0);
+    const b64 = b => { let s = ''; for(let i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000)); return btoa(s); };
+    return frames.map(f => total < 8e6 ? {buf: b64(f.buf)} : {hash: window.__fnv(f.buf)});
+  };
+}, fnv.toString());
+/* Null when the decoded pixels match what the page encoded, else a message. */
+export function check(px, e, i){
+  if(e.hash !== undefined)
+    return fnv(px) === e.hash ? null : `frame ${i} decodes to different pixels than were encoded`;
+  const buf = Buffer.from(e.buf, 'base64');
+  let at = -1;
+  for(let k = 0; k < px.length; k++) if(px[k] !== buf[k]){ at = k; break; }
+  return at < 0 ? null : `frame ${i} differs at px ${at} (${at % e.w},${(at/e.w)|0}): got ${px[at]}, encoded ${buf[at]}`;
+}
+
 /* Put the page into a known state: text, scale, style, mode, scene, intro. */
 export const setup = (page, o) => page.evaluate(opts => {
   const click = sel => { const b = document.querySelector(sel); if(!b) throw new Error('no ' + sel); b.click(); };

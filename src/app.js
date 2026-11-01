@@ -75,7 +75,21 @@ function paint(target, scale, L, dy, G, scroll, frame){
   c.imageSmoothingEnabled = false;
   c.clearRect(0,0,W,H);
   const img = sceneImg();
-  if(G.scene && introOn()){
+  if(G.scene && introOn() && INTROS[state.scene].indexed){
+    // Coloured per frame from palette indices, so there is no image to draw:
+    // composite exactly as the exporter does, at 1x, and scale it up.
+    const buf = new Uint16Array(BG_W * BG_H);
+    fillIntro(buf, {x:0, y:0, w:BG_W, h:BG_H}, 1, scroll, frame||0);
+    const off = paint.off || (paint.off = document.createElement('canvas'));
+    off.width = BG_W; off.height = BG_H;
+    const ox = off.getContext('2d'), im = ox.createImageData(BG_W, BG_H);
+    for(let i = 0; i < buf.length; i++){
+      const col = PALETTE[buf[i]];
+      im.data[i*4] = col[0]; im.data[i*4+1] = col[1]; im.data[i*4+2] = col[2]; im.data[i*4+3] = 255;
+    }
+    ox.putImageData(im, 0, 0);
+    c.drawImage(off, 0, 0, W, H);
+  } else if(G.scene && introOn()){
     const put = (lay, ox, oy) => c.drawImage(lay.img, ox*scale, (oy - scroll)*scale,
                                              lay.w*scale, lay.h*scale);
     // Full-plane layer with its edge rows repeated into whatever the camera or
@@ -529,7 +543,18 @@ function buildIntro(id){
     }
     return {img, idx, w: c.width, h: c.height, id: layerIds++};
   };
-  introLayers[id] = INTROS[id].build(spec, index);
+  // AIZ's layers carry palette indices as grey levels g*4 rather than colours
+  const gidx = img => {
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const x = c.getContext('2d', {willReadFrequently:true});
+    x.drawImage(img, 0, 0);
+    const d = x.getImageData(0, 0, c.width, c.height).data;
+    const g = new Uint8Array(c.width * c.height);
+    for(let i = 0, p = 0; i < d.length; i += 4, p++) if(d[i+3] >= 128) g[p] = d[i] >> 2;
+    return {g, w: c.width, h: c.height, id: layerIds++};
+  };
+  introLayers[id] = INTROS[id].build(spec, index, gidx);
 }
 /* Every artwork part of an intro spec -- anything carrying a src -- so the
    loader can decode them all before buildIntro indexes them. */
@@ -753,10 +778,75 @@ const INTROS = {
       return d;
     },
   },
+
+  /* AIZ1's intro, played back from the timeline tools/build-aiz-assets.mjs
+     computed by stepping the level's objects. Its layers hold palette indices,
+     not colours -- the palette moves the whole time -- so each frame is
+     coloured through the palette it had. Once the cutscene is over the last
+     frame holds while the text springs in; this scene has no V_scroll. */
+  aiz: {
+    indexed: true,
+    build(spec, index, gidx){
+      const unrle = r => { const o = []; for(let i = 0; i < r.length; i += 2) for(let k = 0; k < r[i+1]; k++) o.push(r[i]); return o; };
+      const atlas = gidx(spec.atlas.img);
+      const sprites = spec.sprites.map(([ax, ay, w, h, ox, oy, hi]) => {
+        const g = new Uint8Array(w*h);
+        for(let y = 0; y < h; y++) g.set(atlas.g.subarray((ay+y)*atlas.w + ax, (ay+y)*atlas.w + ax + w), y*w);
+        return {g, w, h, ox, oy, hi, id: layerIds++};
+      });
+      // every palette the scene goes through, as a map from its 64 indices into
+      // the shared palette -- deduplicated against everything but the font's slots
+      const seen = new Map();
+      PALETTE.forEach((c, i) => { if(i > FONT_SLOTS) seen.set((c[0]<<16)|(c[1]<<8)|c[2], i); });
+      const luts = spec.pals.map(hex => Uint16Array.from({length: 64}, (_, i) => {
+        const w = parseInt(hex.slice(i*3, i*3+3), 16);
+        const c = [((w >> 1) & 7)*36, ((w >> 5) & 7)*36, ((w >> 9) & 7)*36], k = (c[0]<<16)|(c[1]<<8)|c[2];
+        if(!seen.has(k)){ seen.set(k, PALETTE.length); PALETTE.push(c); }
+        return seen.get(k);
+      }));
+      return {back: gidx(spec.back.img), fg: gidx(spec.fg.img), fgHi: gidx(spec.fgHi.img), sprites, luts,
+              cam: unrle(spec.cam), bgv: unrle(spec.bgv), pal: unrle(spec.pal)};
+    },
+    len(s){ return s.len; },
+    palAt(t){ const L = introLayers.aiz; return L.pal[Math.min(t, L.pal.length - 1)]; },
+    draws(t){
+      const s = sceneIntro(), L = introLayers.aiz;
+      t = Math.max(0, Math.min(t, s.len - 1));
+      const p = L.pal[t], lut = L.luts[p], fx = s.fgX0 - L.cam[t], v = L.bgv[t];
+      // backdrop (VDP $8720: line 2 colour 0), plane B, plane A's low tiles,
+      // low sprites, plane A's high tiles, high sprites -- the VDP's order
+      const d = [
+        {key:'backdrop', fill:lut[32], x:0, y:0, tag:p, plane:true},
+        {key:'bg', lay:L.back, x:0, y:0, rows:aizBands(v), lut, tag:p + ':' + v, plane:true},
+        {key:'fg', lay:L.fg, x:fx, y:0, lut, tag:p, plane:true},
+      ];
+      const hi = [], spr = s.spr[t];
+      for(let i = 0; i < spr.length; i += 3){
+        const q = L.sprites[spr[i]];
+        (q.hi ? hi : d).push({key:'s' + i, lay:q, x:spr[i+1] + q.ox, y:spr[i+2] + q.oy, lut, tag:p});
+      }
+      d.push({key:'fgHi', lay:L.fgHi, x:fx, y:0, lut, tag:p, plane:true});
+      return d.concat(hi);
+    },
+  },
 };
+/* AIZ1_IntroDeform: the sky's 80 lines at v/2, then 36 bands of 4 lines that
+   run further towards $580 the lower they are -- a perspective ocean. v is
+   Events_fg_1 while it is negative (the ocean), then the camera's x. */
+const s16i = v => ((v & 0xFFFF) ^ 0x8000) - 0x8000;
+function aizBands(v){
+  const d0 = v >> 1, e = new Array(37);
+  if(d0 >= 0x580) return e.fill(d0);
+  e[0] = d0;
+  let acc = ((d0 - 0x580) & 0xFFFF) << 16;
+  const step = acc >> 5;
+  for(let i = 1; i <= 36; i++){ acc = (acc + step) | 0; e[i] = s16i(acc >> 16) + 0x580; }
+  return e;
+}
 const introDraws = t => INTROS[state.scene].draws(t);
 /* What a frame shows, as a string: equal strings are identical pictures. */
-const introSig = t => introDraws(t).map(d => d.key + ':' + d.lay.id + ':' + d.x + ':' + d.y).join('|');
+const introSig = t => introDraws(t).map(d => d.key + ':' + (d.lay ? d.lay.id : '') + ':' + d.x + ':' + d.y
+                                             + ':' + (d.tag ?? '')).join('|');
 
 function buildBackground(id){
   const c = document.createElement('canvas');
@@ -783,9 +873,11 @@ function buildBackground(id){
 /* How far the background has scrolled up on a given frame. */
 function scrollAt(frame){
   if(!sceneOn()) return 0;
-  if(state.mode !== 'anim') return BG_SCROLL;
+  // the title screens raise 16px for the subtitle; a scene can say otherwise
+  const most = (SCENES[state.scene] || {}).vscroll ?? BG_SCROLL;
+  if(state.mode !== 'anim') return most;
   const t = frame - (introOn() ? introLen() : 0);
-  return Math.max(0, Math.min(t, BG_SCROLL));
+  return Math.max(0, Math.min(t, most));
 }
 
 /* Fill an index buffer rect with the scrolled background. The strip exposed at
@@ -808,9 +900,31 @@ function blitLayer(buf, rect, scale, lay, ox, oy, scroll, clampEdges){
     }
   }
 }
+/* A palette-index layer -- AIZ's -- through the frame's palette. `rows`
+   line-scrolls it: screen row y reads from x + rows[band of y], and anything
+   left of 0 wraps into the 512-px plane the VDP actually holds. */
+function blitIndexed(buf, rect, scale, d, scroll){
+  const lay = d.lay, lut = d.lut;
+  for(let ty = 0; ty < rect.h; ty++){
+    const sy = Math.floor((ty + rect.y)/scale), ly = sy + scroll - d.y;
+    if(ly < 0 || ly >= lay.h) continue;
+    const off = d.rows ? d.rows[sy < 80 ? 0 : 1 + ((sy - 80) >> 2)] : -d.x;
+    const srow = ly*lay.w, trow = ty*rect.w;
+    for(let tx = 0; tx < rect.w; tx++){
+      let lx = Math.floor((tx + rect.x)/scale) + off;
+      if(d.rows && lx < 0) lx = ((lx % 512) + 512) % 512;
+      if(lx < 0 || lx >= lay.w) continue;
+      const v = lay.g[srow + lx];
+      if(v) buf[trow + tx] = lut[v];
+    }
+  }
+}
 function fillIntro(buf, rect, scale, scroll, frame){
-  for(const d of introDraws(frame||0))
-    blitLayer(buf, rect, scale, d.lay, d.x, d.y, d.fixed ? 0 : scroll, d.clamp);
+  for(const d of introDraws(frame||0)){
+    if(d.fill !== undefined) buf.fill(d.fill);
+    else if(d.lut) blitIndexed(buf, rect, scale, d, d.fixed ? 0 : scroll);
+    else blitLayer(buf, rect, scale, d.lay, d.x, d.y, d.fixed ? 0 : scroll, d.clamp);
+  }
 }
 
 function fillBackground(buf, rect, scale, scroll){
@@ -830,7 +944,9 @@ function fillBackground(buf, rect, scale, scroll){
 /* Draw one frame into a palette-index buffer (0 = transparent). */
 function paintIndexed(rect, scale, L, dy, G, bgIdx, scroll, banks, frame){
   const W = rect.w, H = rect.h;
-  const buf = new Uint8Array(W * H);
+  // 16-bit: with AIZ's palettes loaded the shared palette runs past 256, and
+  // exports compact it back down to what a file actually uses
+  const buf = new Uint16Array(W * H);
   if(G.scene && introOn()) fillIntro(buf, rect, scale, scroll||0, frame);
   else if(G.scene) fillBackground(buf, rect, scale, scroll||0);
   else if(bgIdx) buf.fill(bgIdx);
@@ -1092,6 +1208,9 @@ function introRect(t, scale, W, H){
   const sc = scrollAt(t) * scale;
   const box = d => ({x: d.x*scale, y: d.y*scale - (d.fixed ? 0 : sc),
                      w: d.lay.w*scale, h: d.lay.h*scale});
+  // a palette change recolours everything on screen
+  if(INTROS[state.scene].palAt && INTROS[state.scene].palAt(t) !== INTROS[state.scene].palAt(Math.max(0, t-1)))
+    return {x:0, y:0, w:W, h:H};
   const was = new Map(introDraws(Math.max(0, t-1)).map(d => [d.key, d]));
   const now = new Map(introDraws(t).map(d => [d.key, d]));
   let r = null;
@@ -1105,7 +1224,7 @@ function introRect(t, scale, W, H){
   };
   for(const key of new Set([...was.keys(), ...now.keys()])){
     const p = was.get(key), c = now.get(key);
-    if(p && c && p.lay === c.lay && p.x === c.x && p.y === c.y) continue;
+    if(p && c && p.lay === c.lay && p.x === c.x && p.y === c.y && p.tag === c.tag) continue;
     if((p && p.plane) || (c && c.plane)) return {x:0, y:0, w:W, h:H};
     if(p) add(box(p));
     if(c) add(box(c));
@@ -1181,8 +1300,25 @@ function animFrames(kind){
       gifDispose: scene ? 1 : 2,             // GIF:  1 = leave, 2 = restore to bg
     }, rect));
   }
-  return {frames, W, H, pal, scale, runs, offs, scene,
+  // The shared palette runs past 256 once AIZ's palettes are loaded, and GIF and
+  // indexed PNG both stop there: keep only the colours this export uses.
+  const packed = compactPalette(frames.map(f => f.buf), pal);
+  frames.forEach(f => { f.buf = packed.remap(f.buf); });
+  return {frames, W, H, pal: packed.pal, scale, runs, offs, scene,
           den: state.timebase === 'ntsc' ? 5992 : 50};
+}
+
+/* The colours a set of index buffers uses, in first-use order, and a remap onto
+   them. Index 0 stays 0: it is transparency in both containers. */
+function compactPalette(bufs, pal){
+  const map = new Int32Array(pal.length).fill(-1), out = [pal[0]];
+  map[0] = 0;
+  for(const b of bufs) for(let i = 0; i < b.length; i++){
+    const v = b[i];
+    if(map[v] < 0){ map[v] = out.length; out.push(pal[v]); }
+  }
+  if(out.length > 256) throw new Error(out.length + ' colours in one export');
+  return {pal: out, remap: b => Uint8Array.from(b, v => map[v])};
 }
 
 /* allowResample is a GIF-only concession: GIF can't express 59.92Hz, so NTSC is
@@ -1225,18 +1361,21 @@ function estimateGif(){
   const F = gifFrames();
   const {W,H,pal,bgIdx,banks,runs,L,g,scale} = F;
   const rects = frameRects(F, 'gif');
-  const bits = Math.max(2, Math.ceil(Math.log2(Math.max(2, pal.length))));
+  // the export compacts its palette; 8 bits is the ceiling either way
+  const bits = Math.min(8, Math.max(2, Math.ceil(Math.log2(Math.max(2, pal.length)))));
   // Sample a few frames for a bytes-per-pixel rate, then scale by the total area
   // actually being encoded. Weighting by frame count instead badly misreads a
   // timeline that mixes whole-screen repaints with small text rects.
   const probe = [...new Set([0, runs.length>>2, runs.length>>1, runs.length-1])]
                   .filter(i => i >= 0 && i < runs.length);
+  const bufs = probe.map(i => { const r = runs[i];
+    return paintIndexed(rects[i], scale, L, r.dy, g, bgIdx, r.scroll, banks, r.frame); });
+  const {remap} = compactPalette(bufs, pal);
   let bytes = 0, px = 0;
-  for(const i of probe){
-    const r = runs[i], rect = rects[i];
-    bytes += lzwEncode(paintIndexed(rect, scale, L, r.dy, g, bgIdx, r.scroll, banks, r.frame), bits).length;
-    px += rect.w * rect.h;
-  }
+  probe.forEach((i, k) => {
+    bytes += lzwEncode(remap(bufs[k]), bits).length;
+    px += rects[i].w * rects[i].h;
+  });
   const perPx = px ? bytes / px : 0;
   const total = rects.reduce((a, q) => a + q.w * q.h, 0);
   return perPx * total + runs.length * 18 + pal.length * 3 + 800;
