@@ -68,6 +68,7 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
       <div class="seg" id="style" role="group" aria-label="Letter style">
         <button data-style="outline" aria-pressed="true">Outlined</button>
         <button data-style="plain" aria-pressed="false">Plain</button>
+        <button data-style="card" aria-pressed="false">Title card</button>
       </div>
     </div>
 
@@ -100,8 +101,10 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
       <input type="range" id="pad" aria-label="Edge padding" min="0" max="32" step="1" value="0">
     </div>
 
-    <div class="ctl" style="grid-column:1/-1;border-right:0">
+    <div class="ctl" id="palCtl" style="grid-column:1/-1;border-right:0">
       <span class="lbl">Palette</span>
+      <span class="note card-only">The title-card letters keep the game's own colours — white
+      over the dark bar the zone name sits on — so the palette does not apply to them.</span>
       <div class="bgrow">
         <div class="seg" id="palette" role="group" aria-label="Palette">
           <button data-pal="classic" aria-pressed="true">Classic</button>

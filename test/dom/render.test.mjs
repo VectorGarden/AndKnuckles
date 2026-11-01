@@ -134,25 +134,38 @@ test('the S3 opening settles onto the static scene, wink aside', async () => {
   assert.ok(r.inWink > 0, 'the wink should be showing');
 });
 
-test('every glyph in the table renders, in both styles', async () => {
-  for(const style of ['outline', 'plain']){
+test('every glyph in the table renders, in every style', async () => {
+  // the title card is letters only: 22 decoded from the zone names, J Q W X derived
+  for(const [style, count] of [['outline', 68], ['plain', 68], ['card', 26]]){
     await setup(page, {style, text: 'X'});
-    const r = await page.evaluate(async () => {
+    const r = await page.evaluate(async style => {
       const ta = document.getElementById('text');
-      ta.value = Object.keys(FONT.plain.glyphs).join('');
+      ta.value = Object.keys(FONT[style].glyphs).join('');
       ta.dispatchEvent(new Event('input'));
       await new Promise(r => requestAnimationFrame(r));
       const cv = document.getElementById('preview');
       const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
       let ink = 0; for(let i = 3; i < d.length; i += 4) if(d[i] > 128) ink++;
       return {skipped: document.getElementById('skipped').textContent.trim(), ink,
-              count: Object.keys(FONT.plain.glyphs).length};
-    });
+              count: Object.keys(FONT[style].glyphs).length};
+    }, style);
     assert.equal(r.skipped, '', `${style}: ${r.skipped}`);
     assert.ok(r.ink > 1000, `${style}: only ${r.ink} ink pixels`);
-    assert.equal(r.count, 68);
+    assert.equal(r.count, count, `${style} glyph count`);
   }
 });
+
+// The card style draws from its own atlas in the preview and its own indices in
+// the export, so it needs the same two invariants the scenes have.
+for(const opts of [{scene: 'aiz', intro: 'on'}, {scene: 'off', intro: 'off'}]){
+  test(`title-card text, ${opts.scene}: preview matches export, sub-rects composite cleanly`, async () => {
+    await setup(page, {mode: 'anim', style: 'card', text: 'ANGEL ISLAND\nZONE', ...opts});
+    const p = await previewMatchesExport(page);
+    assert.deepEqual(p.bad, [], 'preview and export disagree');
+    const c = await compositesCleanly(page);
+    assert.equal(c.badCount, 0, `${c.badCount} of ${c.frames} frames differ, first at ${JSON.stringify(c.bad[0])}`);
+  });
+}
 
 test('no glyph box escapes the atlas or overlaps another', async () => {
   const r = await page.evaluate(() => {

@@ -160,6 +160,19 @@ test('a palette preset recolours the text without touching the scene', async () 
   assert.equal(new Set(font).size, font.length, 'the ramp collapsed to duplicate colours');
 });
 
+// The title card has the game's own colours. Its letters sit in their own palette
+// slots, past the font's, so a preset must leave them exactly as they were.
+test('a palette preset leaves title-card text alone, and its controls hide', async () => {
+  await setup(page, {text: 'ANGEL ISLAND', style: 'card', scene: 'aiz', mode: 'still'});
+  assert.equal(await shown(page, '#palCtl .bgrow'), false, 'palette buttons should hide for the title card');
+  const before = await inkOf(page);
+  await page.evaluate(() => document.querySelector('#palette button[data-pal="emerald"]').click());
+  await page.evaluate(() => new Promise(r => requestAnimationFrame(r)));
+  const after = await inkOf(page);
+  await page.evaluate(() => document.querySelector('#palette button[data-pal="classic"]').click());
+  assert.equal(after.sum, before.sum, 'a preset recoloured the title-card letters');
+});
+
 test('the motion sliders report ROM stock, then modified, then reset', async () => {
   await setup(page, {mode: 'anim'});
   assert.match(await text(page, 'romFlag'), /ROM stock/);

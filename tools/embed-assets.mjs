@@ -76,6 +76,20 @@ if(has('aiz-meta.json')){
   }
 }
 
+// ---- the title-card lettering: its own atlas and table ----
+if(has('card-atlas.png') && has('card-table.json')){
+  const table = fs.readFileSync(OUT + 'card-table.json', 'utf8').trim();
+  const lines = `const CARD_FONT = ${table};\nconst CARD_SRC = "${b64('card-atlas.png')}";`;
+  const cur = html.match(/^const CARD_FONT = .*;\nconst CARD_SRC = "[^"]*";$/m);
+  if(cur) html = html.slice(0, cur.index) + lines + html.slice(cur.index + cur[0].length);
+  else {
+    const a = html.match(/^const ATLAS_SRC = "[^"]*";$/m);
+    if(!a) throw new Error('ATLAS_SRC not found to put the title-card font after');
+    const at = a.index + a[0].length;
+    html = html.slice(0, at) + '\n' + lines + html.slice(at);
+  }
+}
+
 // ---- font: the atlas and the glyph table ----
 if(has('font-atlas.png') && has('font-table.json')){
   const a = html.match(/^const ATLAS_SRC = "data:image\/png;base64,[^"]*";$/m);

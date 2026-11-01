@@ -7,7 +7,14 @@ const SPACE_W = 8;
 // packed even tighter than that -- 168px against our 180 at -2 -- so the tight
 // look is authentic, but it reads as overlap. 0 lets the outlines touch while
 // each glyph and line stays its own; -3 or so reproduces the ROM spacing.
-const DEFAULTS = { outline:{track:0, lead:0}, plain:{track:2, lead:4} };
+const DEFAULTS = { outline:{track:0, lead:0}, plain:{track:2, lead:4}, card:{track:0, lead:4} };
+
+/* The title-card lettering (tools/build-card-font.mjs) is a third style with its
+   own atlas. Its letters already carry their spacing -- each glyph's dark bar
+   runs to its right edge so a word reads as one bar -- hence track 0. */
+FONT.card = CARD_FONT;
+const cardAtlas = new Image();
+let CARD_IDX = null, CARD_W = 0;
 
 const el = id => document.getElementById(id);
 const canvas = el('preview'), ctx = canvas.getContext('2d');
@@ -119,7 +126,7 @@ function paint(target, scale, L, dy, G, scroll, frame){
     if(state.align==='center') ox = Math.round((L.w - line.w)/2);
     if(state.align==='right')  ox = L.w - line.w;
     const oy = i*(L.rowh + state.lead);
-    const atlasForLine = tintedAtlas(rampForLine(i));
+    const atlasForLine = state.style === 'card' ? cardAtlas : tintedAtlas(rampForLine(i));
     for(const {g,x} of line.items){
       c.drawImage(atlasForLine, g[0],g[1],g[2],g[3],
         (o.x + ox + x)*scale, (o.y + oy + g[4] + dy)*scale, g[2]*scale, g[3]*scale);
@@ -461,6 +468,24 @@ function paletteBanks(L){
     return base;
   });
   return {pal, banks};
+}
+/* The title-card letters index into the shared palette like a scene does --
+   after the font's slots, never in them -- so recolouring cannot reach them. */
+function buildCard(){
+  const c = document.createElement('canvas');
+  CARD_W = c.width = cardAtlas.naturalWidth; c.height = cardAtlas.naturalHeight;
+  const x = c.getContext('2d', {willReadFrequently:true});
+  x.drawImage(cardAtlas, 0, 0);
+  const d = x.getImageData(0, 0, c.width, c.height).data;
+  const seen = new Map();
+  PALETTE.forEach((p, i) => { if(i > FONT_SLOTS) seen.set((p[0]<<16)|(p[1]<<8)|p[2], i); });
+  CARD_IDX = new Uint16Array(c.width * c.height);
+  for(let i = 0, p = 0; i < d.length; i += 4, p++){
+    if(d[i+3] < 128) continue;
+    const k = (d[i]<<16)|(d[i+1]<<8)|d[i+2];
+    if(!seen.has(k)){ seen.set(k, PALETTE.length); PALETTE.push([d[i], d[i+1], d[i+2]]); }
+    CARD_IDX[p] = seen.get(k);
+  }
 }
 function buildIndexed(){
   const c = document.createElement('canvas');
@@ -959,16 +984,19 @@ function paintIndexed(rect, scale, L, dy, G, bgIdx, scroll, banks, frame){
     for(const {g, x} of line.items){
       const dx0 = (o.x + ox + x)*scale - rect.x;
       const dy0 = (o.y + oy + g[4] + dy)*scale - rect.y;
-      const bank = banks ? banks[i] : 0;
+      // the title card keeps the game's colours: its own indices, no ramp bank
+      const card = state.style === 'card';
+      const bank = card ? 0 : banks ? banks[i] : 0;
+      const src = card ? CARD_IDX : ATLAS_IDX, stride = card ? CARD_W : ATLAS_W;
       const [sx, sy, sw, sh] = g;
       for(let yy = 0; yy < sh; yy++){
-        const srow = (sy + yy)*ATLAS_W + sx;
+        const srow = (sy + yy)*stride + sx;
         for(let ry = 0; ry < scale; ry++){
           const ty = dy0 + yy*scale + ry;
           if(ty < 0 || ty >= H) continue;
           const trow = ty*W;
           for(let xx = 0; xx < sw; xx++){
-            const v = ATLAS_IDX[srow + xx];
+            const v = src[srow + xx];
             if(!v) continue;
             const bv = bank + v;
             const tx0 = dx0 + xx*scale;
@@ -1550,6 +1578,7 @@ el('style').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.style = b.dataset.style;
   [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  document.body.classList.toggle('card', state.style === 'card');
   const d = DEFAULTS[state.style];
   if(!state.touchedTrack){ state.track = d.track; el('track').value = d.track; el('trackVal').textContent = d.track; }
   if(!state.touchedLead){ state.lead = d.lead; el('lead').value = d.lead; el('leadVal').textContent = d.lead; }
@@ -1835,8 +1864,11 @@ atlas.onload = ()=>{
   // the scene background shares the font's palette, so it must index after it
   // both scenes share the font's palette, so they must be indexed after it
   const ids = Object.keys(SCENES);
-  let pending = ids.length;
+  let pending = ids.length + 1;
   const done = ()=>{ if(--pending === 0){ ready = true; render(); } };
+  cardAtlas.onload = ()=>{ buildCard(); done(); };
+  cardAtlas.onerror = ()=>{ el('style').querySelector('button[data-style="card"]').disabled = true; done(); };
+  cardAtlas.src = CARD_SRC;
   for(const id of ids){
     const spec = SCENES[id].intro;
     if(spec){

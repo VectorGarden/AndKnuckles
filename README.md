@@ -522,6 +522,40 @@ budget the real **O** uses: a 7px stroke against a 4px counter.
 down-left sweep against a full-width chamfered base, and the two fought into a visible
 step on the bottom-right edge. Deriving it means the two glyphs cannot drift apart.
 
+## Title-card lettering
+
+**Title card** is a third letter style: the tall face S3&K writes zone names in on its
+title cards, *ANGEL ISLAND ZONE*. Unlike the main font it is decoded rather than ripped.
+There is no font in the ROM as such — each zone name is a mapping frame in
+`Map - Title Card.asm`, assembled from letter pieces over that zone's own small letter
+set and the shared title-card art — so `tools/build-card-font.mjs` renders all fourteen
+names plus *ZONE*, splits them back into letters, and keeps one of each.
+
+The split is the only subtle part. Pieces never cut a letter, but one piece can hold
+several: in *MUSHROOM HILL* a single 32px piece is H, I and L. Words where every piece is
+one letter give the letters' widths — 16px, with I and L at 8 and M and O at 24 — and
+with those known every other word splits by position. **All 22 letters the names spell
+come out pixel-identical everywhere they appear** (A twenty times, E fifteen), and the
+build stops if one ever does not.
+
+**J, Q, W and X** never appear in a zone name, so they are derived:
+
+- **W** is M turned upside down — two valleys for two peaks.
+- **J** is U without its left stem above the hook.
+- **X** and **Q's tail** are new diagonals, anti-aliased by a rule calibrated against
+  the real V: supersampled coverage of a 2.1px band, cut at 0.8, 0.5 and 0.1 into the
+  face colour and the two anti-aliasing tints. Run along V's own stroke it reproduces V
+  pixel for pixel, and the build checks that it still does.
+
+There are no digits or punctuation — the title card never drew any beyond the act number,
+which is a different design. Anything outside A–Z is skipped and named under the preview.
+
+The letters keep the game's colours: white, two pale anti-aliasing tints, and a dark bar
+behind their lower two-thirds that every glyph carries to its right edge, so a word sits on
+one continuous bar the way the zone name does. They take their own palette slots, past the
+font's, so the palette presets cannot reach them and the palette controls hide while this
+style is selected. Tracking defaults to 0 because the spacing is built into the glyphs.
+
 ## Deploy
 
 Pushes to `main` deploy through [`.github/workflows/pages.yml`](.github/workflows/pages.yml).
