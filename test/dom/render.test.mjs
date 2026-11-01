@@ -135,8 +135,9 @@ test('the S3 opening settles onto the static scene, wink aside', async () => {
 });
 
 test('every glyph in the table renders, in every style', async () => {
-  // the title card is letters only: 22 decoded from the zone names, J Q W X derived
-  for(const [style, count] of [['outline', 68], ['plain', 68], ['card', 26]]){
+  // the title card: 22 letters decoded from the zone names, J Q W X derived, and
+  // & with eight punctuation marks drawn
+  for(const [style, count] of [['outline', 68], ['plain', 68], ['card', 35]]){
     await setup(page, {style, text: 'X'});
     const r = await page.evaluate(async style => {
       const ta = document.getElementById('text');

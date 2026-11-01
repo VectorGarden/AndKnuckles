@@ -155,8 +155,9 @@ J, Q, W and X are derived at the end of the file, and the anti-aliasing rule use
 drawn strokes is checked against the real V on every build. Writes `card-atlas.png`, in the
 title card's own colours (Sonic's palette line, which the card is drawn in), and
 `card-table.json`, the same shape as the main font's table plus two extras: `parts`, the
-offsets of the rest of the card (the banner, ZONE and both act numbers, written as
-`card-banner.png`, `card-zone.png`, `card-act1.png` and `card-act2.png`), and `card`, the
+offsets of the rest of the card (the banner in its three versions — `card-banner-s3.png`,
+`-s3k`, `-sk`, one per game, by what loads at `$510` — and ZONE and both act numbers,
+`card-zone.png`, `card-act1.png`, `card-act2.png`), and `card`, the
 elements' start and rest positions, speeds, hold and exit order from `ObjArray_TtlCard`.
 
 ## What build-page does

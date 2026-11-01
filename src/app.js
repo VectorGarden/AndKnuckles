@@ -15,7 +15,7 @@ const DEFAULTS = { outline:{track:0, lead:0}, plain:{track:2, lead:4}, card:{tra
 FONT.card = CARD_FONT;
 const cardAtlas = new Image();
 let CARD_IDX = null, CARD_W = 0;
-const cardParts = {};          // banner, zone, act1, act2: {img, idx, w, h}
+const cardParts = {};          // banner-s3/-s3k/-sk, zone, act1, act2: {img, idx, w, h}
 
 const el = id => document.getElementById(id);
 const canvas = el('preview'), ctx = canvas.getContext('2d');
@@ -26,7 +26,7 @@ const SUP = { webp:true, avif:true };
 const state = {
   text:'', style:'outline', scale:4, track:0, lead:0, pad:0, palette:'classic', tint:'#FCB400', linePalettes:[],
   align:'center', bg:'none', touchedTrack:false, touchedLead:false,
-  mode:'still', timebase:'pal', scene:'off', sceneY:176, intro:true, cardZone:true, cardAct:1,
+  mode:'still', timebase:'pal', scene:'off', sceneY:176, intro:true, cardZone:true, cardAct:1, cardBanner:'s3k',
   dist:96, vel0:4, accel:0.25, damp:0.5, amp:100, head:-1
 };
 
@@ -395,7 +395,8 @@ function cardTimeline(){
    lines stack above it, so the last line sits where a zone name does. */
 function cardBox(k, pos, L){
   const C = CARD_FONT.card, P = CARD_FONT.parts;
-  if(k === 'banner') return {x: C.banner.x + P.banner.ox, y: pos + P.banner.oy, w: P.banner.w, h: P.banner.h};
+  const B = P['banner-s3k'];                         // all three banners share one shape
+  if(k === 'banner') return {x: C.banner.x + B.ox, y: pos + B.oy, w: B.w, h: B.h};
   if(k === 'zone')   return {x: pos + P.zone.ox, y: C.zone.y, w: P.zone.w, h: P.zone.h};
   if(k === 'act')    return {x: pos + P.act1.ox, y: C.act.y, w: P.act1.w, h: P.act1.h};
   const top = C.name.y - (L.lines.length - 1) * (L.rowh + state.lead);
@@ -406,7 +407,7 @@ function cardBox(k, pos, L){
 function cardItems(pose, L){
   const C = CARD_FONT.card, P = CARD_FONT.parts, out = [];
   const part = (name, x, y) => out.push({part: cardParts[name], x: x + P[name].ox, y: y + P[name].oy});
-  if(pose.banner !== undefined) part('banner', C.banner.x, pose.banner);
+  if(pose.banner !== undefined) part('banner-' + state.cardBanner, C.banner.x, pose.banner);
   if(pose.act !== undefined) part('act' + state.cardAct, pose.act, C.act.y);
   if(pose.zone !== undefined) part('zone', pose.zone, C.zone.y);
   if(pose.name !== undefined){
@@ -1916,6 +1917,12 @@ el('cardZone').addEventListener('click', e=>{
   state.cardZone = b.dataset.zone === 'on';
   [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   if(!player.playing) showRest();
+  render();
+});
+el('cardBanner').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  state.cardBanner = b.dataset.banner;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   render();
 });
 el('cardAct').addEventListener('click', e=>{

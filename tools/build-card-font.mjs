@@ -35,10 +35,13 @@ const kos = f => kosMDecode(fs.readFileSync(D + f));
 
 const map = parseMapTables(fs.readFileSync(D + 'TitleCard_map.asm', 'utf8')).Map_TitleCard;
 // Obj_TitleCard's Queue_Kos_Module calls, in order
-function vram(zone){
+// `shared` is what loads at $510 over Red ACT: S3&K's file, S&K-alone's, or --
+// for Sonic 3 alone, which loads nothing there -- none. It holds the ZONE letters
+// and the banner's emblem, and only the emblem differs between the three.
+function vram(zone, shared = 'TitleCard_S3KZone.kosm'){
   const v = new Uint8Array(0x600*32);
   v.set(kos('TitleCard_RedAct.kosm'),  0x500*32);
-  v.set(kos('TitleCard_S3KZone.kosm'), 0x510*32);
+  if(shared) v.set(kos(shared), 0x510*32);
   v.set(kos('TitleCard_Number1.kosm'), 0x53D*32);
   if(zone) v.set(kos(`TitleCard_${zone}.kosm`), 0x54D*32);
   return v;
@@ -140,6 +143,55 @@ glyphs.X = {...fromMask(overlay(Array(H).fill('.'.repeat(16)),
 // Q is O with a short tail through its lower right, at V's stroke weight.
 glyphs.Q = {...fromMask(overlay(toMask(glyphs.O), strokeCov(24, 13.5, 19.5, 15, 24))), from: 'O + tail'};
 
+// ---- & and punctuation, which the title card never drew -------------------------------
+// Built from three primitives at the same weight and cut-offs as the strokes above:
+// a segment and a box, and an elliptical arc which, run as a whole ellipse, lands
+// within one shade of the real O on all but 36 of its 576 pixels. Angles are
+// degrees clockwise from the right, since y runs down.
+const HW = 1.05;
+function shape(w, ...parts){
+  const cov = Array.from({length: H}, () => new Float64Array(w));
+  for(let y = 0; y < H; y++) for(let x = 0; x < w; x++){
+    let c = 0;
+    for(let sy = 0; sy < 8; sy++) for(let sx = 0; sx < 8; sx++){
+      const X = x + (sx + 0.5)/8, Y = y + (sy + 0.5)/8;
+      if(parts.some(f => f(X, Y))) c += 1/64;
+    }
+    cov[y][x] = c;
+  }
+  return {...fromMask(cov.map(r => Array.from(r, c => CHAR[level(c)]).join(''))), from: 'drawn'};
+}
+const seg = (x0, y0, x1, y1) => (X, Y) => {
+  const dx = x1 - x0, dy = y1 - y0, t = Math.max(0, Math.min(1, ((X-x0)*dx + (Y-y0)*dy) / (dx*dx + dy*dy)));
+  return Math.hypot(X - (x0 + t*dx), Y - (y0 + t*dy)) <= HW;
+};
+const arc = (cx, cy, rx, ry, a0, a1) => (X, Y) => {
+  const nx = (X - cx)/rx, ny = (Y - cy)/ry, t = Math.atan2(ny, nx);
+  let deg = t * 180 / Math.PI; if(deg < 0) deg += 360;
+  if(a0 <= a1 ? deg < a0 || deg > a1 : deg < a0 && deg > a1) return false;
+  return Math.abs(Math.hypot(nx, ny) - 1) * Math.hypot(rx*Math.cos(t), ry*Math.sin(t)) <= HW;
+};
+const box = (x0, y0, x1, y1) => (X, Y) => X >= x0 && X < x1 && Y >= y0 && Y < y1;
+{
+  const ring = arc(12, 12, 11.25, 11.5, 0, 360), real = toMask(glyphs.O);
+  const drawn = toMask(shape(24, ring));
+  let off = 0; for(let y = 0; y < H; y++) for(let x = 0; x < 24; x++) if(drawn[y][x] !== real[y][x].replace(/[^#ab]/g, '.')) off++;
+  if(off > 36) throw new Error(`the arc rule has drifted from O: ${off} pixels`);
+}
+// The style keeps its features small and high -- B's upper bowl, A's bar at row 7 --
+// with long strokes below, so & is a small loop on top, a tall bowl, and a leg out
+// to the bottom right: one crossing, where the leg leaves the bowl.
+glyphs['&'] = shape(16, arc(5.6, 4.0, 3.0, 3.6, 0, 360), seg(6.9, 7.4, 13.6, 23.4),
+                        arc(5.6, 16.6, 4.4, 6.4, 330, 215), seg(3.6, 7.2, 2.0, 11.0));
+glyphs['.'] = shape(4, box(1, 22, 3, 24));
+glyphs[','] = shape(5, box(1, 20, 3, 22), seg(2.5, 21.5, 1.2, 23.6));
+glyphs["'"] = shape(4, box(1, 0, 3, 6));
+glyphs['"'] = shape(7, box(1, 0, 3, 6), box(4, 0, 6, 6));
+glyphs['!'] = shape(4, box(1, 0, 3, 18), box(1, 22, 3, 24));
+glyphs[':'] = shape(4, box(1, 9, 3, 11), box(1, 22, 3, 24));
+glyphs['-'] = shape(10, box(1, 13, 9, 15));
+glyphs['?'] = shape(14, arc(6.2, 5.2, 4.6, 4.6, 180, 100), box(5.2, 10, 7.2, 18), box(5.2, 22, 7.2, 24));
+
 // ---- write ------------------------------------------------------------------------
 const order = Object.keys(glyphs).sort();
 const AW = order.reduce((a, L) => a + glyphs[L].w + 2, 0), atlas = new Uint8Array(AW * H);
@@ -160,10 +212,15 @@ console.log(`card-atlas.png  ${AW}x${H}  ${fs.statSync(OUT + 'card-atlas.png').s
 // ---- the rest of the card -----------------------------------------------------------
 // The red banner (frame 1), ZONE (frame 3) and the ACT number (frame 2, over Number 1
 // or Number 2 at $53D), each written as its own image with its offset from the
-// object's origin, so the page can slide them the way their objects move.
+// object's origin, so the page can slide them the way their objects move. The
+// banner comes three ways, one per game, by what Obj_TitleCard loads at $510:
+// SONIC 3 (Sonic 3 alone, nothing loaded over Red ACT), SONIC 3 & KNUCKLES, and
+// SONIC & KNUCKLES (ArtKosM_TitleCardSKZone, when SK_alone_flag is set).
 table.parts = {};
-for(const [name, frame, number] of [['banner', 1], ['zone', 3], ['act1', 2, 1], ['act2', 2, 2]]){
-  const v = vram(null);
+for(const [name, frame, number, shared] of [
+  ['banner-s3', 1, 0, null], ['banner-s3k', 1], ['banner-sk', 1, 0, 'TitleCard_SKZone.kosm'],
+  ['zone', 3], ['act1', 2, 1], ['act2', 2, 2]]){
+  const v = vram(null, shared);
   if(number) v.set(kos(`TitleCard_Number${number}.kosm`), 0x53D*32);
   const r = renderFrame(map[frame], v);
   for(let i = 0; i < r.px.length; i++) r.px[i] &= 15;
@@ -184,3 +241,4 @@ table.card = {
 };
 fs.writeFileSync(OUT + 'card-table.json', JSON.stringify(table));
 for(const L of ['J','Q','W','X']) console.log(`  ${L}: ${glyphs[L].from}`);
+console.log(`  drawn: & . , ' " ! ? : -`);
