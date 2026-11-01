@@ -25,13 +25,34 @@ const has = f => fs.existsSync(OUT + f);
 let html = fs.readFileSync(HTML, 'utf8');
 const before = html;
 
-// ---- S3: one flat background, so only its src moves ----
-if(has('s3-back.png')){
+// ---- S3: the flat background, plus the opening and the title sprites ----
+// Tuned by eye rather than read from the ROM, so kept across rebuilds like the
+// S&K numbers below. `hold` is how long the SEGA logo sits before its fade --
+// the ROM waits out the 3-second chant, which is a long time to watch a logo in
+// a GIF. `idle` is how far past the settle the loop runs; it defaults to Tails'
+// first pass clearing the screen. `tails.x0` would start his flight part-way.
+if(has('s3-back.png') && has('s3-intro-meta.json')){
   const l = html.match(/^  s3: \{ label:"S3 title".*$/m);
   if(!l) throw new Error('SCENES.s3 entry not found in src/generated/assets.js');
-  const head = l[0].slice(0, l[0].indexOf('src:"') + 5);
-  const tail = l[0].slice(l[0].lastIndexOf('"'));
-  html = html.slice(0, l.index) + head + b64('s3-back.png') + tail + html.slice(l.index + l[0].length);
+  const entry = l[0];
+  const m = JSON.parse(fs.readFileSync(OUT + 's3-intro-meta.json', 'utf8'));
+  const at = entry.indexOf('intro:');
+  const old = at < 0 ? {} : JSON.parse(entry.slice(at + 6, entry.lastIndexOf(', src:')));
+  const patches = ps => Object.fromEntries(Object.entries(ps).map(([f, q]) => [f, {src: b64(q.file), x: q.x, y: q.y}]));
+  const spec = {
+    hold: old.hold ?? 25,
+    idle: old.idle ?? m.tailsGone,
+    seq: m.seq.map(s => ({src: b64(s.file), dur: s.dur})),
+    back:  {src: b64('s3-plane-b.png')},
+    front: {src: b64('s3-plane-a.png')},
+    finger: {steps: m.finger.steps, patches: patches(m.finger.patches)},
+    wink:   {steps: m.wink.steps,   patches: patches(m.wink.patches)},
+    tails: {x0: old.tails?.x0 ?? m.tails.x0, turn: m.tails.turn, yOut: m.tails.yOut, yBack: m.tails.yBack,
+            dur: m.tails.dur, frames: m.tails.frames.map(p => p.map(q => ({src: b64(q.file), dx: q.dx, dy: q.dy})))},
+  };
+  const y = entry.match(/y:\d+, /)[0];
+  const next = `  s3: { label:"S3 title",  ${y}intro:${JSON.stringify(spec)}, src:"${b64('s3-back.png')}" },`;
+  html = html.slice(0, l.index) + next + html.slice(l.index + entry.length);
 }
 
 // ---- font: the atlas and the glyph table ----

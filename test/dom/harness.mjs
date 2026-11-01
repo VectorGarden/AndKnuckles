@@ -36,7 +36,7 @@ export const setup = (page, o) => page.evaluate(opts => {
   click(`#style button[data-style="${opts.style}"]`);
   click(`#mode button[data-mode="${opts.mode}"]`);
   click(`#scene button[data-scene="${opts.scene}"]`);
-  if(opts.mode === 'anim' && opts.scene === 'sk') click(`#intro button[data-intro="${opts.intro}"]`);
+  if(opts.mode === 'anim' && opts.scene !== 'off') click(`#intro button[data-intro="${opts.intro}"]`);
   return {scene: state.scene, mode: state.mode, intro: state.intro};
 }, {text: 'SONIC &\nKNUCKLES', scale: 1, style: 'outline', mode: 'still',
     scene: 'off', intro: 'off', ...o});

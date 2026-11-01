@@ -5,9 +5,9 @@ sprite font, and download it as PNG, WebP or AVIF.
 
 **Live:** https://andknuckles.reizu.dev
 
-Or switch to **Animated** for the title-screen bounce, optionally over the real
-Sonic 3 title screen — or over the full S&K opening, Death Egg and all — exported
-as GIF, APNG, WebM or MP4.
+Or switch to **Animated** for the title-screen bounce, optionally over either real
+title screen with its full opening — Sonic 3's out of the SEGA logo, or S&K's with
+the Death Egg — exported as GIF, APNG, WebM or MP4.
 
 ## How it works
 
@@ -23,8 +23,8 @@ file meant half of it was base64:
     src/generated/assets.js   ->  <script>, first — the four asset constants
     src/app.js                ->  <script>, after — all hand-written, no base64
 
-Those four generated constants are 100 KB of the 198 KB, and they used to sit above
-every line of real code. Now `app.js` is 1,644 lines of nothing else. Rebuild with
+Those four generated constants are 194 KB of the 290 KB, and they used to sit above
+every line of real code. Now `app.js` is 1,721 lines of nothing else. Rebuild with
 `node tools/build-all.mjs`; CI checks the committed page still matches. See
 [`tools/README.md`](tools/README.md).
 
@@ -135,7 +135,8 @@ Two sprites sit on top of the planes rather than in them: `Obj_SKTitle_DeathEgg`
 mountain is a sprite so it can cover the Death Egg"*. Both are positioned from
 `Camera_Y_pos_P2`, which is the detail the intro turns on.
 
-The S3 screen ships as the **settled pose**, static. The S&K one plays its opening.
+Both screens ship their **settled pose** as the still, and both play their opening in
+animated mode.
 
 ### Compression formats implemented
 
@@ -177,6 +178,38 @@ real colour. The S&K composite did exactly that: black, for Sonic's pupils. Mark
 index transparent punched 313 holes through the picture, which showed up in GIF, APNG and
 WebM but *not* MP4 — H.264 has no alpha, so it flattened them back to black and looked
 correct by accident.
+
+## The S3 opening
+
+On by default once you pick the S3 background in animated mode, and the same toggle as
+S&K's. It is `Title_Screen`'s S3 branch, and nearly all of it is full-screen pictures:
+`TitleSonic_Frames` lists thirteen, each its own Enigma map and palette over one of seven
+Kosinski art blocks. Frames 1&ndash;7 share frame 1's tiles — `TitleSonic_LoadFrame` skips
+the DMA below 7.
+
+- **The SEGA logo**, then `Pal_Title` fading it seven colours a frame until the backdrop is
+  black: 8 frames. The ROM holds the logo for the 3-second chant first, which is a long time
+  to watch a logo in a GIF, so the page holds it for `hold` = 25 frames instead.
+- **Eleven page flips**, Sonic coming out of the logo at the camera. `TitleAnim_FlipBuffer`
+  swaps nametables every fourth frame and `Iterate_TitleSonicFrame` loads the next picture
+  two frames ahead of it, so each shows for 4 — except the last, frame C, which gets 3:
+  `SonicFrameIndex` hits `$FF` on the next load slot and the loop exits a frame before its
+  flip would have come round.
+- **A white flash** — the palette flooded with `$EEE` — for the 3 frames until FlipBuffer's
+  next copy from `Target_palette`. The ROM is decompressing frame D's 650 tiles meanwhile,
+  and whatever that stall shows on hardware is not modelled: the flash cuts to the title.
+
+Then the settled screen, with three objects on it that start with the banner:
+
+- `Obj_TitleSonicWink` — Animate_SpriteIrregularDelay, so it winks straight away.
+- `Obj_TitleSonicFinger` — three wags, from 36 frames in. Both loops are 168 frames.
+- `Obj_TitleTailsPlane` — a pixel a frame from x 0 to `$240`, then mirrored and 16px lower
+  on the way back. It is the only thing not offset by `V_scroll`, and its art is **low
+  priority**: in front of plane B, behind plane A. So it crosses behind the ring rather than
+  over it, and the screen is shipped as two planes rather than one flat image so it can.
+
+The loop runs until Tails' first pass clears the right edge — frame 471 after the settle,
+`idle` in the spec — which makes an S3 export about eleven seconds.
 
 ## The S&K intro
 
@@ -291,7 +324,7 @@ and the extractor throws instead of silently testing nothing.
   hanging.
 - [`test/png-scanlines.test.mjs`](test/png-scanlines.test.mjs) — the PNG row packer, which
   needs its own test because the APNG round-trip cannot reach half of it. The palette is
-  built from the atlas and every scene at load, so it is always 69 entries and `buildApng`
+  built from the atlas and every scene at load, so it is always 122 entries and `buildApng`
   always picks 8-bit depth: **the 4-bit branch is unreachable from the app**. A mutation
   that swapped the nibble order was invisible until this test existed.
 
@@ -307,10 +340,11 @@ no server and no fixture, and what is under test is exactly the file that deploy
 
 - **Sub-rectangle frames composite to a full repaint.** Each frame is a delta against the
   one before it; this replays them the way a GIF player would, honouring disposal, and
-  compares against a full repaint. Run for four scene and intro combinations.
+  compares against a full repaint. Run for five scene and intro combinations.
 - **The canvas preview matches the indexed exporter**, pixel for pixel. These are separate
   code paths and have drifted apart more than once.
-- **The intro's last frame equals the static scene**, or the handoff to the text pops.
+- **The intro's last frame equals the static scene**, or the handoff to the text pops. On S3
+  the wink is the one allowed difference, since it starts on the first settled frame.
 - Every glyph renders in both styles; no glyph box escapes the atlas or overlaps another.
 - [`test/dom/gif.test.mjs`](test/dom/gif.test.mjs) exports a real GIF and decodes it back —
   structure, frame rects, and every frame's LZW payload against the buffer the encoder was

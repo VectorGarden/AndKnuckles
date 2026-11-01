@@ -62,8 +62,8 @@ const previewMatchesExport = page => page.evaluate(() => {
 });
 
 for(const scene of ['off', 's3', 'sk']){
-  for(const intro of scene === 'sk' ? ['off', 'on'] : ['off']){
-    const name = scene === 'sk' ? `sk, intro ${intro}` : scene;
+  for(const intro of scene === 'off' ? ['off'] : ['off', 'on']){
+    const name = scene === 'off' ? scene : `${scene}, intro ${intro}`;
     test(`${name}: sub-rectangle frames composite to a full repaint`, async () => {
       await setup(page, {mode: 'anim', scene, intro});
       const r = await compositesCleanly(page);
@@ -81,7 +81,7 @@ for(const scene of ['off', 's3', 'sk']){
   }
 }
 
-test('the intro ends on exactly the static scene', async () => {
+test('the S&K intro ends on exactly the static scene', async () => {
   await setup(page, {mode: 'anim', scene: 'sk', intro: 'on'});
   const diff = await page.evaluate(() => {
     const {W, H, scale} = gifFrames(true), rect = {x:0, y:0, w:W, h:H};
@@ -92,6 +92,30 @@ test('the intro ends on exactly the static scene', async () => {
     return n;
   });
   assert.equal(diff, 0, 'the handoff to the text phase would pop');
+});
+
+// The wink is the one exception: Obj_TitleSonicWink starts on its first frame,
+// so Sonic is already mid-wink when the screen settles. Everywhere else the
+// two planes plus empty sprite frames must be the still, pixel for pixel.
+test('the S3 opening settles onto the static scene, wink aside', async () => {
+  await setup(page, {mode: 'anim', scene: 's3', intro: 'on'});
+  const r = await page.evaluate(() => {
+    const {W, H, scale} = gifFrames(true), rect = {x:0, y:0, w:W, h:H};
+    const a = new Uint8Array(W*H); fillIntro(a, rect, scale, 0, introLen());
+    const b = new Uint8Array(W*H); fillBackground(b, rect, scale, 0);
+    const keys = introDraws(introLen()).map(d => d.key);
+    const w = introDraws(introLen()).find(d => d.key === 'wink').lay;
+    let n = 0, inWink = 0;
+    for(let y = 0; y < H; y++) for(let x = 0; x < W; x++){
+      if(a[y*W+x] === b[y*W+x]) continue;
+      const sx = Math.floor(x/scale), sy = Math.floor(y/scale);
+      if(sx >= w.x && sx < w.x + w.w && sy >= w.y && sy < w.y + w.h) inWink++; else n++;
+    }
+    return {n, inWink, keys};
+  });
+  assert.deepEqual(r.keys, ['back', 'front', 'wink'], 'settled frame layers');
+  assert.equal(r.n, 0, 'pixels outside the wink differ from the still');
+  assert.ok(r.inWink > 0, 'the wink should be showing');
 });
 
 test('every glyph in the table renders, in both styles', async () => {

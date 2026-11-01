@@ -126,11 +126,11 @@ test('the scene controls only exist when a scene is on', async () => {
   assert.equal(await shown(page, '#sceneCtl'), true);
 });
 
-test('the intro toggle is animated-and-S&K only', async () => {
+test('the intro toggle is animated-with-a-scene only', async () => {
   const cases = [
     [{mode: 'still', scene: 'sk'}, false, 'still mode'],
     [{mode: 'anim',  scene: 'off'}, false, 'no scene'],
-    [{mode: 'anim',  scene: 's3'},  false, 'S3 has no intro'],
+    [{mode: 'anim',  scene: 's3'},  true,  'animated S3'],
     [{mode: 'anim',  scene: 'sk'},  true,  'animated S&K'],
   ];
   for(const [opts, want, why] of cases){
