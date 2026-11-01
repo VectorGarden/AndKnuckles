@@ -7,7 +7,8 @@ sprite font, and download it as PNG, WebP or AVIF.
 
 Or switch to **Animated** for the title-screen bounce, optionally over either real
 title screen with its full opening — Sonic 3's out of the SEGA logo, or S&K's with
-the Death Egg — exported as GIF, APNG, WebM or MP4.
+the Death Egg — or over the whole Angel Island intro, Tornado to emeralds, exported
+as GIF, APNG, WebM or MP4.
 
 ## How it works
 
@@ -23,8 +24,8 @@ file meant half of it was base64:
     src/generated/assets.js   ->  <script>, first — the four asset constants
     src/app.js                ->  <script>, after — all hand-written, no base64
 
-Those four generated constants are 194 KB of the 290 KB, and they used to sit above
-every line of real code. Now `app.js` is 1,721 lines of nothing else. Rebuild with
+Those four generated constants are 446 KB of the 550 KB, and they used to sit above
+every line of real code. Now `app.js` is 1,860 lines of nothing else. Rebuild with
 `node tools/build-all.mjs`; CI checks the committed page still matches. See
 [`tools/README.md`](tools/README.md).
 
@@ -100,8 +101,9 @@ says so, because the loop will visibly jump.
 
 ## The backgrounds
 
-Two of them — **S3 title** and **S&K title** — either of which swaps the transparent
-canvas for the real thing and locks output to the Genesis frame, 320&times;224. Text sits where the ROM puts
+Three of them — **S3 title**, **S&K title** and **AIZ intro** — any of which swaps the
+transparent canvas for the real thing and locks output to the Genesis frame, 320&times;224.
+The two title screens are described here; the AIZ intro has its own section below. Text sits where the ROM puts
 `& KNUCKLES` — screen y 176, from banner rest `$D4` plus the `$5C` subtitle offset,
 less the `$80` sprite-space origin — and the background scrolls up 16px across the
 first 16 frames, which is `V_scroll_value` in the original making room for the
@@ -210,6 +212,58 @@ Then the settled screen, with three objects on it that start with the banner:
 
 The loop runs until Tails' first pass clears the right edge — frame 471 after the settle,
 `idle` in the spec — which makes an S3 export about eleven seconds.
+
+## The Angel Island intro
+
+The **AIZ intro** scene is the cutscene that opens Angel Island Zone Act 1 in Sonic 3
+& Knuckles, from its first frame to the one before the title card: the Tornado over the
+ocean, Sonic jumping off and turning Super, the spray behind him, the beach, the jungle,
+Knuckles bursting out of the ground, the emeralds, Sonic turning back, Knuckles running
+them down and laughing, and leaving. **1,096 frames**, about 18 seconds at 60 Hz, then
+the text springs in over the beach.
+
+It is not a title screen. It runs in the level engine, with the real Player object
+hidden and a stand-in (`Obj_AIZPlaneIntro`) drawing Sonic in screen coordinates while
+it pushes the hidden one along. So `tools/build-aiz-assets.mjs` does what the engine
+does, offline: it decodes AIZ1 the way `LevelLoadBlock` entry 0 loads it for the intro
+(Primary plus the intro's Secondary tiles and blocks), steps every object the way its
+routine does — the plane's swing, the jump arc, the wave spawner, Knuckles' scripts,
+the emeralds' gravity and floor checks against the decoded collision, the knock-back's
+hurt physics and the camera — and records what is on screen each frame. The page plays
+that back.
+
+Checks on the transcription: every phase lands where the code says (the plane at F65,
+the jump at F225, Knuckles buried at F587, the knock-back at F758, Knuckles off-screen
+at F1097), and **all seven emeralds are picked up**, the last on the exact frame Knuckles
+turns around. That only happens with the intro object's final push on the frame it is
+deleted, so it is a sharp test of the frame accounting. The build refuses to finish if
+an emerald is left on the ground.
+
+Three things about it are unlike the other scenes:
+
+- **The palette never stops moving** — a fade from black, the ocean's sparkle cycle,
+  Super Sonic's cycle, the swap to the normal AIZ palette when the camera passes `$1308`,
+  then Knuckles' palette and the emeralds'. So the layers carry palette *indices*, and
+  each frame is coloured through the palette it had: 87 of them over the scene.
+- **The ocean is line-scrolled.** `AIZ1_IntroDeform` scrolls the sky's 80 lines at half
+  the camera and 36 bands of 4 lines below it progressively faster: a perspective ocean.
+  While the scroll is negative the VDP reads the 512-px plane as it was first drawn, which
+  the page reproduces with a wrap.
+- **Plane A's priority matters.** The island's tiles below `y $430` are high priority,
+  which is what keeps Knuckles buried and hides Super Sonic in the undergrowth as he
+  crosses the jungle. Plane A ships as two layers, and the rock's fragments, the only
+  high-priority sprites, go over both.
+
+The white behind the jungle trees before the palette swap is sand: plane B there is the
+island's beach, seen from the sea. It turns to noise in the normal AIZ palette, but by the
+time that loads the foreground covers the screen.
+
+What is not modelled: the frame on which the Tornado's art finishes loading (it is
+off-screen until about F80), and Super Sonic's two-frame flicker phase, which follows a
+VBlank counter that is never reset — any phase is as correct as any other.
+
+Exports are big. The background moves on nearly every frame, so almost every frame is
+a full repaint: about 7 MB as a GIF at 1×. WebM and MP4 are the sensible formats here.
 
 ## The S&K intro
 
@@ -322,11 +376,12 @@ and the extractor throws instead of silently testing nothing.
   on the ROM's own `y_vel == -$5B` test rather than a guard. Also that tuned parameters
   still close on rest, and that damping which never dissipates is *reported* rather than
   hanging.
-- [`test/png-scanlines.test.mjs`](test/png-scanlines.test.mjs) — the PNG row packer, which
-  needs its own test because the APNG round-trip cannot reach half of it. The palette is
-  built from the atlas and every scene at load, so it is always 122 entries and `buildApng`
-  always picks 8-bit depth: **the 4-bit branch is unreachable from the app**. A mutation
-  that swapped the nibble order was invisible until this test existed.
+- [`test/png-scanlines.test.mjs`](test/png-scanlines.test.mjs) — the PNG row packer, tested
+  directly because for a long time the APNG round-trip could not reach half of it: every
+  export carried the whole shared palette, so `buildApng` always picked 8-bit depth and a
+  mutation that swapped the 4-bit nibble order was invisible. Exports now compact their
+  palette to the colours they use — the shared one runs past 256 once AIZ is loaded — so
+  text alone packs at 4 bits and the round-trip covers that branch as well.
 
 They were checked by breaking the code on purpose: widening the LZW width one step early
 fails 41 assertions, damping 0.5→0.6 fails 5, acceleration 0.25→0.26 fails 4, and shifting
@@ -340,11 +395,12 @@ no server and no fixture, and what is under test is exactly the file that deploy
 
 - **Sub-rectangle frames composite to a full repaint.** Each frame is a delta against the
   one before it; this replays them the way a GIF player would, honouring disposal, and
-  compares against a full repaint. Run for five scene and intro combinations.
+  compares against a full repaint. Run for seven scene and intro combinations.
 - **The canvas preview matches the indexed exporter**, pixel for pixel. These are separate
   code paths and have drifted apart more than once.
 - **The intro's last frame equals the static scene**, or the handoff to the text pops. On S3
-  the wink is the one allowed difference, since it starts on the first settled frame.
+  the wink is the one allowed difference, since it starts on the first settled frame. AIZ's
+  still is built offline from the same layers, so it has to meet the cutscene exactly.
 - Every glyph renders in both styles; no glyph box escapes the atlas or overlaps another.
 - [`test/dom/gif.test.mjs`](test/dom/gif.test.mjs) exports a real GIF and decodes it back —
   structure, frame rects, and every frame's LZW payload against the buffer the encoder was
@@ -386,8 +442,8 @@ shaped like a palette** — the key is plain JSON anyone can edit — must be sk
 break startup. Seven shapes are tried, from `this is not json` to channels of `NaN`.
 
 Every suite here has been mutation-tested, and twice that turned up a gap rather than a
-confirmation: a swapped 4-bit nibble order was invisible because the app can never reach
-that branch, and a broken codec table made the video test skip itself rather than fail.
+confirmation: a swapped 4-bit nibble order was invisible because the app could not reach
+that branch at the time, and a broken codec table made the video test skip itself rather than fail.
 Both are covered now. It is worth running mutations through something that refuses to
 apply a no-op — three times in this project a mutation quietly matched nothing and reported
 a reassuring zero failures.

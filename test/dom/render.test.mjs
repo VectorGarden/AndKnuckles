@@ -19,18 +19,20 @@ test.before(async () => ({browser, page, errors} = await open()));
 test.after(async () => { await browser?.close(); });
 
 /* Composite every emitted frame the way a GIF player would and compare against a
-   full repaint of the same frame. Disposal 2 clears the frame's rect first. */
+   full repaint of the same frame. Disposal 2 clears the frame's rect first.
+   Compared as colours: the export compacts its palette, the repaint does not. */
 const compositesCleanly = page => page.evaluate(() => {
   const G = gifFrames(true), F = animFrames('gif');
   const {W, H, runs, L, g, scale, bgIdx, banks} = G;
   const cv = new Uint8Array(W * H);
+  const rgb = (pal, v) => v ? pal[v].join(',') : 'clear';
   const bad = [];
   for(let i = 0; i < F.frames.length; i++){
     const f = F.frames[i], r = runs[i];
     for(let y = 0; y < f.h; y++) cv.set(f.buf.subarray(y*f.w, (y+1)*f.w), (f.y+y)*W + f.x);
     const truth = paintIndexed({x:0,y:0,w:W,h:H}, scale, L, r.dy, g, bgIdx, r.scroll, banks, r.frame);
     for(let k = 0; k < cv.length; k++)
-      if(cv[k] !== truth[k]){ bad.push({frame: r.frame, x: k % W, y: (k/W)|0}); break; }
+      if(rgb(F.pal, cv[k]) !== rgb(G.pal, truth[k])){ bad.push({frame: r.frame, x: k % W, y: (k/W)|0}); break; }
     if(f.gifDispose === 2)
       for(let y = 0; y < f.h; y++) cv.fill(0, (f.y+y)*W + f.x, (f.y+y)*W + f.x + f.w);
   }
@@ -61,7 +63,7 @@ const previewMatchesExport = page => page.evaluate(() => {
   return {bad, checked: Math.ceil(keys.length / step)};
 });
 
-for(const scene of ['off', 's3', 'sk']){
+for(const scene of ['off', 's3', 'sk', 'aiz']){
   for(const intro of scene === 'off' ? ['off'] : ['off', 'on']){
     const name = scene === 'off' ? scene : `${scene}, intro ${intro}`;
     test(`${name}: sub-rectangle frames composite to a full repaint`, async () => {
@@ -92,6 +94,20 @@ test('the S&K intro ends on exactly the static scene', async () => {
     return n;
   });
   assert.equal(diff, 0, 'the handoff to the text phase would pop');
+});
+
+// AIZ is coloured per frame from palette indices, and its still is a flat image
+// built offline from the same layers. They must meet on the cutscene's last frame.
+test('the AIZ intro ends on exactly the still', async () => {
+  await setup(page, {mode: 'anim', scene: 'aiz', intro: 'on'});
+  const diff = await page.evaluate(() => {
+    const {W, H, scale} = gifFrames(true), rect = {x:0, y:0, w:W, h:H};
+    const a = new Uint16Array(W*H); fillIntro(a, rect, scale, 0, introLen() - 1);
+    const b = new Uint16Array(W*H); fillBackground(b, rect, scale, 0);
+    let n = 0; for(let k = 0; k < a.length; k++) if(PALETTE[a[k]].join() !== PALETTE[b[k]].join()) n++;
+    return n;
+  });
+  assert.equal(diff, 0, 'the last frame of the cutscene does not match the still');
 });
 
 // The wink is the one exception: Obj_TitleSonicWink starts on its first frame,

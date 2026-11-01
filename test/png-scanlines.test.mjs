@@ -1,10 +1,11 @@
 /* pngScanlines, the only part of the PNG writer that is a pure function.
 
-   It earns its own test because the app cannot reach half of it: the palette is
-   built from the atlas and every scene at load, so it is always 69 entries and
-   buildApng always picks 8-bit depth. The 4-bit packing branch is unreachable in
-   practice, and the DOM round-trip therefore never exercises it -- a mutation
-   that swapped the nibble order was invisible until this test existed. */
+   It earns its own test because for a long time the app could not reach half of
+   it: every export carried the whole shared palette, well over 16 entries, so
+   buildApng always picked 8-bit depth and the DOM round-trip never exercised the
+   4-bit branch -- a mutation that swapped the nibble order was invisible until
+   this test existed. Exports now compact their palette and text alone packs at
+   4 bits, so the round-trip covers it too; this stays as the direct check. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fromSource} from './from-source.mjs';

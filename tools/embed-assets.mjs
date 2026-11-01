@@ -55,6 +55,27 @@ if(has('s3-back.png') && has('s3-intro-meta.json')){
   html = html.slice(0, l.index) + next + html.slice(l.index + entry.length);
 }
 
+// ---- AIZ: the intro's layers, sprite atlas and per-frame timeline ----
+// Nothing here is tuned by hand -- every number comes out of the simulation --
+// so the whole entry is regenerated; only its text position is kept.
+if(has('aiz-meta.json')){
+  const m = JSON.parse(fs.readFileSync(OUT + 'aiz-meta.json', 'utf8'));
+  const spec = {len: m.len, fgX0: m.fgX0, sprites: m.sprites, pals: m.pals, pal: m.pal,
+                cam: m.cam, bgv: m.bg, spr: m.spr,
+                back: {src: b64('aiz-bg.png')}, fg: {src: b64('aiz-fg.png')},
+                fgHi: {src: b64('aiz-fg-hi.png')}, atlas: {src: b64('aiz-sprites.png')}};
+  const cur = html.match(/^  aiz: \{ label:"AIZ intro".*$/m);
+  const y = cur ? cur[0].match(/y:\d+, /)[0] : 'y:176, ';
+  const next = `  aiz: { label:"AIZ intro", ${y}vscroll:0, intro:${JSON.stringify(spec)}, src:"${b64('aiz-still.png')}" },`;
+  if(cur) html = html.slice(0, cur.index) + next + html.slice(cur.index + cur[0].length);
+  else {
+    const sk = html.match(/^  sk: \{ label:"S&K title".*$/m);
+    if(!sk) throw new Error('SCENES.sk entry not found to put AIZ after');
+    const at = sk.index + sk[0].length;
+    html = html.slice(0, at) + '\n' + next + html.slice(at);
+  }
+}
+
 // ---- font: the atlas and the glyph table ----
 if(has('font-atlas.png') && has('font-table.json')){
   const a = html.match(/^const ATLAS_SRC = "data:image\/png;base64,[^"]*";$/m);

@@ -13,22 +13,85 @@
 
 const num = t => { t = t.trim(); return t.startsWith('$') ? parseInt(t.slice(1), 16) : parseInt(t, 10); };
 
-/* Every frame, in offset-table order. */
-export function parseMapFrames(text){
-  const blocks = new Map();
+/* The labelled blocks of a mapping or DPLC file -- each one's dc.b rows and
+   dc.w values -- and its offset tables, keyed by table label. One file can
+   hold several tables: Map - Sonic.asm has Map_Sonic and Map_SuperSonic. */
+function parseBlocks(text){
+  const blocks = new Map(), tables = new Map();
   let cur = null;
   for(const raw of text.split('\n')){
     const line = raw.replace(/;.*/, '');
     const label = /^(\w+):/.exec(line);
-    if(label){ cur = []; blocks.set(label[1], cur); }
+    if(label){ cur = {b: [], w: []}; blocks.set(label[1], cur); }
+    const ref = /dc\.w\s+(\w+)-(\w+)/.exec(line);
+    if(ref){
+      if(!tables.has(ref[2])) tables.set(ref[2], []);
+      tables.get(ref[2]).push(ref[1]);
+      continue;
+    }
     const b = /dc\.b\s+(.+)/.exec(line);
-    if(b && cur) cur.push(b[1].split(',').map(num));
+    if(b && cur) cur.b.push(b[1].split(',').map(num));
+    const w = /dc\.w\s+(.+)/.exec(line);
+    if(w && cur) cur.w.push(...w[1].split(',').map(num));
   }
-  const order = [...text.matchAll(/dc\.w\s+(\w+)-\w+/g)].map(m => m[1]);
-  return order.map(l => {
-    if(!blocks.has(l)) throw new Error('mapping frame ' + l + ' not found');
-    return blocks.get(l);
+  const get = l => { if(!blocks.has(l)) throw new Error('frame ' + l + ' not found'); return blocks.get(l); };
+  return {tables, get};
+}
+
+/* Every frame, in offset-table order. */
+export function parseMapFrames(text){
+  const {tables, get} = parseBlocks(text);
+  return [...tables.values()].flat().map(l => get(l).b);
+}
+
+/* Each table's frames, keyed by its label minus the trailing underscore. */
+export function parseMapTables(text){
+  const {tables, get} = parseBlocks(text), out = {};
+  for(const [t, labels] of tables) out[t.replace(/_$/, '')] = labels.map(l => get(l).b);
+  return out;
+}
+
+/* DPLC tables: per frame, the dc.w words after the count word. */
+export function parseDplcTables(text){
+  const {tables, get} = parseBlocks(text), out = {};
+  for(const [t, labels] of tables) out[t.replace(/_$/, '')] = labels.map(l => get(l).w.slice(1));
+  return out;
+}
+
+/* One frame as a cropped image of line*16 + colour (0 transparent), with its
+   offset from the object's origin. `base`, `line` and `pri` are the object's
+   art_tile split up: tile numbers are relative to `art`, so a DPLC frame's art
+   is just the tiles it loaded. */
+export function renderFrame(pieces, art, {base = 0, line = 0, pri = 0, hflip = false} = {}){
+  if(!pieces.length) return null;
+  const boxes = pieces.map(([yy,size,,,xh,xl]) => {
+    let Y=yy>127?yy-256:yy, X=(xh<<8)|xl; if(X>32767) X-=65536;
+    const pw=((size>>2)&3)+1, ph=(size&3)+1;
+    if(hflip) X=-X-pw*8;
+    return {X, Y, pw, ph};
   });
+  const ox = Math.min(...boxes.map(b => b.X)), oy = Math.min(...boxes.map(b => b.Y));
+  const w = Math.max(...boxes.map(b => b.X + b.pw*8)) - ox, h = Math.max(...boxes.map(b => b.Y + b.ph*8)) - oy;
+  const px = new Uint8Array(w*h);
+  let hi = null;
+  pieces.forEach(([, , th, tl], i) => {
+    const {X, Y, pw, ph} = boxes[i], word = (th<<8)|tl;
+    const p = pri | (word >> 15);
+    if(hi === null) hi = p; else if(hi !== p) throw new Error('mixed sprite priority in one frame');
+    const L = (line + ((word >> 13) & 3)) & 3;
+    const hf = !!(word&0x800) !== !!hflip, vf = !!(word&0x1000);
+    let t = base + (word & 0x7FF);
+    for(let cx=0;cx<pw;cx++) for(let cy=0;cy<ph;cy++){
+      for(let y=0;y<8;y++) for(let x=0;x<8;x++){
+        const sx=hf?7-x:x, sy=vf?7-y:y;
+        const b=art[t*32+sy*4+(sx>>1)], idx=(sx&1)?(b&0x0F):(b>>4);
+        if(!idx) continue;
+        const gx=X-ox+(hf?(pw-1-cx):cx)*8+x, gy=Y-oy+(vf?(ph-1-cy):cy)*8+y;
+        px[gy*w+gx]=L*16+idx;
+      } t++;
+    }
+  });
+  return {px, w, h, ox, oy, hi: hi ? 1 : 0};
 }
 
 /* Every piece in the file as one list -- for single-frame mappings. */

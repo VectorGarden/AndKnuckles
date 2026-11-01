@@ -8,11 +8,11 @@
    parsed and reported the right frame count while being wrong further down. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {open, setup} from './harness.mjs';
+import {open, setup, install, check} from './harness.mjs';
 import {lzwDecode} from '../lzw-decode.mjs';
 
 let browser, page;
-test.before(async () => ({browser, page} = await open()));
+test.before(async () => { ({browser, page} = await open()); await install(page); });
 test.after(async () => { await browser?.close(); });
 
 /* Walk the GIF's blocks. Deliberately a separate reading of the format from the
@@ -54,6 +54,7 @@ const cases = [
   {name: 'S3 title',        opts: {mode: 'anim', scene: 's3'}},
   {name: 'S3, intro on',   opts: {mode: 'anim', scene: 's3', intro: 'on'}},
   {name: 'S&K, intro on',   opts: {mode: 'anim', scene: 'sk', intro: 'on'}},
+  {name: 'AIZ intro',      opts: {mode: 'anim', scene: 'aiz', intro: 'on'}},
 ];
 
 for(const c of cases){
@@ -65,9 +66,9 @@ for(const c of cases){
       let s = ''; const CH = 0x8000;
       for(let i = 0; i < bytes.length; i += CH)
         s += String.fromCharCode.apply(null, bytes.subarray(i, i + CH));
+      const px = window.__frames(F.frames);
       return {b64: btoa(s), W: F.W, H: F.H,
-              expect: F.frames.map(f => ({x: f.x, y: f.y, w: f.w, h: f.h,
-                                          buf: Array.from(f.buf)}))};
+              expect: F.frames.map((f, i) => ({x: f.x, y: f.y, w: f.w, h: f.h, ...px[i]}))};
     });
     const gif = parseGif(Buffer.from(b64, 'base64'));
 
@@ -84,11 +85,8 @@ for(const c of cases){
       assert.equal(px.length, e.w * e.h, `frame ${i}: ${px.length} px for a ${e.w}x${e.h} rect`);
       // deepEqual on ~70k numbers per frame is slow; compare directly and only
       // build a message when it actually differs
-      let at = -1;
-      for(let k = 0; k < px.length; k++) if(px[k] !== e.buf[k]){ at = k; break; }
-      assert.equal(at, -1,
-        at < 0 ? '' : `frame ${i} differs at px ${at} (${at % e.w},${(at/e.w)|0}): ` +
-                      `got ${px[at]}, encoded ${e.buf[at]}`);
+      const bad = check(px, e, i);
+      assert.equal(bad, null, bad || '');
     }
   });
 }
