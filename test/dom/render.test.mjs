@@ -134,25 +134,62 @@ test('the S3 opening settles onto the static scene, wink aside', async () => {
   assert.ok(r.inWink > 0, 'the wink should be showing');
 });
 
-test('every glyph in the table renders, in both styles', async () => {
-  for(const style of ['outline', 'plain']){
+test('every glyph in the table renders, in every style', async () => {
+  // the title card is letters only: 22 decoded from the zone names, J Q W X derived
+  for(const [style, count] of [['outline', 68], ['plain', 68], ['card', 26]]){
     await setup(page, {style, text: 'X'});
-    const r = await page.evaluate(async () => {
+    const r = await page.evaluate(async style => {
       const ta = document.getElementById('text');
-      ta.value = Object.keys(FONT.plain.glyphs).join('');
+      ta.value = Object.keys(FONT[style].glyphs).join('');
       ta.dispatchEvent(new Event('input'));
       await new Promise(r => requestAnimationFrame(r));
       const cv = document.getElementById('preview');
       const d = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
       let ink = 0; for(let i = 3; i < d.length; i += 4) if(d[i] > 128) ink++;
       return {skipped: document.getElementById('skipped').textContent.trim(), ink,
-              count: Object.keys(FONT.plain.glyphs).length};
-    });
+              count: Object.keys(FONT[style].glyphs).length};
+    }, style);
     assert.equal(r.skipped, '', `${style}: ${r.skipped}`);
     assert.ok(r.ink > 1000, `${style}: only ${r.ink} ink pixels`);
-    assert.equal(r.count, 68);
+    assert.equal(r.count, count, `${style} glyph count`);
   }
 });
+
+// Obj_TitleCard's own timing: the act number is the last in (448px at $10 a
+// frame, so 28 frames), everything rests on its ObjArray_TtlCard target, the
+// hold is 90 frames, and the elements leave in their exit order.
+test('the title card arrives, holds and leaves the way the ROM steps it', async () => {
+  await setup(page, {mode: 'anim', style: 'card', text: 'ANGEL ISLAND'});
+  const r = await page.evaluate(() => {
+    const t = cardTimeline(), at = f => t.poses[t.frames[f]];
+    const gone = k => t.frames.findIndex((id, f) => f > t.rest && t.poses[id][k] === undefined);
+    const firstMove = k => t.frames.findIndex((id, f) => f > t.rest && t.poses[id][k] !== at(t.rest)[k]);
+    return {rest: t.rest, restPose: at(t.rest), before: at(0),
+            leave: ['banner', 'name', 'zone', 'act'].map(firstMove),
+            gone: ['banner', 'name', 'zone', 'act'].map(gone), last: at(t.frames.length - 1)};
+  });
+  assert.deepEqual(r.before, {}, 'nothing is drawn before the card is created');
+  assert.equal(r.rest, 28, 'the act number lands on frame 28');
+  assert.deepEqual(r.restPose, {name: 160, zone: 252, act: 260, banner: 64});
+  // The act's last move is frame 28 (frame 0 is before the card). Obj_TitleCardWait
+  // clears the moved flag on 29, finds it clear on 30 and moves on; Wait2 counts
+  // its 90 down on 31-120; the exit count reaches 1 on 121.
+  assert.deepEqual(r.leave, [121, 123, 125, 127], 'exit order banner, name, ZONE, act, two frames apart');
+  assert.ok(r.gone.every((g, i) => g > r.leave[i]), 'each element is deleted after it starts leaving');
+  assert.deepEqual(r.last, {}, 'the timeline ends with the card gone');
+});
+
+// The card style draws from its own atlas in the preview and its own indices in
+// the export, so it needs the same two invariants the scenes have.
+for(const opts of [{scene: 'aiz', intro: 'on'}, {scene: 'off', intro: 'off'}]){
+  test(`title-card text, ${opts.scene}: preview matches export, sub-rects composite cleanly`, async () => {
+    await setup(page, {mode: 'anim', style: 'card', text: 'ANGEL ISLAND\nZONE', ...opts});
+    const p = await previewMatchesExport(page);
+    assert.deepEqual(p.bad, [], 'preview and export disagree');
+    const c = await compositesCleanly(page);
+    assert.equal(c.badCount, 0, `${c.badCount} of ${c.frames} frames differ, first at ${JSON.stringify(c.bad[0])}`);
+  });
+}
 
 test('no glyph box escapes the atlas or overlaps another', async () => {
   const r = await page.evaluate(() => {

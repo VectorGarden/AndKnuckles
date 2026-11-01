@@ -7,7 +7,15 @@ const SPACE_W = 8;
 // packed even tighter than that -- 168px against our 180 at -2 -- so the tight
 // look is authentic, but it reads as overlap. 0 lets the outlines touch while
 // each glyph and line stays its own; -3 or so reproduces the ROM spacing.
-const DEFAULTS = { outline:{track:0, lead:0}, plain:{track:2, lead:4} };
+const DEFAULTS = { outline:{track:0, lead:0}, plain:{track:2, lead:4}, card:{track:0, lead:4} };
+
+/* The title-card lettering (tools/build-card-font.mjs) is a third style with its
+   own atlas. Its letters already carry their spacing -- each glyph's dark bar
+   runs to its right edge so a word reads as one bar -- hence track 0. */
+FONT.card = CARD_FONT;
+const cardAtlas = new Image();
+let CARD_IDX = null, CARD_W = 0;
+const cardParts = {};          // banner, zone, act1, act2: {img, idx, w, h}
 
 const el = id => document.getElementById(id);
 const canvas = el('preview'), ctx = canvas.getContext('2d');
@@ -18,7 +26,7 @@ const SUP = { webp:true, avif:true };
 const state = {
   text:'', style:'outline', scale:4, track:0, lead:0, pad:0, palette:'classic', tint:'#FCB400', linePalettes:[],
   align:'center', bg:'none', touchedTrack:false, touchedLead:false,
-  mode:'still', timebase:'pal', scene:'off', sceneY:176, intro:true,
+  mode:'still', timebase:'pal', scene:'off', sceneY:176, intro:true, cardZone:true, cardAct:1,
   dist:96, vel0:4, accel:0.25, damp:0.5, amp:100, head:-1
 };
 
@@ -113,6 +121,15 @@ function paint(target, scale, L, dy, G, scroll, frame){
   } else if(state.bg !== 'none'){
     c.fillStyle = state.bg; c.fillRect(0,0,W,H);
   }
+  if(state.style === 'card'){
+    // the title card: banner, act, ZONE and the name, wherever this frame has them
+    for(const it of cardItems(cardPose(dy), L)){
+      if(it.part) c.drawImage(it.part.img, it.x*scale, it.y*scale, it.part.w*scale, it.part.h*scale);
+      else { const g = it.glyph;
+        c.drawImage(cardAtlas, g[0], g[1], g[2], g[3], it.x*scale, it.y*scale, g[2]*scale, g[3]*scale); }
+    }
+    return {W,H};
+  }
   const o = origin(L, G);
   L.lines.forEach((line,i)=>{
     let ox = 0;
@@ -130,6 +147,7 @@ function paint(target, scale, L, dy, G, scroll, frame){
 
 function geom(L){
   if(sceneOn()) return { head: 0, w0: BG_W, h0: BG_H, scene: true };
+  if(state.style === 'card') return { head: 0, w0: BG_W, h0: BG_H, scene: false };   // a screen-sized card
   const head = headroom();
   return { head, w0: L.w + state.pad*2, h0: L.h + state.pad*2 + head };
 }
@@ -146,8 +164,10 @@ const player = { playing:false, frame:0, raf:0, acc:0, last:0 };
 // Rest is the last frame of the whole timeline, intro included -- using just the
 // spring's length parked the preview mid-bounce and, because play() rewinds only
 // from rest, left Play resuming past the intro so the opening never showed.
-const restFrame = () => Math.max(0, motion().frames.length - 1
-                                    + (introOn() ? introLen() : 0) + introTail());
+// The title card rests mid-timeline, at its hold: it leaves the screen at the end.
+const restFrame = () => state.style === 'card'
+  ? cardTimeline().rest + (introOn() ? introLen() : 0)
+  : Math.max(0, textFrames().length - 1 + (introOn() ? introLen() : 0) + introTail());
 function showRest(){ player.frame = restFrame(); }
 
 function render(){
@@ -156,7 +176,7 @@ function render(){
   const g = geom(L);
   const scale = scaleFor(L);
   const anim = state.mode === 'anim';
-  const frames = anim ? motion().frames : null;
+  const frames = anim ? textFrames() : null;
   const span = anim ? frames.length + (introOn() ? introLen() : 0) + introTail() : 0;
   if(anim && player.frame >= span) player.frame = 0;
   const iLen = anim && introOn() ? introLen() : 0;
@@ -197,7 +217,7 @@ function render(){
 const FRAME_MS = 20;                 // GIF delay is whole centiseconds: 2cs
 function tick(ts){
   if(!player.playing) return;
-  const frames = motion().frames;
+  const frames = textFrames();
   // the idle tail too -- without it playback wrapped before the S&K smile fired
   // and before Tails ever reached the screen, though both are in the export
   const total = frames.length + (introOn() ? introLen() : 0) + introTail();
@@ -315,6 +335,92 @@ function motion(){
   }
   return curveCache;
 }
+/* The text's own timeline, one entry per frame: the banner spring's vertical
+   offsets, or for the title card an index into its distinct poses. Everything
+   that walks the timeline -- playback, the scrubber, every export -- goes through
+   here, and hands the entry to paint() as its dy. */
+function textFrames(){ return state.style === 'card' ? cardTimeline().frames : motion().frames; }
+
+/* ---------- the title card ------------------------------------------------
+   Obj_TitleCard and its elements, stepped the way the ROM steps them. Each
+   element slides in at $10 a frame -- the name, ZONE and the act number from
+   the right, the red banner from the top -- and flags the card while it moves.
+   Once a frame passes with nothing moving, the card holds for 90 frames, then
+   counts up one a frame; each element leaves when the count reaches its place
+   in the order (banner 1, name 3, ZONE 5, act 7) at $20 a frame, and is deleted
+   once a frame has drawn it entirely off-screen. Frame 0 is before the card
+   exists, which is what the intro frames show. */
+const cardCache = {key: '', t: null};
+function cardTimeline(){
+  const L = layout();
+  const key = [state.cardZone, state.cardAct, L.w, L.h, L.lines.length, state.lead].join('|');
+  if(cardCache.key === key) return cardCache.t;
+  const C = CARD_FONT.card;
+  const els = [
+    {k: 'name',   e: C.name,   sign: -1},
+    {k: 'zone',   e: C.zone,   sign: -1, on: state.cardZone},
+    {k: 'act',    e: C.act,    sign: -1, on: state.cardAct > 0},
+    {k: 'banner', e: C.banner, sign: +1},
+  ].filter(x => x.on !== false).map(x => ({...x, pos: x.e.from, alive: true, off: false}));
+  const poses = [], ids = new Map(), frames = [];
+  const record = none => {
+    const p = {}; if(!none) for(const x of els) if(x.alive) p[x.k] = x.pos;
+    const k = JSON.stringify(p);
+    if(!ids.has(k)){ ids.set(k, poses.length); poses.push(p); }
+    frames.push(ids.get(k));
+  };
+  record(true);                                      // before the card exists
+  let parent = 'create', moved = false, hold = C.hold, count = 0, rest = -1;
+  for(let guard = 0; els.some(x => x.alive) && guard < 2000; guard++){
+    if(parent === 'create') parent = 'wait';         // its elements run this same frame
+    else if(parent === 'wait'){ if(moved) moved = false; else parent = 'hold'; }
+    else if(hold > 0) hold--;
+    else count++;
+    for(const x of els){
+      if(!x.alive) continue;
+      if(!count){ if(x.pos !== x.e.to){ x.pos += x.sign * C.speedIn; moved = true; } }
+      else if(x.off){ x.alive = false; continue; }
+      else if(count >= x.e.order) x.pos -= x.sign * C.speedOut;
+      const b = cardBox(x.k, x.pos, L);
+      x.off = b.x >= BG_W || b.x + b.w <= 0 || b.y >= BG_H || b.y + b.h <= 0;
+    }
+    record();
+    if(rest < 0 && els.every(x => x.pos === x.e.to)) rest = frames.length - 1;
+  }
+  cardCache.key = key;
+  return cardCache.t = {frames, poses, rest};
+}
+/* Where an element is drawn with its origin at pos, in screen pixels. The name
+   is the text, right-aligned the way every zone-name frame ends at +128; extra
+   lines stack above it, so the last line sits where a zone name does. */
+function cardBox(k, pos, L){
+  const C = CARD_FONT.card, P = CARD_FONT.parts;
+  if(k === 'banner') return {x: C.banner.x + P.banner.ox, y: pos + P.banner.oy, w: P.banner.w, h: P.banner.h};
+  if(k === 'zone')   return {x: pos + P.zone.ox, y: C.zone.y, w: P.zone.w, h: P.zone.h};
+  if(k === 'act')    return {x: pos + P.act1.ox, y: C.act.y, w: P.act1.w, h: P.act1.h};
+  const top = C.name.y - (L.lines.length - 1) * (L.rowh + state.lead);
+  return {x: pos + C.name.right - L.w, y: top, w: L.w, h: L.h};
+}
+/* Everything the card draws for a pose, back to front. The elements share a
+   priority, so slot order decides: name over ZONE over act over banner. */
+function cardItems(pose, L){
+  const C = CARD_FONT.card, P = CARD_FONT.parts, out = [];
+  const part = (name, x, y) => out.push({part: cardParts[name], x: x + P[name].ox, y: y + P[name].oy});
+  if(pose.banner !== undefined) part('banner', C.banner.x, pose.banner);
+  if(pose.act !== undefined) part('act' + state.cardAct, pose.act, C.act.y);
+  if(pose.zone !== undefined) part('zone', pose.zone, C.zone.y);
+  if(pose.name !== undefined){
+    const top = C.name.y - (L.lines.length - 1) * (L.rowh + state.lead);
+    L.lines.forEach((line, i) => {
+      const x0 = pose.name + C.name.right - line.w, y = top + i * (L.rowh + state.lead);
+      for(const {g, x} of line.items) out.push({glyph: g, x: x0 + x, y: y + g[4]});
+    });
+  }
+  return out;
+}
+/* The pose a frame shows: animated, the timeline entry; still, the hold. */
+const cardPose = (dy, G) => { const t = cardTimeline(); return t.poses[state.mode === 'anim' ? dy : t.frames[t.rest]] || {}; };
+
 function headroom(){
   if(sceneOn()) return 0;           // the 320x224 frame is the viewport; clipping is authentic
   if(state.mode !== 'anim') return 0;
@@ -462,6 +568,26 @@ function paletteBanks(L){
   });
   return {pal, banks};
 }
+/* The title-card letters index into the shared palette like a scene does --
+   after the font's slots, never in them -- so recolouring cannot reach them. */
+function indexCardImage(img){
+  const c = document.createElement('canvas');
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const x = c.getContext('2d', {willReadFrequently:true});
+  x.drawImage(img, 0, 0);
+  const d = x.getImageData(0, 0, c.width, c.height).data;
+  const seen = new Map();
+  PALETTE.forEach((p, i) => { if(i > FONT_SLOTS) seen.set((p[0]<<16)|(p[1]<<8)|p[2], i); });
+  const idx = new Uint16Array(c.width * c.height);
+  for(let i = 0, p = 0; i < d.length; i += 4, p++){
+    if(d[i+3] < 128) continue;
+    const k = (d[i]<<16)|(d[i+1]<<8)|d[i+2];
+    if(!seen.has(k)){ seen.set(k, PALETTE.length); PALETTE.push([d[i], d[i+1], d[i+2]]); }
+    idx[p] = seen.get(k);
+  }
+  return {img, idx, w: c.width, h: c.height};
+}
+function buildCard(){ const r = indexCardImage(cardAtlas); CARD_IDX = r.idx; CARD_W = r.w; }
 function buildIndexed(){
   const c = document.createElement('canvas');
   ATLAS_W = c.width = atlas.naturalWidth;
@@ -490,6 +616,18 @@ function buildIndexed(){
    carry the rectangle the block actually occupies -- the rest is cleared for
    us. Vertical travel makes that a large saving. */
 function frameRect(L, scale, dy, G, W, H){
+  if(state.style === 'card'){
+    let r = null;
+    for(const it of cardItems(cardPose(dy), L)){
+      const w = it.part ? it.part.w : it.glyph[2], h = it.part ? it.part.h : it.glyph[3];
+      const x0 = Math.max(0, it.x*scale), y0 = Math.max(0, it.y*scale);
+      const x1 = Math.min(W, (it.x + w)*scale), y1 = Math.min(H, (it.y + h)*scale);
+      if(x1 <= x0 || y1 <= y0) continue;
+      const q = {x: x0, y: y0, w: x1 - x0, h: y1 - y0};
+      r = r ? rectUnion(r, q) : q;
+    }
+    return r || {x:0, y:0, w:1, h:1};
+  }
   const o = origin(L, G);
   let lo = Infinity, hi = -Infinity;
   L.lines.forEach(line => {
@@ -607,7 +745,7 @@ function introLen(){
 function introTail(){
   const s = sceneIntro();
   if(!introOn() || !s) return 0;
-  return Math.max(0, (s.idle || 0) - motion().frames.length);
+  return Math.max(0, (s.idle || 0) - textFrames().length);
 }
 /* Which state each hand channel is showing on timeline frame t, or null before
    the pose has settled. SKTitle_AnimateHands counts a per-channel timer down and
@@ -950,6 +1088,36 @@ function paintIndexed(rect, scale, L, dy, G, bgIdx, scroll, banks, frame){
   if(G.scene && introOn()) fillIntro(buf, rect, scale, scroll||0, frame);
   else if(G.scene) fillBackground(buf, rect, scale, scroll||0);
   else if(bgIdx) buf.fill(bgIdx);
+  // Copy a box of an index image into the buffer at (dx0,dy0), scaled up.
+  const blit = (src, stride, sx, sy, sw, sh, dx0, dy0, bank) => {
+    for(let yy = 0; yy < sh; yy++){
+      const srow = (sy + yy)*stride + sx;
+      for(let ry = 0; ry < scale; ry++){
+        const ty = dy0 + yy*scale + ry;
+        if(ty < 0 || ty >= H) continue;
+        const trow = ty*W;
+        for(let xx = 0; xx < sw; xx++){
+          const v = src[srow + xx];
+          if(!v) continue;
+          const bv = bank + v;
+          const tx0 = dx0 + xx*scale;
+          for(let rx = 0; rx < scale; rx++){
+            const tx = tx0 + rx;
+            if(tx >= 0 && tx < W) buf[trow + tx] = bv;
+          }
+        }
+      }
+    }
+  };
+  if(state.style === 'card'){
+    // the title card keeps the game's colours: its own indices, no ramp bank
+    for(const it of cardItems(cardPose(dy), L)){
+      const dx0 = it.x*scale - rect.x, dy0 = it.y*scale - rect.y;
+      if(it.part) blit(it.part.idx, it.part.w, 0, 0, it.part.w, it.part.h, dx0, dy0, 0);
+      else { const [sx, sy, sw, sh] = it.glyph; blit(CARD_IDX, CARD_W, sx, sy, sw, sh, dx0, dy0, 0); }
+    }
+    return buf;
+  }
   const o = origin(L, G);
   L.lines.forEach((line, i) => {
     let ox = 0;
@@ -957,28 +1125,9 @@ function paintIndexed(rect, scale, L, dy, G, bgIdx, scroll, banks, frame){
     if(state.align === 'right')  ox = L.w - line.w;
     const oy = i*(L.rowh + state.lead);
     for(const {g, x} of line.items){
-      const dx0 = (o.x + ox + x)*scale - rect.x;
-      const dy0 = (o.y + oy + g[4] + dy)*scale - rect.y;
-      const bank = banks ? banks[i] : 0;
       const [sx, sy, sw, sh] = g;
-      for(let yy = 0; yy < sh; yy++){
-        const srow = (sy + yy)*ATLAS_W + sx;
-        for(let ry = 0; ry < scale; ry++){
-          const ty = dy0 + yy*scale + ry;
-          if(ty < 0 || ty >= H) continue;
-          const trow = ty*W;
-          for(let xx = 0; xx < sw; xx++){
-            const v = ATLAS_IDX[srow + xx];
-            if(!v) continue;
-            const bv = bank + v;
-            const tx0 = dx0 + xx*scale;
-            for(let rx = 0; rx < scale; rx++){
-              const tx = tx0 + rx;
-              if(tx >= 0 && tx < W) buf[trow + tx] = bv;
-            }
-          }
-        }
-      }
+      blit(ATLAS_IDX, ATLAS_W, sx, sy, sw, sh, (o.x + ox + x)*scale - rect.x,
+           (o.y + oy + g[4] + dy)*scale - rect.y, banks ? banks[i] : 0);
     }
   });
   return buf;
@@ -1178,8 +1327,9 @@ async function buildApng(frames, W, H, palette, delayDen){
 function exportCanvas(){
   const off = document.createElement('canvas');
   const L = layout();
-  // force zero headroom so still output is unaffected by animation settings
-  const G = sceneOn() ? geom(L)
+  // force zero headroom so still output is unaffected by animation settings;
+  // a scene or the title card is the whole Genesis frame either way
+  const G = sceneOn() || state.style === 'card' ? geom(L)
                         : {head:0, w0:L.w + state.pad*2, h0:L.h + state.pad*2};
   const scale = clampScale(G.w0, G.h0, state.scale, STILL_BUDGET);
   paint(off, scale, L, 0, G, scrollAt(1e9));
@@ -1330,7 +1480,7 @@ function gifFrames(allowResample){
   const W = g.w0*scale, H = g.h0*scale;
   const {pal, bgIdx} = gifPalette(L);
   const banks = paletteBanks(L).banks;
-  let offs = motion().frames;
+  let offs = textFrames();
   if(allowResample && state.timebase === 'ntsc'){
     // resample the ROM curve onto a 50fps grid so wall-clock matches NTSC
     const n = Math.round(offs.length / 59.92 / (FRAME_MS/1000));
@@ -1438,7 +1588,7 @@ async function recordVideo(mime, ext, btnId){
     const L = layout(), g = geom(L), scale = scaleFor(L);
     const W = g.w0*scale, H = g.h0*scale;
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    const frames = motion().frames;
+    const frames = textFrames();
     const stream = cv.captureStream(0);
     const track = stream.getVideoTracks()[0];
     const rec = new MediaRecorder(stream, {mimeType: mime, videoBitsPerSecond: 12e6});
@@ -1550,6 +1700,8 @@ el('style').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.style = b.dataset.style;
   [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  document.body.classList.toggle('card', state.style === 'card');
+  if(!player.playing) showRest();
   const d = DEFAULTS[state.style];
   if(!state.touchedTrack){ state.track = d.track; el('track').value = d.track; el('trackVal').textContent = d.track; }
   if(!state.touchedLead){ state.lead = d.lead; el('lead').value = d.lead; el('leadVal').textContent = d.lead; }
@@ -1759,6 +1911,20 @@ el('scene').addEventListener('click', e=>{
   if(!player.playing) showRest();
   render();
 });
+el('cardZone').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  state.cardZone = b.dataset.zone === 'on';
+  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  if(!player.playing) showRest();
+  render();
+});
+el('cardAct').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  state.cardAct = +b.dataset.act;
+  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  if(!player.playing) showRest();
+  render();
+});
 el('intro').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.intro = b.dataset.intro === 'on';
@@ -1787,7 +1953,7 @@ MOTION.forEach(([id,out,fmt])=>{
   el(id).addEventListener('input', e=>{
     state[id] = +e.target.value;
     el(out).textContent = fmt(+e.target.value);
-    if(player.frame >= motion().frames.length) showRest();
+    if(player.frame >= textFrames().length) showRest();
     render();
   });
 });
@@ -1835,8 +2001,18 @@ atlas.onload = ()=>{
   // the scene background shares the font's palette, so it must index after it
   // both scenes share the font's palette, so they must be indexed after it
   const ids = Object.keys(SCENES);
-  let pending = ids.length;
+  let pending = ids.length + 1;
   const done = ()=>{ if(--pending === 0){ ready = true; render(); } };
+  cardAtlas.onload = ()=>{ buildCard(); done(); };
+  for(const [name, part] of Object.entries(CARD_FONT.parts)){
+    pending++;
+    const im = new Image();
+    im.onload = ()=>{ cardParts[name] = indexCardImage(im); done(); };
+    im.onerror = done;
+    im.src = part.src;
+  }
+  cardAtlas.onerror = ()=>{ el('style').querySelector('button[data-style="card"]').disabled = true; done(); };
+  cardAtlas.src = CARD_SRC;
   for(const id of ids){
     const spec = SCENES[id].intro;
     if(spec){

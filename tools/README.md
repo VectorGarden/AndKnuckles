@@ -142,6 +142,23 @@ style's row height, and no glyph overflows its row band once its `yOffset` is
 applied. Both are how a period ends up on the baseline and a quote at cap height
 without padding the bitmap.
 
+## What build-card-font does
+
+Decodes the title-card lettering. It loads the title card's art the way `Obj_TitleCard`
+queues it — Red ACT at tile `$500`, the shared letters at `$510`, the act number at `$53D`,
+each zone's own letters at `$54D`, later loads winning — renders each zone-name frame of
+`Map - Title Card.asm`, and splits the names back into letters using the pieces' positions
+and widths learned from one-letter-per-piece words. It throws if a letter differs between
+two names, or if a word's letters do not exactly fill its pieces.
+
+J, Q, W and X are derived at the end of the file, and the anti-aliasing rule used for the
+drawn strokes is checked against the real V on every build. Writes `card-atlas.png`, in the
+title card's own colours (Sonic's palette line, which the card is drawn in), and
+`card-table.json`, the same shape as the main font's table plus two extras: `parts`, the
+offsets of the rest of the card (the banner, ZONE and both act numbers, written as
+`card-banner.png`, `card-zone.png`, `card-act1.png` and `card-act2.png`), and `card`, the
+elements' start and rest positions, speeds, hold and exit order from `ObjArray_TtlCard`.
+
 ## What build-page does
 
 Inlines `src/style.css`, `src/generated/assets.js` and `src/app.js` into

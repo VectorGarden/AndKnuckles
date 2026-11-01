@@ -522,6 +522,75 @@ budget the real **O** uses: a 7px stroke against a 4px counter.
 down-left sweep against a full-width chamfered base, and the two fought into a visible
 step on the bottom-right edge. Deriving it means the two glyphs cannot drift apart.
 
+## The title card
+
+**Title card** is a third letter style, and it is the whole S3&K title card, not just its
+lettering: in animated mode the red *SONIC 3 & KNUCKLES* banner drops in on the left, your
+text slides in from the right as the zone name, with **ZONE** and **ACT 1** below it, they
+hold, and they leave — the way `Obj_TitleCard` plays it at the start of every zone. Still
+mode shows the card at rest. Over the AIZ intro it arrives the moment Knuckles has gone,
+which is exactly when the game shows it.
+
+### The motion
+
+Read from `Obj_TitleCard`, its element objects, and `ObjArray_TtlCard`:
+
+| element | rests at (screen) | in | out |
+|---|---|---|---|
+| red banner | x 64–128, y −48 to 176 | from the top, $10/frame (11 frames) | up, 1st |
+| zone name | right edge at x 288, y 96 | from the right, $10/frame (20) | right, 2nd |
+| ZONE | x 216–288, y 128 | from the right (24) | right, 3rd |
+| act number | x 232–281, y 160 | from the right (28) | right, 4th |
+
+Every element flags the card while it moves. The frame after nothing moved, the card holds
+for **90 frames**, then counts up one a frame, and each element leaves at $20 a frame once
+the count reaches its place in the order (1, 3, 5, 7) — so they go two frames apart, banner
+first. An element is deleted once a frame has drawn it entirely off-screen. The test suite
+pins the numbers: the act lands on frame 28, the exits start on 121, 123, 125 and 127.
+
+Every zone-name frame ends at x +128 from its origin, so names are right-aligned there, and
+so is yours. Extra lines stack *above* it, so the last line sits where a zone name does.
+**ZONE** and the act number (1, 2, or none) are options, since not every zone has them —
+Sky Sanctuary and the Doomsday have no act. The banner, ZONE, ACT and both numbers are the
+game's own art, decoded from the same title-card files. The spring's sliders hide while
+this style is on; they do not drive it.
+
+The VDP draws a sprite's first mapping piece on top, and the banner depends on it: its
+*SONIC 3 & KNUCKLES* emblem comes first in the list and sits over the red tiles. The shared
+sprite renderer used to let later pieces win, which hid the emblem; none of the other
+scenes' sprites overlap themselves, so fixing it changed nothing else.
+
+### The lettering
+
+It is decoded rather than ripped. There is no font in the ROM as such — each zone name is a
+mapping frame in `Map - Title Card.asm`, assembled from letter pieces over that zone's own
+small letter set and the shared title-card art — so `tools/build-card-font.mjs` renders all
+fourteen names plus *ZONE*, splits them back into letters, and keeps one of each.
+
+The split is the only subtle part. Pieces never cut a letter, but one piece can hold
+several: in *MUSHROOM HILL* a single 32px piece is H, I and L. Words where every piece is
+one letter give the letters' widths — 16px, with I and L at 8 and M and O at 24 — and
+with those known every other word splits by position. **All 22 letters the names spell
+come out pixel-identical everywhere they appear** (A twenty times, E fifteen), and the
+build stops if one ever does not.
+
+**J, Q, W and X** never appear in a zone name, so they are derived:
+
+- **W** is M turned upside down — two valleys for two peaks.
+- **J** is U without its left stem above the hook.
+- **X** and **Q's tail** are new diagonals, anti-aliased by a rule calibrated against
+  the real V: supersampled coverage of a 2.1px band, cut at 0.8, 0.5 and 0.1 into the
+  face colour and the two anti-aliasing tints. Run along V's own stroke it reproduces V
+  pixel for pixel, and the build checks that it still does.
+
+There are no digits or punctuation — the title card never drew any beyond the act number,
+which is a different design. Anything outside A–Z is skipped and named under the preview.
+
+The card keeps the game's colours — it is drawn in Sonic's palette line — including the
+dark bar behind each letter's lower two-thirds, which runs to the glyph's right edge so a
+name sits on one continuous bar. These take their own palette slots, past the font's, so
+the palette presets cannot reach them, and the palette controls hide while the style is on.
+
 ## Deploy
 
 Pushes to `main` deploy through [`.github/workflows/pages.yml`](.github/workflows/pages.yml).

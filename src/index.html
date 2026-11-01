@@ -68,6 +68,19 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
       <div class="seg" id="style" role="group" aria-label="Letter style">
         <button data-style="outline" aria-pressed="true">Outlined</button>
         <button data-style="plain" aria-pressed="false">Plain</button>
+        <button data-style="card" aria-pressed="false">Title card</button>
+      </div>
+    </div>
+    <div class="ctl card-only" id="cardCtl">
+      <span class="lbl">Title card</span>
+      <div class="seg" id="cardZone" role="group" aria-label="ZONE line">
+        <button data-zone="on" aria-pressed="true">ZONE</button>
+        <button data-zone="off" aria-pressed="false">No ZONE</button>
+      </div>
+      <div class="seg" id="cardAct" role="group" aria-label="Act number" style="margin-top:6px">
+        <button data-act="1" aria-pressed="true">Act 1</button>
+        <button data-act="2" aria-pressed="false">Act 2</button>
+        <button data-act="0" aria-pressed="false">No act</button>
       </div>
     </div>
 
@@ -100,8 +113,10 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
       <input type="range" id="pad" aria-label="Edge padding" min="0" max="32" step="1" value="0">
     </div>
 
-    <div class="ctl" style="grid-column:1/-1;border-right:0">
+    <div class="ctl" id="palCtl" style="grid-column:1/-1;border-right:0">
       <span class="lbl">Palette</span>
+      <span class="note card-only">The title-card letters keep the game's own colours — white
+      over the dark bar the zone name sits on — so the palette does not apply to them.</span>
       <div class="bgrow">
         <div class="seg" id="palette" role="group" aria-label="Palette">
           <button data-pal="classic" aria-pressed="true">Classic</button>
@@ -172,27 +187,27 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
   </div>
 
   <div class="controls anim-only" id="animCtl">
-    <div class="ctl">
+    <div class="ctl spring-only">
       <span class="lbl">Entry distance <b id="distVal">96</b></span>
       <input type="range" id="dist" aria-label="Entry distance" min="0" max="256" step="1" value="96">
     </div>
-    <div class="ctl">
+    <div class="ctl spring-only">
       <span class="lbl">Initial velocity <b id="vel0Val">4</b></span>
       <input type="range" id="vel0" aria-label="Initial velocity" min="0.25" max="16" step="0.25" value="4">
     </div>
-    <div class="ctl">
+    <div class="ctl spring-only">
       <span class="lbl">Acceleration <b id="accelVal">0.25</b></span>
       <input type="range" id="accel" aria-label="Acceleration" min="0.05" max="2" step="0.05" value="0.25">
     </div>
-    <div class="ctl">
+    <div class="ctl spring-only">
       <span class="lbl">Bounciness <b id="dampVal">0.5</b></span>
       <input type="range" id="damp" aria-label="Bounciness" min="0.1" max="0.95" step="0.05" value="0.5">
     </div>
-    <div class="ctl">
+    <div class="ctl spring-only">
       <span class="lbl">Amplitude <b id="ampVal">100%</b></span>
       <input type="range" id="amp" aria-label="Amplitude" min="10" max="200" step="5" value="100">
     </div>
-    <div class="ctl">
+    <div class="ctl spring-only">
       <span class="lbl">Headroom <b id="headVal">auto</b></span>
       <input type="range" id="head" aria-label="Headroom" min="-1" max="128" step="1" value="-1">
     </div>
@@ -207,7 +222,7 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
       (1.66s). APNG delays are a fraction, so it expresses 59.92 Hz exactly as 100/5992 —
       pick APNG if the timing matters. Video is a real-time capture and is approximate either way.</span>
     </div>
-    <div class="ctl" style="grid-column:1/-1;border-bottom:0;border-right:0">
+    <div class="ctl spring-only" style="grid-column:1/-1;border-bottom:0;border-right:0">
       <button class="btn ghost sm" id="romReset" style="min-width:0">Reset to ROM values</button>
       <span class="note">Defaults are read from Obj_TitleBanner_Main in the Sonic&nbsp;3 &amp; Knuckles
       disassembly: 96px entry, 4px/frame initial velocity, 0.25px/frame² spring, velocity halved
