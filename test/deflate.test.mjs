@@ -22,6 +22,18 @@ function rawOf(png){
   while(p < png.length){ const n = png.readUInt32BE(p); if(png.toString('latin1', p + 4, p + 8) === 'IDAT') parts.push(png.subarray(p + 8, p + 8 + n)); p += 12 + n; }
   return zlib.inflateSync(Buffer.concat(parts));
 }
+// the pipeline's PNGs: tools/out if a build left it, else built here, step by step
+let built = null;
+function pngDir(){
+  const out = path.join(ROOT, 'tools', 'out');
+  if(fs.existsSync(out) && fs.readdirSync(out).some(f => f.endsWith('.png'))) return out;
+  if(!built){
+    built = fs.mkdtempSync(path.join(os.tmpdir(), 'pipeline-'));
+    for(const step of fs.readdirSync(path.join(ROOT, 'tools')).filter(f => /^build-.*-?.*\.mjs$/.test(f) && !['build-all.mjs', 'build-page.mjs'].includes(f)))
+      execFileSync(process.execPath, [path.join(ROOT, 'tools', step), built], {cwd: ROOT, stdio: 'ignore'});
+  }
+  return built;
+}
 function inputs(){
   let seed = 7; const rnd = () => (seed = (seed * 1103515245 + 12345) >>> 0) >>> 24;
   const list = [['empty', Buffer.alloc(0)], ['one byte', Buffer.from([42])], ['zeros', Buffer.alloc(100000)],
@@ -30,8 +42,7 @@ function inputs(){
   // mixed: noise with repeats, past two windows
   const mix = Buffer.alloc(200000); for(let i = 0; i < mix.length; i++) mix[i] = i % 977 < 500 ? rnd() & 7 : mix[i - 977] ?? 0;
   list.push(['mixed', mix]);
-  const out = path.join(ROOT, 'tools', 'out');
-  if(fs.existsSync(out)) for(const f of fs.readdirSync(out).filter(f => f.endsWith('.png')).sort()) list.push([f, rawOf(fs.readFileSync(path.join(out, f)))]);
+  for(const f of fs.readdirSync(pngDir()).filter(f => f.endsWith('.png')).sort()) list.push([f, rawOf(fs.readFileSync(path.join(pngDir(), f)))]);
   return list;
 }
 
@@ -48,7 +59,7 @@ for f in glob.glob(sys.argv[1] + '/*.raw'):
     if(!got.equals(want)) bad.push(`${name} (${got.length} vs ${want.length})`);
   });
   fs.rmSync(dir, {recursive: true});
-  assert.ok(list.length > 6, 'inputs found');
+  assert.ok(list.length > 150, `the pipeline's PNGs found (${list.length - 6})`);
   assert.deepEqual(bad, [], `${bad.length} of ${list.length} differ from zlib`);
 });
 
