@@ -101,10 +101,10 @@ says so, because the loop will visibly jump.
 
 ## The backgrounds
 
-Five of them — **S1 title**, **GHZ**, **S3 title**, **S&K title** and **AIZ intro** — any of which
+Six of them — **S1 title**, **GHZ**, **S2 title**, **S3 title**, **S&K title** and **AIZ intro** — any of which
 swaps the transparent canvas for the real thing and locks output to the Genesis frame,
-320&times;224. The S3 and S&K title screens are described here; Sonic 1, Green Hill and the AIZ
-intro have their own sections below. Text sits where the ROM puts
+320&times;224. The S3 and S&K title screens are described here; Sonic 1, Green Hill, Sonic 2 and
+the AIZ intro have their own sections below. Text sits where the ROM puts
 `& KNUCKLES` — screen y 176, from banner rest `$D4` plus the `$5C` subtitle offset,
 less the `$80` sprite-space origin — and the background scrolls up 16px across the
 first 16 frames, which is `V_scroll_value` in the original making room for the
@@ -291,6 +291,57 @@ the second are ignored.
 The rebuilt SONIC / THE HEDGEHOG is close to the original but not exact — the artist's letters
 carry hand-placed highlights the rule does not reproduce — and the emblem was laid out for five
 letters, so a first line much longer than SONIC runs past the ribbon onto the ornaments.
+
+## The Sonic 2 title
+
+The **S2 title** scene is the Sonic 2 title screen, decoded from
+[s2disasm](https://github.com/sonicretro/s2disasm), REV01 with its bugs kept. Almost nothing
+on it is a fixed picture. It is one object, `Obj0E`, plus two palette changers (`ObjC9`).
+So the build runs them, transcribed from `s2.asm`, and writes down what every frame shows:
+the sprites front to back, the palette, and the background's scroll. The page plays that
+table back. In animated mode:
+
+- **The screen opens on black.** The fade-in brings up only palette line 1, which nothing
+  on screen uses except a star. The star twinkles at nine places in turn.
+- **The emblem fades in from frame 56**, its line counting up a step every 3 frames.
+- **Sonic rises out of it at frame 128**, a new position every 4 frames, then plays his
+  appear frames. REV01's animation still has the prototype frame with both arms missing,
+  for one frame. His hand comes up after him, and the copyright line lights with his
+  palette.
+- **Tails follows at frame 192.** He is drawn behind Sonic: his priority is never set, which
+  s2disasm's FixBugs build corrects.
+- **At frame 288 the background arrives in a white flash.** Line 2 is set to white, then
+  stepped down to the background's colours every 5 frames. Your text springs in once that
+  has settled, 40 frames on.
+
+Some details:
+
+- **The two rise behind the top of the emblem by sprite masking.** They are drawn over the
+  emblem; a masking sprite on lines 112–175 hides every sprite after it in the list. The top
+  of the emblem is redrawn as a sprite ahead of the mask, so it stays in front of them.
+- **The background is still above line 160.** Lines 160–191 scroll with the camera, which
+  creeps right a pixel a frame (the background moves at a quarter of that), and lines
+  192–207 ripple off it from a 66-byte table.
+- **Text is centred at y 204**, where the game's menu (`Obj0F`) sits. The menu is left out,
+  as Sonic 1's PRESS START is. So is the falling star, which only comes at frame 464.
+- The star's and the ripple's 8-frame steps run off the global frame counter, whose real
+  value depends on how long the screens before the title took. The build starts it at 0
+  when the fade begins.
+
+### The Sonic 2 lettering
+
+**Sonic 2** is a letter style: the face of *SONIC AND MILES 'TAILS' PROWER IN*, the screen
+before the title, and of the staff roll. Each letter is a white outline round a hollow
+shape, one tile tall and two wide, written edge to edge. The intro's text macro emits each
+letter as two tile codes, through a character map `s2.asm` sets up for it, so the build reads
+the letters straight off that map: **all 26 letters** (including a Q that neither the intro
+nor the roll ever spells), **1, 2 and 9**, and **' ( ) . :**. The apostrophe is the game's
+double tick.
+
+**0** is O, and **6** is 9 turned round. **3, 4, 5, 7 and 8** and **& ! ? , -** are drawn
+in the face's own style, the digits on the outlines of the real 2 and 9. Lines are spaced
+a blank tile row apart, as in the staff roll. Like the other game faces, it keeps its own
+colours: white, from the intro's palette.
 
 ## The S3 opening
 
@@ -742,7 +793,7 @@ Background art decoded from the [Sonic Retro disassembly][disasm], whose compres
 data is vendored under [`tools/rom/`](tools/rom/); the Kosinski, Enigma and Nemesis formats
 were implemented against [flamewing/mdcomp][mdcomp].
 
-Sonic the Hedgehog 3 and Sonic & Knuckles are © **Sega**. This is an unofficial
+Sonic the Hedgehog, Sonic the Hedgehog 2, Sonic the Hedgehog 3 and Sonic & Knuckles are © **Sega**. This is an unofficial
 fan tool; all of the artwork belongs to them.
 
 [mdcomp]: https://github.com/flamewing/mdcomp

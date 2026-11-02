@@ -20,7 +20,7 @@ const HTML  = path.join(HERE, '..', 'index.html');
 const check = process.argv.includes('--check');
 
 const STEPS = ['build-sk-assets.mjs', 'build-s3-assets.mjs', 'build-aiz-assets.mjs', 'build-font.mjs',
-               'build-card-font.mjs', 'build-s1-assets.mjs'];
+               'build-card-font.mjs', 'build-s1-assets.mjs', 'build-s2-assets.mjs'];
 // the two files the pipeline writes; --check has to restore both or it would
 // leave src/generated/assets.js rebuilt while claiming it changed nothing
 const ASSETS = path.join(HERE, '..', 'src', 'generated', 'assets.js');

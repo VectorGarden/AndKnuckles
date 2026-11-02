@@ -8,7 +8,8 @@ const SPACE_W = 8;
 // look is authentic, but it reads as overlap. 0 lets the outlines touch while
 // each glyph and line stays its own; -3 or so reproduces the ROM spacing.
 const DEFAULTS = { outline:{track:0, lead:0}, plain:{track:2, lead:4}, card:{track:0, lead:4},
-                   credits:{track:0, lead:4}, card1:{track:0, lead:4}, logo:{track:0, lead:0} };
+                   credits:{track:0, lead:4}, card1:{track:0, lead:4}, logo:{track:0, lead:0},
+                   credits2:{track:0, lead:8} };
 
 /* The title-card lettering (tools/build-card-font.mjs) is a third style with its
    own atlas. Its letters already carry their spacing -- each glyph's dark bar
@@ -19,6 +20,11 @@ FONT.card = CARD_FONT;
 FONT.credits = CRED_FONT;
 const credAtlas = new Image();
 let CRED_IDX = null, CRED_W = 0;
+/* The Sonic 2 credit font (tools/build-s2-assets.mjs): one tile tall, two wide,
+   edge to edge as the intro writes it, a blank row between lines as the roll does. */
+FONT.credits2 = CRED2_FONT;
+const cred2Atlas = new Image();
+let CRED2_IDX = null, CRED2_W = 0;
 /* The Sonic 1 title card: its letters, and the card it plays (ZONE, ACT, the oval). */
 FONT.card1 = S1CARD_FONT;
 const s1cardAtlas = new Image();
@@ -106,7 +112,8 @@ const sceneDrawn = () => introOn() || logoOnScene();
 /* Faces that keep the game's colours: their own atlas and palette slots, no ramp. */
 const fixedFont = () => state.style === 'card' ? {img: cardAtlas, idx: CARD_IDX, w: CARD_W}
                       : state.style === 'card1' ? {img: s1cardAtlas, idx: S1CARD_IDX, w: S1CARD_W}
-                      : state.style === 'credits' ? {img: credAtlas, idx: CRED_IDX, w: CRED_W} : null;
+                      : state.style === 'credits' ? {img: credAtlas, idx: CRED_IDX, w: CRED_W}
+                      : state.style === 'credits2' ? {img: cred2Atlas, idx: CRED2_IDX, w: CRED2_W} : null;
 const cardAtlas = new Image();
 let CARD_IDX = null, CARD_W = 0;
 const cardParts = {};          // banner-s3/-s3k/-sk, zone, act1, act2: {img, idx, w, h}
@@ -857,7 +864,8 @@ function buildIntro(id){
     const d = x.getImageData(0, 0, c.width, c.height).data;
     const seen = new Map();
     PALETTE.forEach((c2,i)=>{ if(i > FONT_SLOTS) seen.set((c2[0]<<16)|(c2[1]<<8)|c2[2], i); });
-    const idx = new Uint8Array(c.width * c.height);
+    // 16-bit: the scenes between them bring more than 256 colours
+    const idx = new Uint16Array(c.width * c.height);
     for(let i=0, p=0; i<d.length; i+=4, p++){
       if(d[i+3] < 128) continue;                 // 0 = transparent for overlays
       const k = (d[i]<<16)|(d[i+1]<<8)|d[i+2];
@@ -1160,6 +1168,55 @@ const INTROS = {
     },
   },
 
+  /* TitleScreen and Obj0E, played back from the table tools/build-s2-assets.mjs
+     writes by running them: a star twinkling on black, the emblem fading in from
+     frame 56, Sonic rising out of it at 128, Tails at 192, and at 288 the
+     background in a white flash; the text springs in once that has faded. Each
+     frame lists its sprites front to back; the ones after the masking sprite are
+     hidden on lines 112-175, which is how the two stay behind the emblem's top
+     while they rise. A sprite's low-priority pieces go behind the emblem. */
+  s2: {
+    indexed: true,
+    build(spec, index, gidx){
+      const seen = new Map();
+      PALETTE.forEach((c, i) => { if(i > FONT_SLOTS) seen.set((c[0]<<16)|(c[1]<<8)|c[2], i); });
+      const luts = spec.pals.map(hex => Uint16Array.from({length: 64}, (_, i) => {
+        const w = parseInt(hex.slice(i*3, i*3+3), 16);
+        const c = [((w >> 1) & 7)*36, ((w >> 5) & 7)*36, ((w >> 9) & 7)*36], k = (c[0]<<16)|(c[1]<<8)|c[2];
+        if(!seen.has(k)){ seen.set(k, PALETTE.length); PALETTE.push(c); }
+        return seen.get(k);
+      }));
+      const spr = spec.spr.map(q => gidx(q.img));
+      return {back: gidx(spec.back.img), emblem: gidx(spec.emblemImg.img), luts,
+              parts: spec.sprites.map(p => p.map(q => q && Object.assign({}, spr[q.n], {ox: q.ox, oy: q.oy})))};
+    },
+    len(s){ return s.intro; },
+    at(t){ const s = sceneIntro(); return s.tl[Math.min(t, s.frames - 1)]; },
+    palAt(t){ return this.at(t)[0]; },
+    draws(t){
+      const s = sceneIntro(), L = introLayers.s2, e = this.at(t), p = e[0], lut = L.luts[p];
+      // SwScrl_Title: lines 160-191 at the BG scroll, 192-207 rippling off it, the rest still
+      const rows = new Array(BG_H).fill(0);
+      if(e[1] !== null) for(let y = 160; y < 208; y++) rows[y] = -(e[1] + (y < 192 ? 0 : s.ripple[e[2] + y - 192]));
+      const d = [
+        {key:'backdrop', fill:lut[32], x:0, y:0, tag:p, plane:true},
+        {key:'bg', lay:L.back, x:0, y:0, rows, wrapAll:true, lut, tag:p + ':' + e[1] + ':' + e[2], plane:true},
+      ];
+      const lo = [], hi = [], m = e[3].indexOf('m');
+      e[3].forEach((q, i) => {
+        if(q === 'm') return;
+        const clip = m >= 0 && i > m ? [s.maskTop, s.maskBottom] : null;
+        for(const part of [0, 1]){
+          const lay = L.parts[q[0]][part]; if(!lay) continue;
+          (part || q[3] ? hi : lo).unshift({key:'s' + i + ':' + part, lay, x:q[1] + lay.ox, y:q[2] + lay.oy,
+                                            clip, lut, tag:p + ':' + !!clip});
+        }
+      });
+      d.push(...lo, {key:'emblem', lay:L.emblem, x:0, y:0, lut, tag:p}, ...hi);
+      return d;
+    },
+  },
+
   /* Green Hill Zone act 1 at its start position: Sonic standing, the clouds
      creeping, the waterfalls cycling. With the Sonic 1 title card it opens the
      way the level does -- black while the card slides in, then once the act is
@@ -1295,7 +1352,7 @@ function buildBackground(id){
   // (S&K uses the font's red across 6958 pixels of Knuckles).
   const seen = new Map();
   PALETTE.forEach((c,i)=>{ if(i > FONT_SLOTS) seen.set((c[0]<<16)|(c[1]<<8)|c[2], i); });
-  const IDX = bgIdxs[id] = new Uint8Array(BG_W * BG_H);
+  const IDX = bgIdxs[id] = new Uint16Array(BG_W * BG_H);
   for(let i = 0, p = 0; i < d.length; i += 4, p++){
     if(d[i+3] < 128) continue;
     const k = (d[i]<<16) | (d[i+1]<<8) | d[i+2];
@@ -2325,6 +2382,10 @@ atlas.onload = ()=>{
   credAtlas.onload = ()=>{ const r = indexCardImage(credAtlas); CRED_IDX = r.idx; CRED_W = r.w; done(); };
   credAtlas.onerror = ()=>{ el('style').querySelector('button[data-style="credits"]').disabled = true; done(); };
   credAtlas.src = CRED_SRC;
+  pending++;
+  cred2Atlas.onload = ()=>{ const r = indexCardImage(cred2Atlas); CRED2_IDX = r.idx; CRED2_W = r.w; done(); };
+  cred2Atlas.onerror = ()=>{ el('style').querySelector('button[data-style="credits2"]').disabled = true; done(); };
+  cred2Atlas.src = CRED2_SRC;
   pending++;
   s1cardAtlas.onload = ()=>{ const r = indexCardImage(s1cardAtlas); S1CARD_IDX = r.idx; S1CARD_W = r.w; done(); };
   s1cardAtlas.onerror = ()=>{ el('style').querySelector('button[data-style="card1"]').disabled = true; done(); };
