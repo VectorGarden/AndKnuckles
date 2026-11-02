@@ -122,6 +122,22 @@ if(has('ghz-meta.json')){
     html = html.slice(0, s1.index + s1[0].length) + '\n' + next + html.slice(s1.index + s1[0].length);
   }
 }
+// ---- Sonic 2: the title screen scene ----
+if(has('s2-meta.json')){
+  const m = JSON.parse(fs.readFileSync(OUT + 's2-meta.json', 'utf8'));
+  const n = m.sprites.flat().filter(Boolean).length;
+  const spec = {...m, back: {src: b64('s2-bg.png')}, emblemImg: {src: b64('s2-emblem.png')},
+                spr: Array.from({length: n}, (_, i) => ({src: b64(`s2-spr${i}.png`)}))};
+  const cur = html.match(/^  s2: \{ label:"S2 title".*$/m);
+  // centred where Obj0F's menu sits, y 92 below the screen's centre
+  const y = cur ? cur[0].match(/y:\d+, /)[0] : 'y:204, ';
+  const next = `  s2: { label:"S2 title", ${y}vscroll:0, intro:${JSON.stringify(spec)}, src:"${b64('s2-still.png')}" },`;
+  if(cur) html = html.slice(0, cur.index) + next + html.slice(cur.index + cur[0].length);
+  else {
+    const g = html.match(/^  ghz: \{ label:"GHZ".*$/m);
+    html = html.slice(0, g.index + g[0].length) + '\n' + next + html.slice(g.index + g[0].length);
+  }
+}
 if(has('s1card-atlas.png') && has('s1card-table.json')){
   const t = JSON.parse(fs.readFileSync(OUT + 's1card-table.json', 'utf8'));
   for(const [name, part] of Object.entries(t.parts)) part.src = b64(`s1card-${name}.png`);
@@ -149,6 +165,16 @@ if(has('cred-atlas.png') && has('cred-table.json')){
   else {
     const a = html.match(/^const CARD_SRC = "[^"]*";$/m);
     if(!a) throw new Error('CARD_SRC not found to put the credits font after');
+    html = html.slice(0, a.index + a[0].length) + '\n' + lines + html.slice(a.index + a[0].length);
+  }
+}
+if(has('s2cred-atlas.png') && has('s2cred-table.json')){
+  const lines = `const CRED2_FONT = ${fs.readFileSync(OUT + 's2cred-table.json', 'utf8').trim()};\nconst CRED2_SRC = "${b64('s2cred-atlas.png')}";`;
+  const cur = html.match(/^const CRED2_FONT = .*;\nconst CRED2_SRC = "[^"]*";$/m);
+  if(cur) html = html.slice(0, cur.index) + lines + html.slice(cur.index + cur[0].length);
+  else {
+    const a = html.match(/^const CRED_SRC = "[^"]*";$/m);
+    if(!a) throw new Error('CRED_SRC not found to put the Sonic 2 credits font after');
     html = html.slice(0, a.index + a[0].length) + '\n' + lines + html.slice(a.index + a[0].length);
   }
 }

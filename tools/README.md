@@ -20,6 +20,8 @@ The steps underneath, if you want to run one on its own:
 ```bash
 node tools/build-sk-assets.mjs      # rom/ -> out/  (17 PNGs + intro-meta.json)
 node tools/build-s3-assets.mjs      # rom/ -> out/  (background + banner sheet)
+node tools/build-s1-assets.mjs      # rom/ -> out/  (Sonic 1: title, GHZ, credits, card, logo)
+node tools/build-s2-assets.mjs      # rom/ -> out/  (Sonic 2: title and credit font)
 node tools/build-font.mjs           # font/ -> out/ (sprite font atlas + glyph table)
 node tools/embed-assets.mjs         # out/  -> src/generated/assets.js
 node tools/build-page.mjs           # src/  -> index.html
@@ -131,6 +133,25 @@ their mirror symmetry), and `s1-logo.json`: the lifted S O N I C and T H E D G O
 drawn glyphs from `font/s1-logo.mjs`, the gradient read down the real I, and the face's
 placement and shadow constants.
 
+## What build-s2 does
+
+The Sonic 2 title screen and credit font, from s2disasm. It loads VRAM in `TitleScreen`'s
+order (the credit font first, then the title art over and around it) and renders from it:
+plane B, the two background maps side by side across the 512px plane; plane A, the emblem
+with the copyright line written over it; and `Obj0E`'s mapping frames, each split into its
+high- and low-priority pieces.
+
+Then it runs the screen. `Obj0E`'s routines and `ObjC9`'s palette fades are transcribed from
+`s2.asm`, and they run in object-slot order the way `RunObjects` runs them, with sprites
+queued by priority the way `BuildSprites` lists them. It covers the fade-in, the loop and
+`SwScrl_Title`'s scroll. Every frame is written to `s2-meta.json`, and the still is rendered
+from the same table. It asserts that the flash lands on `Obj0E`'s frame 288, and that the
+palette has settled by the time the text arrives.
+
+The credit font comes off `creditText`'s character map: each letter is an upper-case code
+and a lower-case one, two tiles. The glyphs the game never spells are drawn
+(`s2cred-atlas.png`, `s2cred-table.json`).
+
 ## What build-font does
 
 The one build here that is **not** a decode. The ROM has no title font at all:
@@ -211,7 +232,9 @@ cannot silently undo tuning that was arrived at by eye.
 
 ## rom/
 
-Compressed source data from the [Sonic Retro disassembly][disasm], unmodified.
+Compressed source data from the Sonic Retro disassemblies, unmodified: [skdisasm][disasm],
+and [s1disasm](https://github.com/sonicretro/s1disasm) and
+[s2disasm](https://github.com/sonicretro/s2disasm) for the `S1_` and `S2_` files.
 It is Sega's, like the rest of the artwork this project renders — see the credits
 in the root README. The page already embeds the decoded results; these are the
 inputs they came from, kept here so the build runs without a network fetch.

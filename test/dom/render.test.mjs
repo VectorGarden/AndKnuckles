@@ -63,7 +63,7 @@ const previewMatchesExport = page => page.evaluate(() => {
   return {bad, checked: Math.ceil(keys.length / step)};
 });
 
-for(const scene of ['off', 's1', 'ghz', 's3', 'sk', 'aiz']){
+for(const scene of ['off', 's1', 'ghz', 's2', 's3', 'sk', 'aiz']){
   for(const intro of scene === 'off' ? ['off'] : ['off', 'on']){
     const name = scene === 'off' ? scene : `${scene}, intro ${intro}`;
     test(`${name}: sub-rectangle frames composite to a full repaint`, async () => {
@@ -107,6 +107,30 @@ test('the S1 title settles onto exactly the still', async () => {
     return n;
   });
   assert.equal(diff, 0, 'the frame the text arrives on does not match the still');
+});
+
+// Sonic 2's still is likewise the frame the text arrives on, rendered offline from
+// the same timeline table the page plays. On the way there: Sonic rises masked off
+// lines 112-175, the background arrives in a white flash, and the text waits for it.
+test('the S2 title plays Obj0E\'s timeline and settles onto exactly the still', async () => {
+  await setup(page, {mode: 'anim', scene: 's2', intro: 'on'});
+  const r = await page.evaluate(() => {
+    const {W, H, scale} = gifFrames(true), rect = {x:0, y:0, w:W, h:H}, s = sceneIntro();
+    const a = new Uint16Array(W*H); fillIntro(a, rect, scale, 0, introLen());
+    const b = new Uint16Array(W*H); fillBackground(b, rect, scale, 0);
+    let n = 0; for(let k = 0; k < a.length; k++) if(PALETTE[a[k]].join() !== PALETTE[b[k]].join()) n++;
+    const lut = t => introLayers.s2.luts[INTROS.s2.palAt(t)];
+    const rising = introDraws(s.fadeFrames + 150).filter(d => d.clip);
+    return {n, intro: introLen(), flash: s.flash, white: PALETTE[lut(s.flash)[33]].join(),
+            darkBefore: PALETTE[lut(s.flash - 1)[33]].join(), masked: rising.length, clip: rising[0] && rising[0].clip};
+  });
+  assert.equal(r.n, 0, 'the frame the text arrives on does not match the still');
+  assert.equal(r.flash, 22 + 287, 'the flash is at Obj0E frame 288, which counts the run before the fade');
+  assert.equal(r.intro, r.flash + 40, 'the text waits for the flash to fade');
+  assert.equal(r.darkBefore, '0,0,0', 'the background is black before the flash');
+  assert.equal(r.white, '252,252,252', 'and white on it');
+  assert.ok(r.masked > 0, 'Sonic is masked while he rises');
+  assert.deepEqual(r.clip, [112, 176], 'on lines 112-175');
 });
 
 // GHZ's still is the level faded in, built offline; it must meet the first frame
@@ -174,8 +198,10 @@ test('the S3 opening settles onto the static scene, wink aside', async () => {
 test('every glyph in the table renders, in every style', async () => {
   // the title card: 22 letters decoded from the zone names, J Q W X derived, and
   // & with eight punctuation marks and the ten digits drawn; the Sonic 1 credits:
-  // 23 letters and the 2 decoded, the rest derived
-  for(const [style, count] of [['outline', 68], ['plain', 68], ['card', 45], ['credits', 44], ['card1', 44], ['logo', 43]]){
+  // 23 letters and the 2 decoded, the rest derived; the Sonic 2 credits: 26 letters,
+  // 1 2 9 and five marks decoded, the rest drawn
+  for(const [style, count] of [['outline', 68], ['plain', 68], ['card', 45], ['credits', 44], ['card1', 44], ['logo', 43],
+                               ['credits2', 46]]){
     await setup(page, {style, text: 'X'});
     const r = await page.evaluate(async style => {
       const ta = document.getElementById('text');
@@ -271,7 +297,7 @@ test('the S1 logo takes the emblem\'s place, and its shadows lean to the centre'
 // the export, so it needs the same two invariants the scenes have.
 for(const opts of [{scene: 'aiz', intro: 'on'}, {scene: 'off', intro: 'off'}, {scene: 's1', intro: 'on', style: 'card1'},
                    {scene: 'ghz', intro: 'on', style: 'card1'}, {scene: 's1', intro: 'on', style: 'logo'},
-                   {scene: 'off', intro: 'off', style: 'logo'}]){
+                   {scene: 'off', intro: 'off', style: 'logo'}, {scene: 's2', intro: 'on', style: 'credits2'}]){
   test(`title-card text, ${opts.scene}: preview matches export, sub-rects composite cleanly`, async () => {
     await setup(page, {mode: 'anim', style: 'card', text: 'ANGEL ISLAND\nZONE', ...opts});
     const p = await previewMatchesExport(page);
