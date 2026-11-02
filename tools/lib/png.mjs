@@ -1,4 +1,5 @@
 import zlib from 'zlib';
+import {deflateSync} from './deflate.mjs';
 export function decodePng(buf){
   let p = 8, w=0, h=0, depth=0, ctype=0, plte=null, trns=null;
   const idat = [];
@@ -51,6 +52,7 @@ export function encodeIndexedPng(idx, w, h, palette, transparentIndex){
     const trns = Buffer.alloc(transparentIndex+1, 255); trns[transparentIndex] = 0;
     parts.push(chunk('tRNS',trns));
   }
-  parts.push(chunk('IDAT', zlib.deflateSync(raw,{level:9})), chunk('IEND', Buffer.alloc(0)));
+  // our own deflate, not node:zlib's: see deflate.mjs
+  parts.push(chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0)));
   return Buffer.concat(parts);
 }
