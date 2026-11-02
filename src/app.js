@@ -8,7 +8,7 @@ const SPACE_W = 8;
 // look is authentic, but it reads as overlap. 0 lets the outlines touch while
 // each glyph and line stays its own; -3 or so reproduces the ROM spacing.
 const DEFAULTS = { outline:{track:0, lead:0}, plain:{track:2, lead:4}, card:{track:0, lead:4},
-                   credits:{track:0, lead:4} };
+                   credits:{track:0, lead:4}, card1:{track:0, lead:4} };
 
 /* The title-card lettering (tools/build-card-font.mjs) is a third style with its
    own atlas. Its letters already carry their spacing -- each glyph's dark bar
@@ -19,8 +19,15 @@ FONT.card = CARD_FONT;
 FONT.credits = CRED_FONT;
 const credAtlas = new Image();
 let CRED_IDX = null, CRED_W = 0;
+/* The Sonic 1 title card: its letters, and the card it plays (ZONE, ACT, the oval). */
+FONT.card1 = S1CARD_FONT;
+const s1cardAtlas = new Image();
+let S1CARD_IDX = null, S1CARD_W = 0;
+const s1cardParts = {};
+const isCard = () => state.style === 'card' || state.style === 'card1';
 /* Faces that keep the game's colours: their own atlas and palette slots, no ramp. */
 const fixedFont = () => state.style === 'card' ? {img: cardAtlas, idx: CARD_IDX, w: CARD_W}
+                      : state.style === 'card1' ? {img: s1cardAtlas, idx: S1CARD_IDX, w: S1CARD_W}
                       : state.style === 'credits' ? {img: credAtlas, idx: CRED_IDX, w: CRED_W} : null;
 const cardAtlas = new Image();
 let CARD_IDX = null, CARD_W = 0;
@@ -60,7 +67,7 @@ function layout(){
   const lines = raw.split('\n').slice(0,12).map(src=>{
     const items=[]; let x=0;
     for(const ch of src){
-      if(ch===' '){ x += SPACE_W + state.track; continue; }
+      if(ch===' '){ x += (font.space || SPACE_W) + state.track; continue; }
       const g = G[ch];
       if(!g){ if(ch.trim()) skipped.add(ch); continue; }
       items.push({g,x});
@@ -130,12 +137,13 @@ function paint(target, scale, L, dy, G, scroll, frame){
   } else if(state.bg !== 'none'){
     c.fillStyle = state.bg; c.fillRect(0,0,W,H);
   }
-  if(state.style === 'card'){
-    // the title card: banner, act, ZONE and the name, wherever this frame has them
+  if(isCard()){
+    // the title card: every part, wherever this frame has it
+    const atlasImg = fixedFont().img;
     for(const it of cardItems(cardPose(dy), L)){
       if(it.part) c.drawImage(it.part.img, it.x*scale, it.y*scale, it.part.w*scale, it.part.h*scale);
       else { const g = it.glyph;
-        c.drawImage(cardAtlas, g[0], g[1], g[2], g[3], it.x*scale, it.y*scale, g[2]*scale, g[3]*scale); }
+        c.drawImage(atlasImg, g[0], g[1], g[2], g[3], it.x*scale, it.y*scale, g[2]*scale, g[3]*scale); }
     }
     return {W,H};
   }
@@ -157,7 +165,7 @@ function paint(target, scale, L, dy, G, scroll, frame){
 
 function geom(L){
   if(sceneOn()) return { head: 0, w0: BG_W, h0: BG_H, scene: true };
-  if(state.style === 'card') return { head: 0, w0: BG_W, h0: BG_H, scene: false };   // a screen-sized card
+  if(isCard()) return { head: 0, w0: BG_W, h0: BG_H, scene: false };   // a screen-sized card
   const head = headroom();
   return { head, w0: L.w + state.pad*2, h0: L.h + state.pad*2 + head };
 }
@@ -175,7 +183,7 @@ const player = { playing:false, frame:0, raf:0, acc:0, last:0 };
 // spring's length parked the preview mid-bounce and, because play() rewinds only
 // from rest, left Play resuming past the intro so the opening never showed.
 // The title card rests mid-timeline, at its hold: it leaves the screen at the end.
-const restFrame = () => state.style === 'card'
+const restFrame = () => isCard()
   ? cardTimeline().rest + (introOn() ? introLen() : 0)
   : Math.max(0, textFrames().length - 1 + (introOn() ? introLen() : 0) + introTail());
 function showRest(){ player.frame = restFrame(); }
@@ -349,7 +357,7 @@ function motion(){
    offsets, or for the title card an index into its distinct poses. Everything
    that walks the timeline -- playback, the scrubber, every export -- goes through
    here, and hands the entry to paint() as its dy. */
-function textFrames(){ return state.style === 'card' ? cardTimeline().frames : motion().frames; }
+function textFrames(){ return isCard() ? cardTimeline().frames : motion().frames; }
 
 /* ---------- the title card ------------------------------------------------
    Obj_TitleCard and its elements, stepped the way the ROM steps them. Each
@@ -362,6 +370,7 @@ function textFrames(){ return state.style === 'card' ? cardTimeline().frames : m
    exists, which is what the intro frames show. */
 const cardCache = {key: '', t: null};
 function cardTimeline(){
+  if(state.style === 'card1') return card1Timeline();
   const L = layout();
   const key = [state.cardZone, state.cardAct, L.w, L.h, L.lines.length, state.lead].join('|');
   if(cardCache.key === key) return cardCache.t;
@@ -415,10 +424,11 @@ function cardBox(k, pos, L){
 /* Everything the card draws for a pose, back to front. The elements share a
    priority, so slot order decides: name over ZONE over act over banner. */
 function cardItems(pose, L){
+  if(state.style === 'card1') return card1Items(pose, L);
   const C = CARD_FONT.card, P = CARD_FONT.parts, out = [];
   const part = (name, x, y) => out.push({part: cardParts[name], x: x + P[name].ox, y: y + P[name].oy});
   if(pose.banner !== undefined) part('banner-' + state.cardBanner, C.banner.x, pose.banner);
-  if(pose.act !== undefined) part('act' + state.cardAct, pose.act, C.act.y);
+  if(pose.act !== undefined) part('act' + Math.min(state.cardAct, 2), pose.act, C.act.y);
   if(pose.zone !== undefined) part('zone', pose.zone, C.zone.y);
   if(pose.name !== undefined){
     const top = C.name.y - (L.lines.length - 1) * (L.rowh + state.lead);
@@ -429,6 +439,75 @@ function cardItems(pose, L){
   }
   return out;
 }
+/* ---------- the Sonic 1 title card ----------------------------------------
+   Object $34, by Card_ItemData and Card_ConData. The name slides in from the
+   left to x 160 and ZONE follows it from further left; the act number and the
+   blue oval come from the right -- all at $10 a frame. Where ZONE and the act
+   rest depends on the name: across every zone, ZONE sits at 160 + half the
+   name's width - 48 and the act 24 further on, so a name of any length lands
+   where the game would put it. Once the act is in, the level loads and fades
+   in under the still card (26 frames), Card_Wait holds 60 more, and all four
+   head back the way they came at $20 a frame, each drawn only while its origin
+   is within VDP x 0-$1FF. */
+const card1Cache = {key: '', t: null};
+function card1Timeline(){
+  const L = layout();
+  const key = [state.cardZone, state.cardAct, L.w, L.h, L.lines.length, state.lead].join('|');
+  if(card1Cache.key === key) return card1Cache.t;
+  const C = S1CARD_FONT.card;
+  const zoneTo = C.name.to + Math.round(L.w / 2) + C.zone.rel, actTo = C.name.to + Math.round(L.w / 2) + C.act.rel;
+  const els = [
+    {k: 'name', from: C.name.from, to: C.name.to},
+    {k: 'zone', from: zoneTo + C.zone.start, to: zoneTo, on: state.cardZone},
+    {k: 'act',  from: actTo + C.act.start,  to: actTo,  on: state.cardAct > 0},
+    {k: 'oval', from: actTo + C.oval.start, to: actTo},
+  ].filter(x => x.on !== false).map(x => ({...x, pos: x.from, alive: true, shown: true}));
+  const poses = [], ids = new Map(), frames = [];
+  const seen = x => x.pos >= C.minX && x.pos < C.maxX;
+  const record = none => {
+    const p = {}; if(!none) for(const x of els) if(x.alive && seen(x)) p[x.k] = x.pos;
+    const k = JSON.stringify(p);
+    if(!ids.has(k)){ ids.set(k, poses.length); poses.push(p); }
+    frames.push(ids.get(k));
+  };
+  const step = (x, to, v) => { x.pos = x.pos < to ? Math.min(to, x.pos + v) : Math.max(to, x.pos - v); };
+  record(true);                                      // before the card exists
+  const last = els.find(x => x.k === 'act') || els.reduce((a, b) => Math.abs(b.from - b.to) > Math.abs(a.from - a.to) ? b : a);
+  for(let g = 0; last.pos !== last.to && g < 200; g++){ for(const x of els) step(x, x.to, C.speedIn); record(); }
+  for(const x of els) x.pos = x.to;
+  const rest = frames.length - 1;
+  for(let i = 0; i < C.frozen + C.wait + 1; i++) record();
+  for(let g = 0; els.some(x => x.alive) && g < 200; g++){
+    for(const x of els){
+      if(!x.alive) continue;
+      if(!x.shown || x.pos === x.from){ x.alive = false; continue; }
+      step(x, x.from, C.speedOut);
+      x.shown = seen(x);
+    }
+    record();
+  }
+  card1Cache.key = key;
+  return card1Cache.t = {frames, poses, rest};
+}
+/* Back to front: the oval, the act, ZONE, then the name -- the order they leave
+   the sprite list in reverse. The name is centred on its origin; extra lines
+   stack above it. */
+function card1Items(pose, L){
+  const C = S1CARD_FONT.card, P = S1CARD_FONT.parts, out = [];
+  const part = (name, x, y) => out.push({part: s1cardParts[name], x: x + P[name].ox, y: y + P[name].oy});
+  if(pose.oval !== undefined) part('oval', pose.oval, C.oval.y);
+  if(pose.act !== undefined) part('act' + state.cardAct, pose.act, C.act.y);
+  if(pose.zone !== undefined) part('zone', pose.zone, C.zone.y);
+  if(pose.name !== undefined){
+    const top = C.name.y - 8 - (L.lines.length - 1) * (L.rowh + state.lead);
+    L.lines.forEach((line, i) => {
+      const x0 = pose.name - Math.round(line.w / 2), y = top + i * (L.rowh + state.lead);
+      for(const {g, x} of line.items) out.push({glyph: g, x: x0 + x, y: y + g[4]});
+    });
+  }
+  return out;
+}
+
 /* The pose a frame shows: animated, the timeline entry; still, the hold. */
 const cardPose = (dy, G) => { const t = cardTimeline(); return t.poses[state.mode === 'anim' ? dy : t.frames[t.rest]] || {}; };
 
@@ -627,7 +706,7 @@ function buildIndexed(){
    carry the rectangle the block actually occupies -- the rest is cleared for
    us. Vertical travel makes that a large saving. */
 function frameRect(L, scale, dy, G, W, H){
-  if(state.style === 'card'){
+  if(isCard()){
     let r = null;
     for(const it of cardItems(cardPose(dy), L)){
       const w = it.part ? it.part.w : it.glyph[2], h = it.part ? it.part.h : it.glyph[3];
@@ -982,6 +1061,55 @@ const INTROS = {
     },
   },
 
+  /* Green Hill Zone act 1 at its start position: Sonic standing, the clouds
+     creeping, the waterfalls cycling. With the Sonic 1 title card it opens the
+     way the level does -- black while the card slides in, then once the act is
+     in the level loads, four frames pass, and lines 1-3 fade in under the still
+     card while line 0 (Sonic, and the card) stays lit; then the level runs as the
+     card holds and leaves. With any other style it simply fades in first. */
+  ghz: {
+    indexed: true,
+    build(spec, index, gidx){
+      const seen = new Map();
+      PALETTE.forEach((c, i) => { if(i > FONT_SLOTS) seen.set((c[0]<<16)|(c[1]<<8)|c[2], i); });
+      const luts = spec.pals.map(hex => Uint16Array.from({length: 64}, (_, i) => {
+        const w = parseInt(hex.slice(i*3, i*3+3), 16);
+        const c = [((w >> 1) & 7)*36, ((w >> 5) & 7)*36, ((w >> 9) & 7)*36], k = (c[0]<<16)|(c[1]<<8)|c[2];
+        if(!seen.has(k)){ seen.set(k, PALETTE.length); PALETTE.push(c); }
+        return seen.get(k);
+      }));
+      return {back: gidx(spec.back.img), fg: gidx(spec.fg.img), fgHi: gidx(spec.fgHi.img),
+              sonic: gidx(spec.sonicImg.img), luts};
+    },
+    len(s){ return state.style === 'card1' ? 0 : s.fadeFrames; },
+    /* Frames since the level appeared, and how many of them were the fade. */
+    phase(t){
+      const s = sceneIntro();
+      if(state.style !== 'card1') return {m: t, fade: s.fadeFrames, wait: 0};
+      return {m: t - (cardTimeline().rest + 1), fade: s.fadeFrames, wait: s.levelDelay};
+    },
+    palAt(t){
+      const {m, fade, wait} = this.phase(t);
+      if(m < 0) return 0;                                         // lines 1-3 still black
+      const main = m - wait - fade;
+      if(main < 0) return Math.max(0, Math.min(fade - 1, m - wait));
+      return fade + (Math.floor(main / 6) & 3);
+    },
+    draws(t){
+      const s = sceneIntro(), L = introLayers.ghz, p = this.palAt(t), lut = L.luts[p];
+      const {m, fade, wait} = this.phase(t);
+      const d = [{key:'backdrop', fill:lut[32], x:0, y:0, tag:p, plane:true}];
+      if(m < 0) return d;                                         // the screen is cleared until the level loads
+      const n = Math.max(0, m - wait - fade) + 2, cU = n, cM = Math.floor(0.75 * n), cL = n >> 1;
+      const rows = Array.from({length: BG_H}, (_, y) => y < 24 ? cU : y < 40 ? cM : y < 56 ? cL : 0);
+      d.push({key:'bg', lay:L.back, x:0, y:0, rows, wrapAll:true, lut, tag:p + ':' + n, plane:true},
+             {key:'fg', lay:L.fg, x:0, y:0, lut, tag:p, plane:true},
+             {key:'sonic', lay:L.sonic, x:s.sonic.x, y:s.sonic.y, lut, tag:p},
+             {key:'fgHi', lay:L.fgHi, x:0, y:0, lut, tag:p, plane:true});
+      return d;
+    },
+  },
+
   /* AIZ1's intro, played back from the timeline tools/build-aiz-assets.mjs
      computed by stepping the level's objects. Its layers hold palette indices,
      not colours -- the palette moves the whole time -- so each frame is
@@ -1181,12 +1309,13 @@ function paintIndexed(rect, scale, L, dy, G, bgIdx, scroll, banks, frame){
       }
     }
   };
-  if(state.style === 'card'){
+  if(isCard()){
     // the title card keeps the game's colours: its own indices, no ramp bank
+    const fx = fixedFont();
     for(const it of cardItems(cardPose(dy), L)){
       const dx0 = it.x*scale - rect.x, dy0 = it.y*scale - rect.y;
       if(it.part) blit(it.part.idx, it.part.w, 0, 0, it.part.w, it.part.h, dx0, dy0, 0);
-      else { const [sx, sy, sw, sh] = it.glyph; blit(CARD_IDX, CARD_W, sx, sy, sw, sh, dx0, dy0, 0); }
+      else { const [sx, sy, sw, sh] = it.glyph; blit(fx.idx, fx.w, sx, sy, sw, sh, dx0, dy0, 0); }
     }
     return buf;
   }
@@ -1402,7 +1531,7 @@ function exportCanvas(){
   const L = layout();
   // force zero headroom so still output is unaffected by animation settings;
   // a scene or the title card is the whole Genesis frame either way
-  const G = sceneOn() || state.style === 'card' ? geom(L)
+  const G = sceneOn() || isCard() ? geom(L)
                         : {head:0, w0:L.w + state.pad*2, h0:L.h + state.pad*2};
   const scale = clampScale(G.w0, G.h0, state.scale, STILL_BUDGET);
   paint(off, scale, L, 0, G, scrollAt(1e9));
@@ -1773,8 +1902,12 @@ el('style').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.style = b.dataset.style;
   [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
-  document.body.classList.toggle('card', state.style === 'card');
+  document.body.classList.toggle('card', isCard());
+  document.body.classList.toggle('card3k', state.style === 'card');
+  document.body.classList.toggle('card1', state.style === 'card1');
   document.body.classList.toggle('fixed', !!fixedFont());
+  // S3&K's card has no act 3
+  if(state.style === 'card' && state.cardAct > 2) el('cardAct').querySelector('button[data-act="1"]').click();
   if(!player.playing) showRest();
   const d = DEFAULTS[state.style];
   if(!state.touchedTrack){ state.track = d.track; el('track').value = d.track; el('trackVal').textContent = d.track; }
@@ -2088,6 +2221,17 @@ atlas.onload = ()=>{
   credAtlas.onload = ()=>{ const r = indexCardImage(credAtlas); CRED_IDX = r.idx; CRED_W = r.w; done(); };
   credAtlas.onerror = ()=>{ el('style').querySelector('button[data-style="credits"]').disabled = true; done(); };
   credAtlas.src = CRED_SRC;
+  pending++;
+  s1cardAtlas.onload = ()=>{ const r = indexCardImage(s1cardAtlas); S1CARD_IDX = r.idx; S1CARD_W = r.w; done(); };
+  s1cardAtlas.onerror = ()=>{ el('style').querySelector('button[data-style="card1"]').disabled = true; done(); };
+  s1cardAtlas.src = S1CARD_SRC;
+  for(const [name, part] of Object.entries(S1CARD_FONT.parts)){
+    pending++;
+    const im = new Image();
+    im.onload = ()=>{ s1cardParts[name] = indexCardImage(im); done(); };
+    im.onerror = done;
+    im.src = part.src;
+  }
   for(const [name, part] of Object.entries(CARD_FONT.parts)){
     pending++;
     const im = new Image();

@@ -116,8 +116,14 @@ pal, pri`) rather than bytes; `lib/sprite.mjs` reads them into the same piece la
 S3K ones, so one renderer draws both.
 
 The credits face comes straight off `Map_Cred`, whose pieces are commented with their
-characters, and the missing glyphs are derived and bevelled at the bottom of the file
-(`cred-atlas.png`, `cred-table.json`).
+characters, and the missing glyphs are derived and bevelled (`cred-atlas.png`,
+`cred-table.json`). The Sonic 1 title card is read off `Map_Card` the same way, with the
+unused K, U and full stop taken from the art by tile, its missing glyphs derived and
+re-shadowed, and ZONE, ACT 1-3 and the oval rendered as parts (`s1card-*`); its table also
+carries the card's positions and speeds from `Card_ItemData` / `Card_ConData`. Last, the GHZ
+scene: GHZ1's foreground at the start camera (0, `$300`), split by priority, over both halves
+of the GHZ art; Sonic's standing frame; and the level palette's fade and water cycle
+(`ghz-*`).
 
 ## What build-font does
 

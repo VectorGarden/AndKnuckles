@@ -108,6 +108,30 @@ if(has('s1-meta.json')){
     html = html.slice(0, s3.index) + next + '\n' + html.slice(s3.index);
   }
 }
+if(has('ghz-meta.json')){
+  const m = JSON.parse(fs.readFileSync(OUT + 'ghz-meta.json', 'utf8'));
+  const spec = {...m, back: {src: b64('s1-bg.png')}, fg: {src: b64('ghz-fg.png')},
+                fgHi: {src: b64('ghz-fg-hi.png')}, sonicImg: {src: b64('ghz-sonic.png')}};
+  const cur = html.match(/^  ghz: \{ label:"GHZ".*$/m);
+  const y = cur ? cur[0].match(/y:\d+, /)[0] : 'y:112, ';
+  const next = `  ghz: { label:"GHZ", ${y}vscroll:0, intro:${JSON.stringify(spec)}, src:"${b64('ghz-still.png')}" },`;
+  if(cur) html = html.slice(0, cur.index) + next + html.slice(cur.index + cur[0].length);
+  else {
+    const s1 = html.match(/^  s1: \{ label:"S1 title".*$/m);
+    html = html.slice(0, s1.index + s1[0].length) + '\n' + next + html.slice(s1.index + s1[0].length);
+  }
+}
+if(has('s1card-atlas.png') && has('s1card-table.json')){
+  const t = JSON.parse(fs.readFileSync(OUT + 's1card-table.json', 'utf8'));
+  for(const [name, part] of Object.entries(t.parts)) part.src = b64(`s1card-${name}.png`);
+  const lines = `const S1CARD_FONT = ${JSON.stringify(t)};\nconst S1CARD_SRC = "${b64('s1card-atlas.png')}";`;
+  const cur = html.match(/^const S1CARD_FONT = .*;\nconst S1CARD_SRC = "[^"]*";$/m);
+  if(cur) html = html.slice(0, cur.index) + lines + html.slice(cur.index + cur[0].length);
+  else {
+    const a = html.match(/^const CARD_SRC = "[^"]*";$/m);
+    html = html.slice(0, a.index + a[0].length) + '\n' + lines + html.slice(a.index + a[0].length);
+  }
+}
 if(has('cred-atlas.png') && has('cred-table.json')){
   const lines = `const CRED_FONT = ${fs.readFileSync(OUT + 'cred-table.json', 'utf8').trim()};\nconst CRED_SRC = "${b64('cred-atlas.png')}";`;
   const cur = html.match(/^const CRED_FONT = .*;\nconst CRED_SRC = "[^"]*";$/m);

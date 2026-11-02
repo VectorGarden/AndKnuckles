@@ -191,6 +191,17 @@ test('each banner is its own art, and the choice changes only the banner', async
   assert.equal(new Set(Object.values(r)).size, 3, 'the three banners should draw three different cards');
 });
 
+test('act 3 and the banner choice belong to one card each', async () => {
+  await setup(page, {style: 'card1'});
+  assert.equal(await shown(page, '#cardAct button[data-act="3"]'), true, 'Sonic 1 zones have a third act');
+  assert.equal(await shown(page, '#cardBanner'), false, 'the banner is S3&K\'s');
+  await page.evaluate(() => document.querySelector('#cardAct button[data-act="3"]').click());
+  await setup(page, {style: 'card'});
+  assert.equal(await shown(page, '#cardAct button[data-act="3"]'), false);
+  assert.equal(await shown(page, '#cardBanner'), true);
+  assert.equal(await page.evaluate(() => state.cardAct), 1, 'S3&K has no act 3, so it falls back to 1');
+});
+
 test('the title card swaps the spring controls for its own', async () => {
   await setup(page, {mode: 'anim', style: 'outline'});
   assert.equal(await shown(page, '#cardCtl'), false, 'card options without the card style');

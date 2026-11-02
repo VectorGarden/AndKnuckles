@@ -280,3 +280,196 @@ const credPal = words(rd('S1_Pal_Sonic.bin')).slice(0, 16).map(rgb);
 fs.writeFileSync(OUT + 'cred-atlas.png', encodeIndexedPng(catlas, CW, 16, credPal, 0));
 fs.writeFileSync(OUT + 'cred-table.json', JSON.stringify(ctable));
 console.log(`cred-atlas.png   ${CW}x16  ${corder.length} glyphs (${corder.filter(c => cglyphs[c].from === 'derived').join('')} derived)`);
+
+// ---- the Sonic 1 title card ----------------------------------------------------------------
+// Object $34 over Nem_TitleCard, palette line 0 (Sonic's), high priority. Its letters are
+// read off Map_Card's commented pieces like the credits: 16px apart, I 8 wide, a 16px gap
+// between words. The art also holds a K, a U and a full stop no card ever spells; they are
+// the game's, so they are used.
+const cardArt = nemDecode(rd('S1_TitleCards.nem'));
+const cardMapText = rd('S1_TitleCards_map.asm').toString();
+const cardFrames = parseS1MapFrames(cardMapText);
+const kfound = {};
+for(const m of cardMapText.matchAll(/spritePiece\s+([^;\n]+);\s*([A-Z])\s*$/gm)){
+  const f = m[1].split(',').map(s => s.trim());
+  (kfound[m[2]] ??= new Set()).add([f[2], f[3], f[4]].join(','));
+}
+Object.assign(kfound, {K: new Set(['2,2,$22']), U: new Set(['2,2,$46']), '.': new Set(['1,1,$52'])});
+const kglyphs = {};
+for(const [ch, keys] of Object.entries(kfound)){
+  if(keys.size > 1) throw new Error(`title card ${ch} has ${keys.size} tile sets`);
+  const [w, h, t] = [...keys][0].split(',').map(v => v.startsWith('$') ? parseInt(v.slice(1), 16) : +v);
+  let r = renderFrame([[0, ((w-1) << 2) | (h-1), t >> 8, t & 0xFF, 0, 0]], cardArt);
+  if(ch === '.'){                                              // a 1x1 piece: sit it on the baseline
+    const px = new Uint8Array(8*16); px.set(r.px.subarray(0, 64), 8*8); r = {w: 8, px};
+  }
+  kglyphs[ch] = {w: r.w, px: Array.from(r.px, v => v & 15), from: 'title card'};
+}
+console.log(`  S1 card: ${Object.keys(kglyphs).sort().join('')} decoded`);
+
+// White face (6) anti-aliased with greys (7, 8), and a black shadow (1) cast down and to the
+// right: the shadow is wherever the face is one pixel up or one left. That lands on 86% of
+// the real letters' shadow pixels -- the artist rounded some by hand -- which is close enough
+// to re-shadow a derived glyph, after its old shadow is taken off.
+const FACE = v => v === 6 || v === 7 || v === 8;
+const faceOf = g => ({w: g.w, px: g.px.map(v => FACE(v) ? v : 0)});
+const shadow = g => ({w: g.w, px: g.px.map((v, i) => {
+  if(v) return v;
+  const x = i % g.w, y = (i / g.w) | 0;
+  return (x > 0 && FACE(g.px[i - 1])) || (y > 0 && FACE(g.px[i - g.w])) ? 1 : 0;
+})});
+const vflip = g => ({w: g.w, px: Array.from({length: 16}, (_, y) => g.px.slice((15 - y)*g.w, (16 - y)*g.w)).flat()});
+const rowsOf = g => Array.from({length: 16}, (_, y) => g.px.slice(y*g.w, (y + 1)*g.w));
+const fromRows = rows => ({w: rows[0].length, px: rows.flat()});
+// faces drawn with the title-card primitives' sampling, cut into the face and its two greys
+function face(w, ...parts){
+  const px = new Array(w*16).fill(0);
+  for(let y = 0; y < 16; y++) for(let x = 0; x < w; x++){
+    let c = 0;
+    for(let sy = 0; sy < 8; sy++) for(let sx = 0; sx < 8; sx++)
+      if(parts.some(f => f(x + (sx + 0.5)/8, y + (sy + 0.5)/8))) c += 1/64;
+    px[y*w + x] = c >= 0.75 ? 6 : c >= 0.45 ? 7 : c >= 0.2 ? 8 : 0;
+  }
+  return {w, px};
+}
+const kseg = (x0, y0, x1, y1, hw = 1.1) => (X, Y) => {
+  const dx = x1 - x0, dy = y1 - y0, t = Math.max(0, Math.min(1, ((X-x0)*dx + (Y-y0)*dy) / (dx*dx + dy*dy)));
+  return Math.hypot(X - (x0 + t*dx), Y - (y0 + t*dy)) <= hw;
+};
+const karc = (cx, cy, rx, ry, a0, a1, hw = 1.1) => (X, Y) => {
+  const nx = (X - cx)/rx, ny = (Y - cy)/ry, t = Math.atan2(ny, nx);
+  let deg = t * 180 / Math.PI; if(deg < 0) deg += 360;
+  if(a0 <= a1 ? deg < a0 || deg > a1 : deg < a0 && deg > a1) return false;
+  return Math.abs(Math.hypot(nx, ny) - 1) * Math.hypot(rx*Math.cos(t), ry*Math.sin(t)) <= hw;
+};
+const kbox = (x0, y0, x1, y1) => (X, Y) => X >= x0 && X < x1 && Y >= y0 && Y < y1;
+const overlay = (a, b) => ({w: a.w, px: a.px.map((v, i) => Math.max(v ? 9 - v : 0, b.px[i] ? 9 - b.px[i] : 0)).map(r => r ? 9 - r : 0)});
+{
+  const A = rowsOf(faceOf(kglyphs.A)), bar = A.findIndex(r => r.filter(v => v).length >= 9);
+  const V = vflip(fromRows(A.map((r, y) => y === bar ? r.map((v, x) => (x > 2 && x < 10) ? 0 : v) : r)));
+  const Y = rowsOf(faceOf(kglyphs.Y)).slice(0, 8);
+  const U = rowsOf(faceOf(kglyphs.U));
+  const kd = {
+    V: shadow(V),                                                    // A turned over, its bar taken out
+    W: shadow(vflip(faceOf(kglyphs.M))),                             // M turned over
+    X: shadow(fromRows([...Y, ...Y.slice().reverse()])),             // Y's open top, and again below
+    J: shadow(fromRows(U.map((r, y) => y < 11 ? r.map((v, x) => x < 5 ? 0 : v) : r))),   // U, left stem cut
+    Q: shadow(overlay(faceOf(kglyphs.O), face(16, kseg(9.5, 11.5, 14.5, 15.5)))),        // O and a tail
+    0: kglyphs.O,
+    1: shadow(face(10, kbox(4, 0, 7, 15), kseg(1.5, 3.5, 5, 0.8), kbox(2, 14, 9, 15))),
+    2: shadow(face(14, karc(6.5, 4.2, 4.5, 3.8, 180, 50), kseg(10, 6.8, 2, 14.2), kbox(1.5, 13.5, 12, 15))),
+    3: shadow(face(14, karc(6.4, 3.8, 4.4, 3.2, 200, 90), karc(6.6, 10.6, 5.0, 4.0, 270, 160))),
+    4: shadow(face(14, kbox(8.5, 0, 11.5, 15), kseg(9.5, 0.8, 1.8, 10.2), kbox(1, 9.6, 13, 11.4))),
+    5: shadow(face(14, kbox(2, 0, 11.5, 2), kbox(2, 0, 4.5, 6.6), karc(6.4, 10.2, 5.2, 4.4, 230, 150))),
+    6: shadow(face(14, karc(6.6, 10.6, 4.8, 4.0, 0, 360), karc(10.4, 10.6, 8.6, 9.8, 180, 270))),
+    7: shadow(face(14, kbox(1.5, 0, 12.5, 2), kseg(11.6, 1.5, 5, 15))),
+    8: shadow(face(14, karc(6.6, 3.6, 3.8, 3.0, 0, 360), karc(6.6, 10.6, 5.0, 4.0, 0, 360))),
+    '!': shadow(face(6, kbox(2, 0, 4.5, 10.5), kbox(2, 13, 4.5, 15))),
+    '?': shadow(face(13, karc(6, 4, 4.4, 3.6, 180, 100), kbox(5, 7.5, 7.5, 10.5), kbox(5, 13, 7.5, 15))),
+    "'": shadow(face(6, kbox(2, 0, 4.5, 5))),
+    ',': shadow(face(6, kbox(2, 12, 4.5, 14.5), kseg(4, 14, 2.4, 15.8, 0.9))),
+    '-': shadow(face(10, kbox(1, 7, 8, 9))),
+    ':': shadow(face(6, kbox(2, 4, 4.5, 6.5), kbox(2, 12.5, 4.5, 15))),
+    '&': shadow(face(15, karc(6, 3.6, 3.2, 3.0, 0, 360), kseg(7.6, 6.2, 13.5, 15), karc(6, 10.8, 4.4, 4.0, 330, 215),
+                     kseg(4, 6.4, 2.4, 8.4), kseg(11, 9, 13.6, 7.4))),
+  };
+  kd[9] = {w: kd[6].w, px: kd[6].px.slice().reverse()};             // 6 turned round
+  kd[9] = shadow(faceOf({w: kd[9].w, px: kd[9].px.map(v => v === 1 ? 0 : v)}));
+  for(const [c, g] of Object.entries(kd)) if(!kglyphs[c]) kglyphs[c] = {...g, from: 'derived'};
+}
+const korder = Object.keys(kglyphs).sort();
+const KW = korder.reduce((a, c) => a + kglyphs[c].w + 2, 0), katlas = new Uint8Array(KW * 16);
+const ktable = {rowh: 16, space: 16, glyphs: {}, parts: {}};
+let kx = 0;
+for(const c of korder){
+  const g = kglyphs[c];
+  for(let y = 0; y < 16; y++) for(let x = 0; x < g.w; x++) katlas[y*KW + kx + x] = g.px[y*g.w + x];
+  ktable.glyphs[c] = [kx, 0, g.w, 16, 0];
+  kx += g.w + 2;
+}
+const sonicPal = words(rd('S1_Pal_Sonic.bin')).slice(0, 16).map(rgb);
+fs.writeFileSync(OUT + 's1card-atlas.png', encodeIndexedPng(katlas, KW, 16, sonicPal, 0));
+// ZONE (frame 6), ACT 1-3 (7-9), the blue oval ($A), each with its offset from its origin
+for(const [name, f] of [['zone', 6], ['act1', 7], ['act2', 8], ['act3', 9], ['oval', 10]]){
+  const r = renderFrame(cardFrames[f], cardArt);
+  for(let i = 0; i < r.px.length; i++) r.px[i] &= 15;
+  fs.writeFileSync(OUT + `s1card-${name}.png`, encodeIndexedPng(r.px, r.w, r.h, sonicPal, 0));
+  ktable.parts[name] = {ox: r.ox, oy: r.oy, w: r.w, h: r.h};
+}
+// Card_ItemData and Card_ConData, in screen coordinates. Names are centred on their origin,
+// which slides in from the left to x 160; across every zone ZONE rests at 160 + half the
+// name's width - 48, ACT and the oval 24 further right. ZONE starts $240 left of its rest,
+// ACT $2C0 right, the oval $C0 right. In at $10 a frame; once the act lands the level loads
+// and fades in under the static card (4 + 22 frames), Card_Wait holds 60 more, then all four
+// head back at $20 a frame. Each is drawn only while its origin is within VDP x 0-$1FF.
+ktable.card = {
+  name: {y: 0xD0 - 0x80, from: -0x80, to: 0x120 - 0x80},
+  zone: {y: 0xE4 - 0x80, rel: -48, start: -0x240},
+  act:  {y: 0xEA - 0x80, rel: -24, start: 0x2C0},
+  oval: {y: 0xE0 - 0x80, rel: -24, start: 0xC0},
+  speedIn: 0x10, speedOut: 0x20, frozen: 4 + 22, wait: 60, minX: -0x80, maxX: 0x200 - 0x80,
+};
+fs.writeFileSync(OUT + 's1card-table.json', JSON.stringify(ktable));
+console.log(`s1card-atlas.png ${KW}x16  ${korder.length} glyphs (${korder.filter(c => kglyphs[c].from === 'derived').join('')} derived)`);
+
+// ---- Green Hill Zone, act 1, as it opens ---------------------------------------------------
+// Where the Sonic 1 title card lands: GHZ1 at its start position. LevelSizeLoad puts the
+// camera at (0, $300) for Sonic's start at ($50, $3B0); the only object in that first screen
+// is Sonic -- the nearest rings start at x $144, just off the right edge. Plane B is the same
+// GHZ background the title draws (BG V-scroll comes out 8 here too), so s1-bg.png serves.
+{
+  const tiles2 = new Uint8Array((0x1CD + 369)*32);
+  tiles2.set(tiles, 0); tiles2.set(nemDecode(rd('S1_GHZ2.nem')), 0x1CD*32);   // Nem_GHZ_2nd at $1CD
+  const fgLay = rd('S1_GHZ1_FG.bin'), fw = fgLay[0] + 1, fh = fgLay[1] + 1;
+  const CAM_X = 0, CAM_Y = 0x300;
+  const lo = new Uint8Array(W*H), hi = new Uint8Array(W*H);
+  for(let y = 0; y < H; y++) for(let x = 0; x < W; x++){
+    const X = x + CAM_X, Y = y + CAM_Y, row = Y >> 8, col = X >> 8;
+    if(row >= fh || col >= fw) continue;
+    const id = fgLay[2 + row*fw + col] & 0x7F; if(!id) continue;
+    const cw = chunks.readUInt16BE((id - 1)*0x200 + ((Y >> 4) & 15)*32 + ((X >> 4) & 15)*2);
+    let qx = (X >> 3) & 1, qy = (Y >> 3) & 1;
+    if(cw & 0x800) qx ^= 1; if(cw & 0x1000) qy ^= 1;
+    let w = blocks[(cw & 0x3FF)*4 + qy*2 + qx];
+    if(cw & 0x800) w ^= 0x800; if(cw & 0x1000) w ^= 0x1000;
+    const t = w & 0x7FF, sx = w & 0x800 ? 7 - (X & 7) : X & 7, sy = w & 0x1000 ? 7 - (Y & 7) : Y & 7;
+    const b = tiles2[t*32 + sy*4 + (sx >> 1)], c = sx & 1 ? b & 15 : b >> 4;
+    if(c) (w & 0x8000 ? hi : lo)[y*W + x] = ((w >> 13) & 3)*16 + c;
+  }
+  writeIdx('ghz-fg.png', lo, W, H);
+  writeIdx('ghz-fg-hi.png', hi, W, H);
+  // Sonic standing: MS_Stand, whose DPLC loads Sonic.unc tiles 0-16 in order, so the
+  // mapping's tiles index the art directly. Palette line 0. SonAni_Wait holds this frame
+  // for 288 frames, longer than anything here runs.
+  const stand = parseS1MapFrames(rd('S1_Sonic_map.asm').toString())[1];
+  const r = renderFrame(stand, rd('S1_Sonic.unc'));
+  writeIdx('ghz-sonic.png', r.px, r.w, r.h);
+  // Palette: Sonic's line 0, Pal_GHZ in lines 1-3. Lines 1-3 fade in by PalFadeIn_Alt --
+  // the same step as the title's, but line 0 stays lit -- then PalCycle_GHZ rotates line 2
+  // colours 8-11 every 6 frames.
+  const sonic = words(rd('S1_Pal_Sonic.bin')).slice(0, 16), ghz = words(rd('S1_Pal_GHZ.bin'));
+  const cyc = words(rd('S1_Pal_GHZCycle.bin'));
+  if(ghz.length !== 48 || cyc.length !== 16) throw new Error('unexpected GHZ palette sizes');
+  const full = [...sonic, ...ghz], gp = [];
+  let c = [...sonic, ...new Array(48).fill(0)];
+  for(let s = 0; s < 22; s++){
+    gp.push(hex(c));
+    c = c.map((v, i) => { if(i < 16) return v; const t = full[i];
+      return v === t ? v : v + 0x200 <= t ? v + 0x200 : v + 0x20 <= t ? v + 0x20 : v + 2; });
+  }
+  if(hex(c) !== hex(full)) throw new Error('the GHZ fade does not land on its palette');
+  for(let k = 0; k < 4; k++){ const p = full.slice(); for(let i = 0; i < 4; i++) p[32 + 8 + i] = cyc[k*4 + i]; gp.push(hex(p)); }
+  const gmeta = {pals: gp, fadeFrames: 22, sonic: {x: 0x50 - CAM_X + r.ox, y: 0x3B0 - CAM_Y + r.oy},
+                 // after the act lands: the level loads, 4 frames pass, then the 22-frame fade
+                 levelDelay: 4};
+  // the still: faded in, the first cycle step, Sonic standing
+  const out = new Uint8Array(W*H).fill(32);
+  for(let y = 0; y < H; y++){ const n = 2, s = y < 24 ? n : y < 40 ? Math.floor(0.75*n) : y < 56 ? n >> 1 : 0;
+    for(let x = 0; x < W; x++){ const v = bg[y*BG_W + ((x + s) & 511)]; if(v) out[y*W + x] = v; } }
+  for(let i = 0; i < W*H; i++) if(lo[i]) out[i] = lo[i];
+  for(let y = 0; y < r.h; y++) for(let x = 0; x < r.w; x++){ const v = r.px[y*r.w + x]; if(v) out[(gmeta.sonic.y + y)*W + gmeta.sonic.x + x] = v; }
+  for(let i = 0; i < W*H; i++) if(hi[i]) out[i] = hi[i];
+  fs.writeFileSync(OUT + 'ghz-still.png', encodeIndexedPng(out, W, H, hexToPal(gp[22]), -1));
+  fs.writeFileSync(OUT + 'ghz-meta.json', JSON.stringify(gmeta));
+  console.log(`ghz-still.png    320x224  ${fs.statSync(OUT + 'ghz-still.png').size}B`);
+}

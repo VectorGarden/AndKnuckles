@@ -101,10 +101,10 @@ says so, because the loop will visibly jump.
 
 ## The backgrounds
 
-Four of them — **S1 title**, **S3 title**, **S&K title** and **AIZ intro** — any of which swaps
-the transparent canvas for the real thing and locks output to the Genesis frame, 320&times;224.
-The S3 and S&K title screens are described here; Sonic 1 and the AIZ intro have their own
-sections below. Text sits where the ROM puts
+Five of them — **S1 title**, **GHZ**, **S3 title**, **S&K title** and **AIZ intro** — any of which
+swaps the transparent canvas for the real thing and locks output to the Genesis frame,
+320&times;224. The S3 and S&K title screens are described here; Sonic 1, Green Hill and the AIZ
+intro have their own sections below. Text sits where the ROM puts
 `& KNUCKLES` — screen y 176, from banner rest `$D4` plus the `$5C` subtitle offset,
 less the `$80` sprite-space origin — and the background scrolls up 16px across the
 first 16 frames, which is `V_scroll_value` in the original making room for the
@@ -227,6 +227,38 @@ mid blue, a shade darker at a pure corner, and three the outline. Run on the int
 the real L, T, H and E it lands within 8 pixels of each; the artist hand-shaded a few right
 edges, and the build checks the rule stays that close. Like the title card, it keeps the
 game's colours, so the palette controls hide while it is selected.
+
+### The Sonic 1 title card
+
+**S1 title card** is Sonic 1's own card, object `$34`, played the way it plays: the name
+slides in from the left to the centre, **ZONE** follows from further left, the act number and
+the blue oval come in from the right, all at $10 a frame; once the act is in, the card holds
+through the level's load and fade-in (26 frames) and `Card_Wait`'s 60, then all four go back
+the way they came at $20 a frame, together.
+
+Where ZONE and the act rest depends on the name, and the game keeps a table of positions per
+zone (`Card_ConData`). Across every zone it reduces to one rule — ZONE at the centre plus half
+the name's width minus 48, the act and oval 24 further right — so a name of any length lands
+where the game would put it. The test suite checks that *GREEN HILL* lands exactly on Green
+Hill's table entry. Sonic 1 has three acts, so this card offers **Act 3** as well.
+
+It belongs on the **GHZ** scene: Green Hill Zone act 1 at its start position — Sonic standing,
+the clouds creeping, the waterfalls and water cycling, and nothing else in that first screen
+(the nearest rings start at x `$144`, just off the right edge). Together they open the way the
+level does: the screen is black while the card slides in; once the act is in, the level loads,
+four frames pass, and palette lines 1–3 fade in under the still card while line 0 — Sonic's,
+which the card is also drawn in — stays lit, so he is there in full colour before the level is;
+then the level runs while the card holds and leaves. With any other letter style the scene just
+fades in first. The HUD, which the game also brings up here, is left off.
+
+The lettering is the card's white serif with a black drop shadow and grey anti-aliasing. The
+names spell 19 letters, and the art holds a **K**, a **U** and a full stop that no card ever
+uses — they are the game's, so they are used. **J, Q, V, W and X**, the digits and the rest of
+the punctuation are derived: V is A turned over with its bar taken out, W is M turned over, X
+is Y's open top twice, J is U without its left stem, Q is O with a tail, and the rest are drawn.
+Each derived glyph is re-shadowed by the rule the real ones follow — shadow wherever the face
+is a pixel up or a pixel left, which matches 86% of the real shadow pixels (the artist rounded
+some by hand).
 
 ## The S3 opening
 
@@ -442,7 +474,7 @@ no server and no fixture, and what is under test is exactly the file that deploy
 
 - **Sub-rectangle frames composite to a full repaint.** Each frame is a delta against the
   one before it; this replays them the way a GIF player would, honouring disposal, and
-  compares against a full repaint. Run for nine scene and intro combinations.
+  compares against a full repaint. Run for eleven scene and intro combinations.
 - **The canvas preview matches the indexed exporter**, pixel for pixel. These are separate
   code paths and have drifted apart more than once.
 - **The intro's last frame equals the static scene**, or the handoff to the text pops. On S3
