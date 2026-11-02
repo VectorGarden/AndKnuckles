@@ -1,4 +1,4 @@
-// Package page assembles index.html from src/: tools/build-page.mjs.
+// Package page assembles index.html from src/.
 //
 // The site stays a single static file -- that is what GitHub Pages serves and
 // what makes the page work from a file:// URL with no server. The sources are

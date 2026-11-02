@@ -1,8 +1,7 @@
 /*
 Package s3 builds the S3 title screen the page embeds: the settled background,
 the opening that leads up to it, and the sprites that animate on top of it --
-plus the banner tile sheet the digits were drawn against. It is the Go port of
-tools/build-s3-assets.mjs.
+plus the banner tile sheet the digits were drawn against.
 
 Two planes rather than the S&K screen's layer stack: plane B is the sky and
 scenery, plane A is Sonic and the foreground on top of it. The banner is a
@@ -24,8 +23,7 @@ const (
 	EMPTY            = 0xFF
 )
 
-// at reads a byte as a Buffer does: past the end is undefined, which the bit
-// operations below turn into 0.
+// at reads a byte, 0 past the end.
 func at(b []byte, i int) int {
 	if i < 0 || i >= len(b) {
 		return 0

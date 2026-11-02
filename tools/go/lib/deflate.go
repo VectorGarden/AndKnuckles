@@ -1,9 +1,10 @@
 package lib
 
-// A zlib stream at level 9: stock zlib's deflate_slow and trees.c, transcribed.
-// This mirrors tools/lib/deflate.mjs line for line -- the pipeline is built by
-// both, and is checked byte for byte, so the two must compress identically.
-// Names follow zlib's.
+// A zlib stream at level 9: stock zlib's deflate_slow and trees.c, transcribed
+// for whole-buffer input with Z_FINISH -- 32K window, memLevel 8, lazy matching,
+// chains of 4096. Its output is stock zlib's, byte for byte (deflate_test.go
+// checks it against the system zlib through Python), so the pipeline's PNGs do
+// not depend on whichever zlib a toolchain happens to carry. Names follow zlib's.
 
 const (
 	minMatch     = 3
@@ -636,7 +637,8 @@ func (d *deflater) fillWindow() {
 	}
 }
 
-// at reads the window as the JS does: past the end is undefined, equal only to itself
+// at reads the window; past its end it reads -1, unequal to any byte (strend keeps
+// the matcher inside the window, so it never comes to that)
 func (d *deflater) at(i int) int {
 	if i < len(d.win) {
 		return int(d.win[i])
@@ -704,7 +706,7 @@ func (d *deflater) flushBlock(last int) {
 	d.blockStart = d.strstart
 }
 
-// Deflate compresses input as one zlib stream at level 9, as tools/lib/deflate.mjs does.
+// Deflate compresses input as one zlib stream at level 9, as stock zlib does.
 func Deflate(input []byte) []byte {
 	d := &deflater{input: input, symBuf: make([]uint8, litBufsize*3),
 		win: make([]uint8, windowSize), prev: make([]uint16, wSize), head: make([]uint16, hashSize),

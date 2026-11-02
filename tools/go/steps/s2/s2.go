@@ -1,5 +1,6 @@
 /*
-Package s2 builds the Sonic 2 title screen: tools/build-s2-assets.mjs.
+Package s2 builds the Sonic 2 assets: the title screen, the credit font, the
+logo, the title card and Emerald Hill Zone.
 
 From sonicretro/s2disasm (REV01, bugs kept -- it is the game people played):
 
@@ -31,12 +32,12 @@ import (
 
 const (
 	W, H = 320, 224
-	bgW  = 512 // the JS's BG_W
+	bgW  = 512 // plane B's width
 )
 
 var rd = lib.Rom
 
-// Build writes every file build-s2-assets.mjs writes into out.
+// Build writes every Sonic 2 file into out.
 func Build(out string) {
 	out = lib.OutDir(out)
 	t := buildTitle(out)

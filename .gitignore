@@ -2,7 +2,7 @@
 .DS_Store
 .claude/
 
-# built assets — regenerate with tools/build-sk-assets.mjs
+# built assets — regenerate with: go -C tools/go run .
 tools/out/
 
 # the only dependency is playwright, for the DOM tests

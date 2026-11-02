@@ -9,8 +9,8 @@ import (
 )
 
 // The font modules in tools/font are data: object and array literals of row
-// strings and numbers. Rather than keep a second copy, the Go steps read them
-// from the .mjs source. JSLiteral finds `const NAME =` and parses the first
+// strings and numbers, kept in the JavaScript syntax they were written in. The
+// steps read them from that source. JSLiteral finds `const NAME =` and parses the first
 // object or array literal after it into Obj, []any, string and float64 --
 // enough of JavaScript for those files (Array(n).fill(v) included), and no more.
 func JSLiteral(file, name string) any {

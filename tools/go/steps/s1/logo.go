@@ -133,7 +133,7 @@ func buildLogo(out string, emblem []byte) {
 	}
 	// The small face: T H E D G O lifted from rows 108-113 (white), the rest designed.
 	small := logoFont.Small.Clone()
-	words := []string{"T", "H", "E", "", "H", "E", "D", "G", "E", "H", "O", "G"} // "" is the JS null
+	words := []string{"T", "H", "E", "", "H", "E", "D", "G", "E", "H", "O", "G"} // "" is the gap between the words
 	white := func(col int) bool {
 		for i := 0; i < 6; i++ {
 			if at(emblem, (108+i)*EWD+col)&15 == 6 {

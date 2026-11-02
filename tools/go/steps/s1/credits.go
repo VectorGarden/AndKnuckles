@@ -18,8 +18,7 @@ type glyph struct {
 	from string
 }
 
-// pix reads a glyph pixel; past the end is JavaScript's undefined, which every
-// use here treats as 0.
+// pix reads a glyph pixel, 0 past either end.
 func pix(p []int, i int) int {
 	if i < 0 || i >= len(p) {
 		return 0
@@ -90,7 +89,7 @@ func sortedKeys(m map[string]glyph) []string {
 	for c := range m {
 		k = append(k, c)
 	}
-	sort.Strings(k) // JS's default sort: by UTF-16 code unit, which for ASCII is this
+	sort.Strings(k) // single ASCII characters, so a plain byte sort
 	return k
 }
 

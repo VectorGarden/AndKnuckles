@@ -1,6 +1,5 @@
 /*
-Package font builds the sprite font atlas and glyph table the page embeds:
-tools/build-font.mjs.
+Package font builds the sprite font atlas and glyph table the page embeds.
 
 Unlike the background builds this one is not a pure decode. The ROM has no
 title font at all -- Map - S3 ANDKnuckles.asm is a flat 168x24 bitmap of the

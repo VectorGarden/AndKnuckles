@@ -24,11 +24,6 @@ jobs:
       - name: Check out
         uses: actions/checkout@v7
 
-      - name: Set up Node
-        uses: actions/setup-node@v7
-        with:
-          node-version: 22
-
       - name: Set up Go
         uses: actions/setup-go@v7
         with:
@@ -37,13 +32,6 @@ jobs:
 
       - name: Rebuild the assets and compare
         # --check restores index.html to whatever it found and exits non-zero on a
-        # mismatch. No dependencies to install -- the decoders are all first-party,
-        # compression included; the only import outside tools/ is node:zlib, for
-        # reading PNGs back.
-        run: node tools/build-all.mjs --check
-
-      - name: Rebuild them in Go and compare
-        # The Go pipeline in tools/go builds the same bytes; this holds it to the
-        # committed page too. After the Node check, not beside it: both write
-        # tools/out and index.html.
+        # mismatch. Nothing to install: the decoders are all first-party,
+        # compression included, on Go's standard library alone.
         run: go -C tools/go run . --check

@@ -31,7 +31,7 @@ func block(art []byte, t, wt int) kglyph {
 		for cy := 0; cy < ht; cy++ {
 			for y := 0; y < 8; y++ {
 				for x := 0; x < 8; x++ {
-					b := 0 // past the art's end: undefined, so 0
+					b := 0 // past the art's end: 0
 					if i := (t+cx*ht+cy)*32 + y*4 + (x >> 1); i < len(art) {
 						b = int(art[i])
 					}
@@ -268,7 +268,7 @@ func runObj34() *cardResult {
 	left := &cardObj{k: "left", x: -128, to: 112, from: -128, wait: 0x15, first: 1, loc: 0}
 	o := []*cardObj{name, zone, act, bottom, left}
 	texts := o[:3]
-	bgLoc, bgInit, bgRows, red := 0, false, 0, 0 // bgInit: the JS's bgLoc === 'init'
+	bgLoc, bgInit, bgRows, red := 0, false, 0, 0 // bgInit: BackgroundOutInit's frame comes next
 	var yel, reveal any                          // null or a number
 	shown := map[string]bool{}
 	vis := func(x int) bool { return x+128 >= 0 && x+128 <= 0x200 }

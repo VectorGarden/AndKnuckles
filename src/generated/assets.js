@@ -1,12 +1,11 @@
 /* GENERATED -- do not edit.
 
-   FONT and ATLAS_SRC come from tools/build-font.mjs, CARD_FONT and CARD_SRC
-   from build-card-font.mjs; the SCENES artwork from build-sk-assets.mjs,
-   build-s3-assets.mjs and build-aiz-assets.mjs.
-   tools/embed-assets.mjs writes this file, and tools/build-page.mjs inlines
+   Every constant here comes from the asset pipeline in tools/go: the fonts
+   from its font, cardfont, s1 and s2 steps, the SCENES artwork from sk, s3,
+   aiz, s1 and s2. Its embed step writes this file, and its page step inlines
    it into index.html.
 
-   Change the source in tools/ and run:  node tools/build-all.mjs
+   Change the source in tools/ and run:  go -C tools/go run .
 */
 
 /* Sonic 3 title screen, planes A+B composited at 320x224. Decoded offline from

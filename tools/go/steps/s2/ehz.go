@@ -117,7 +117,7 @@ func buildEHZ(out string, t *title, card *cardResult) {
 		if cw&0x800 != 0 {
 			qy ^= 1
 		}
-		w := 0 // past the table: undefined, which every use treats as 0
+		w := 0 // past the table: 0
 		if i := b*4 + qy*2 + qx; i < len(blockWords) {
 			w = blockWords[i]
 		}

@@ -4,9 +4,10 @@ import "math"
 
 // Math as V8 computes it. Some font shapes are tested point by point against a
 // distance or an angle, and the edge of a shape can turn on the last bit, so
-// these follow V8 exactly rather than Go's math package: Math.hypot is V8's
-// scaled Kahan sum, and atan2, sin and cos are fdlibm's, which V8's ieee754.cc
-// ports. lib/jsmath_test.go checks them bit for bit against Node.
+// these follow V8 -- which first drew them for the committed page -- rather than
+// Go's math package: Math.hypot is V8's scaled Kahan sum, and atan2, sin and cos
+// are fdlibm's, which V8's ieee754.cc ports. lib/jsmath_test.go checks them bit
+// for bit against Node.
 
 func hi(x float64) int32  { return int32(math.Float64bits(x) >> 32) }
 func lo(x float64) uint32 { return uint32(math.Float64bits(x)) }

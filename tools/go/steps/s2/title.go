@@ -530,8 +530,8 @@ func (s *sim) run(o *obj) {
 	}
 }
 
-// runObjects runs the slots in order; one spawned further on runs in the same pass, as the JS
-// array's growing length lets it.
+// runObjects runs the slots in order; one spawned further on runs in the same pass,
+// as RunObjects reaches its slot.
 func (s *sim) runObjects() {
 	for i := range s.objs { // not `range s.objs` by value: that would copy the array
 		if o := s.objs[i]; o != nil {

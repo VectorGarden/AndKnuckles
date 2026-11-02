@@ -1,4 +1,4 @@
-// Package embed writes src/generated/assets.js from the built PNGs: tools/embed-assets.mjs.
+// Package embed writes src/generated/assets.js from the built PNGs.
 //
 // This is the only file that carries base64. Only the artwork and the geometry
 // that comes with it are replaced. Every timing value in the spec -- the camera

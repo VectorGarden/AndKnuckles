@@ -1,8 +1,7 @@
 /*
 Package aiz builds the Angel Island Zone intro: the Tornado over the ocean,
 Super Sonic, the beach, Knuckles and the emeralds -- from the first frame of
-AIZ1 to the frame before control is handed to the player. It is
-tools/build-aiz-assets.mjs.
+AIZ1 to the frame before control is handed to the player.
 
 Unlike the title screens this is a cutscene running in the level engine, so
 the build does what the engine does, offline: it decodes the level, steps
@@ -295,7 +294,7 @@ func animRaw(o *Obj) {
 	}
 	o.ai++
 	if o.base+1+o.ai >= len(K_ANIM) {
-		return // undefined in the JS: no case matches
+		return // no case matches
 	}
 	v := K_ANIM[o.base+1+o.ai]
 	if v < 0x80 {

@@ -5,8 +5,8 @@
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "test:dom": "node --test test/dom/*.test.mjs",
-    "build": "node tools/build-all.mjs",
-    "check": "node tools/build-all.mjs --check"
+    "build": "go -C tools/go run .",
+    "check": "go -C tools/go run . --check"
   },
   "devDependencies": {
     "playwright": "^1.49.0"

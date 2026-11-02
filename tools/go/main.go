@@ -1,13 +1,12 @@
-// Command pipeline is the asset pipeline in Go: tools/build-all.mjs and every
-// step it runs, producing the same bytes.
+// Command pipeline is the asset pipeline: it decodes the disassembly's data in
+// tools/rom into the PNGs and tables the page embeds, then assembles index.html.
 //
 //	go -C tools/go run .                 every step, then the embed and the page
 //	go -C tools/go run . --check         the same, leaving the repo as it found it,
 //	                                     exiting non-zero if index.html would change
 //	go -C tools/go run . <step> [outDir] one step: sk s3 aiz font cardfont s1 s2 embed page
 //
-// --check is what CI runs, next to the Node pipeline's own check: the two
-// pipelines must agree with each other and with the committed page.
+// --check is what CI runs, so the committed page and tools/ cannot drift apart.
 package main
 
 import (
@@ -29,7 +28,7 @@ import (
 	"github.com/VectorGarden/AndKnuckles/tools/go/steps/sk"
 )
 
-// the build steps, in the order build-all.mjs runs them
+// the build steps, in order
 var steps = []struct {
 	name  string
 	build func(out string)
