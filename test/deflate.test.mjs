@@ -29,7 +29,7 @@ function pngDir(){
   if(fs.existsSync(out) && fs.readdirSync(out).some(f => f.endsWith('.png'))) return out;
   if(!built){
     built = fs.mkdtempSync(path.join(os.tmpdir(), 'pipeline-'));
-    for(const step of fs.readdirSync(path.join(ROOT, 'tools')).filter(f => /^build-.*-?.*\.mjs$/.test(f) && !['build-all.mjs', 'build-page.mjs'].includes(f)))
+    for(const step of fs.readdirSync(path.join(ROOT, 'tools')).filter(f => /^build-.*\.mjs$/.test(f) && !['build-all.mjs', 'build-page.mjs'].includes(f)))
       execFileSync(process.execPath, [path.join(ROOT, 'tools', step), built], {cwd: ROOT, stdio: 'ignore'});
   }
   return built;
