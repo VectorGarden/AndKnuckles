@@ -101,7 +101,8 @@ says so, because the loop will visibly jump.
 
 ## The backgrounds
 
-Seven of them — **S1 title**, **GHZ**, **S2 title**, **EHZ**, **S3 title**, **S&K title** and **AIZ intro** — any of which
+Seven of them, which the Scene panel lays out by game — Sonic 1's **Title** and **Green Hill**, Sonic 2's
+**Title** and **Emerald Hill**, and S3&K's **S3 title**, **S&K title** and **AIZ intro** — any of which
 swaps the transparent canvas for the real thing and locks output to the Genesis frame,
 320&times;224. The S3 and S&K title screens are described here; Sonic 1, Green Hill, Sonic 2,
 Emerald Hill and the AIZ intro have their own sections below. Text sits where the ROM puts
@@ -184,7 +185,7 @@ correct by accident.
 
 ## The Sonic 1 title
 
-The **S1 title** scene is the Sonic 1 title screen, decoded from
+Sonic 1's **Title** scene is the Sonic 1 title screen, decoded from
 [s1disasm](https://github.com/sonicretro/s1disasm) — REV01 with its bugs kept, since that is
 the game people played. In animated mode it plays `GM_Title` from the fade-in: the palette
 comes up over 22 frames (blue first, then green, then red), Sonic rises out of the emblem
@@ -214,7 +215,7 @@ wherever the text settles and jumps back to the fade-in.
 
 ### The Sonic 1 lettering
 
-**Sonic 1** is a letter style: the face of *SONIC TEAM PRESENTS* and the staff roll, a blue
+Sonic 1's **Credits** is a letter style: the face of *SONIC TEAM PRESENTS* and the staff roll, a blue
 bevel round a black interior with a white rim. The credits mappings comment every piece
 with its character, so the build reads the letters straight off them: **23 letters and the
 digit 2**, each pixel-identical wherever it is used — except D, which the *SOUND* credits
@@ -230,7 +231,7 @@ game's colours, so the palette controls hide while it is selected.
 
 ### The Sonic 1 title card
 
-**S1 title card** is Sonic 1's own card, object `$34`, played the way it plays: the name
+Sonic 1's **Title card** is the game's own card, object `$34`, played the way it plays: the name
 slides in from the left to the centre, **ZONE** follows from further left, the act number and
 the blue oval come in from the right, all at $10 a frame; once the act is in, the card holds
 through the level's load and fade-in (26 frames) and `Card_Wait`'s 60, then all four go back
@@ -242,7 +243,7 @@ the name's width minus 48, the act and oval 24 further right — so a name of an
 where the game would put it. The test suite checks that *GREEN HILL* lands exactly on Green
 Hill's table entry. Sonic 1 has three acts, so this card offers **Act 3** as well.
 
-It belongs on the **GHZ** scene: Green Hill Zone act 1 at its start position — Sonic standing,
+It belongs on the **Green Hill** scene: Green Hill Zone act 1 at its start position — Sonic standing,
 the clouds creeping, the waterfalls and water cycling, and nothing else in that first screen
 (the nearest rings start at x `$144`, just off the right edge). Together they open the way the
 level does: the screen is black while the card slides in; once the act is in, the level loads,
@@ -262,9 +263,9 @@ some by hand).
 
 ### The Sonic 1 logo
 
-**S1 logo** is a letter style that replaces the emblem's own lettering: your first line in the
+Sonic 1's **Logo** is a letter style that replaces the emblem's own lettering: your first line in the
 chrome face of **SONIC**, your second in the small face of **THE HEDGEHOG**, each centred where
-those sat. On the **S1 title** scene it is part of the emblem, so it fades in with the palette
+those sat. On Sonic 1's **Title** scene it is part of the emblem, so it fades in with the palette
 and Sonic rises behind it; off that scene it is drawn on its own in the title palette's
 colours. It does not spring in — the real logo never moves — so the spring controls hide, and
 like the other game faces it keeps its colours, so the palette controls do too. Lines after
@@ -294,7 +295,7 @@ letters, so a first line much longer than SONIC runs past the ribbon onto the or
 
 ## The Sonic 2 title
 
-The **S2 title** scene is the Sonic 2 title screen, decoded from
+Sonic 2's **Title** scene is the Sonic 2 title screen, decoded from
 [s2disasm](https://github.com/sonicretro/s2disasm), REV01 with its bugs kept. Almost nothing
 on it is a fixed picture. It is one object, `Obj0E`, plus two palette changers (`ObjC9`).
 So the build runs them, transcribed from `s2.asm`, and writes down what every frame shows:
@@ -330,7 +331,7 @@ Some details:
 
 ### The Sonic 2 lettering
 
-**Sonic 2** is a letter style: the face of *SONIC AND MILES 'TAILS' PROWER IN*, the screen
+Sonic 2's **Credits** is a letter style: the face of *SONIC AND MILES 'TAILS' PROWER IN*, the screen
 before the title, and of the staff roll. Each letter is a white outline round a hollow
 shape, one tile tall and two wide, written edge to edge. The intro's text macro emits each
 letter as two tile codes, through a character map `s2.asm` sets up for it, so the build reads
@@ -345,7 +346,7 @@ colours: white, from the intro's palette.
 
 ### The Sonic 2 title card
 
-**S2 title card** is Sonic 2's own card, `Obj34`, played the way it plays. Like the title screen,
+Sonic 2's **Title card** is the game's own card, `Obj34`, played the way it plays. Like the title screen,
 the build runs it frame by frame and the page plays the result back. It never depends on the
 text, which only decides where the name sits.
 
@@ -369,7 +370,7 @@ shadow pixel of the real letters. The font holds **all 26 letters**: B, J, Q, V 
 zone, but they are in it. **0** is O. The other digits and **& ! ? , ' - :** are drawn square in
 the same style, like its E, L and T, and shadowed by the same rule.
 
-It belongs on the **EHZ** scene: Emerald Hill Zone act 1 at its start. Sonic stands at
+It belongs on the **Emerald Hill** scene: Emerald Hill Zone act 1 at its start. Sonic stands at
 ($60, $28F) and Tails stands $20 behind him. Two rings turn at the top right, flowers dot the grass,
 the water ripples, and its colours cycle. Sonic 2 never fades a level in, so with any other
 letter style the level is simply there from the first frame. With the card it follows the card's
@@ -386,9 +387,9 @@ as the blue goes, and then the level's main loop. Some details:
 
 ### The Sonic 2 logo
 
-**S2 logo** does for the S2 emblem what the S1 logo does for Sonic 1's: your first line in the
+Sonic 2's **Logo** does for the S2 emblem what the S1 logo does for Sonic 1's: your first line in the
 chrome face of **SONIC**, your second in the small face of **THE HEDGEHOG**, centred where those
-sat. The **2** stays. On the **S2 title** scene it is part of the emblem, so it fades in with the
+sat. The **2** stays. On Sonic 2's **Title** scene it is part of the emblem, so it fades in with the
 emblem and Sonic and Tails rise behind it. Off that scene it is drawn on its own in the title's
 colours.
 
@@ -670,12 +671,31 @@ must disable saving and leave the rest of the page working; and **stored data th
 shaped like a palette** — the key is plain JSON anyone can edit — must be skipped rather than
 break startup. Seven shapes are tried, from `this is not json` to channels of `NaN`.
 
+[`test/dom/layout.test.mjs`](test/dom/layout.test.mjs) loads the page at 375px, a phone's
+width. Nothing may push it wider than the screen in any of the states that change which
+controls show: animated, a scene with its intro, the S2 card, the S2 logo, a line too long to
+fit. A preview wider than the stage must be shown at a whole multiple of its pixels, and the
+style and scene choices, laid out a row per game, must still be one choice each.
+
 Every suite here has been mutation-tested, and twice that turned up a gap rather than a
 confirmation: a swapped 4-bit nibble order was invisible because the app could not reach
 that branch at the time, and a broken codec table made the video test skip itself rather than fail.
 Both are covered now. It is worth running mutations through something that refuses to
 apply a no-op — three times in this project a mutation quietly matched nothing and reported
 a reassuring zero failures.
+
+## Layout
+
+The letter styles and the scenes are each laid out a row per game (S3&K, Sonic 1, Sonic 2), and
+every row of buttons wraps rather than running off the side. The control panels draw their
+rules from the gaps of a grid, so a panel with fewer controls never leaves a half-ruled cell.
+On a phone the panels stack into one column, and with a touch screen the buttons, sliders and
+swatches grow to finger size.
+
+The preview is the one thing that cannot just shrink. Squeezed to fit a narrow stage, a
+pixel-art canvas gets pixels of uneven width. So when it is too wide it is shown at the largest
+whole multiple of the art's own pixels that fits, which on a phone is usually 1× of a 320&times;224
+scene. It is only squeezed when even that is too wide.
 
 ## Spacing
 
@@ -753,7 +773,7 @@ step on the bottom-right edge. Deriving it means the two glyphs cannot drift apa
 
 ## The title card
 
-**Title card** is a third letter style, and it is the whole S3&K title card, not just its
+S3&K's **Title card** is a third letter style, and it is the whole S3&K title card, not just its
 lettering: in animated mode the red *SONIC 3 & KNUCKLES* banner drops in on the left, your
 text slides in from the right as the zone name, with **ZONE** and **ACT 1** below it, they
 hold, and they leave — the way `Obj_TitleCard` plays it at the start of every zone. Still

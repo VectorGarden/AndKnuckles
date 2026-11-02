@@ -65,7 +65,9 @@
   }
   .stage::before{top:6px;left:6px;border-right:0;border-bottom:0}
   .stage::after{bottom:6px;right:6px;border-left:0;border-top:0}
+  /* shown at a whole multiple of the art's pixels when it is too wide for the stage (app.js) */
   #preview{image-rendering:pixelated;image-rendering:crisp-edges;max-width:100%;height:auto;display:block}
+  #preview.fit{max-width:none}
   #preview.ghost{opacity:.28}
   .readout{
     display:flex;gap:10px;flex-wrap:wrap;align-items:center;
@@ -97,24 +99,37 @@
   .chip:hover{color:var(--gold);border-color:var(--gold)}
 
   /* ---- controls ---- */
+  /* panels of controls: the gaps between them, over the edge colour, are the rules */
   .controls{
-    margin-top:26px;border:3px solid var(--edge);box-shadow:var(--drop);background:var(--panel);
-    display:grid;grid-template-columns:repeat(3,1fr);
+    margin-top:26px;border:3px solid var(--edge);box-shadow:var(--drop);background:var(--edge);
+    display:grid;grid-template-columns:repeat(6,1fr);gap:2px;
   }
-  .ctl{padding:16px;border-right:2px solid var(--edge);border-bottom:2px solid var(--edge)}
-  .ctl:nth-child(3n){border-right:0}
+  .ctl{padding:16px;background:var(--panel);grid-column:span 2;min-width:0}
+  .ctl.half{grid-column:span 3}
+  .ctl.full{grid-column:1/-1}
   label,.lbl{
     display:block;font-family:var(--mono);font-size:10px;letter-spacing:.2em;
     text-transform:uppercase;color:var(--dim);margin-bottom:10px;
   }
   .lbl b{color:var(--gold);font-weight:600;float:right;letter-spacing:.08em}
-  .seg{display:flex}
+  /* a row of joined buttons that wraps: each overlaps its neighbours' borders by their width */
+  .seg{display:flex;flex-wrap:wrap;padding:0 2px 2px 0}
   .seg button{
-    flex:1;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;
-    background:transparent;color:var(--dim);border:2px solid var(--edge);padding:8px 4px;cursor:pointer;
+    flex:1 1 auto;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+    background:transparent;color:var(--dim);border:2px solid var(--edge);padding:8px 10px;cursor:pointer;
+    margin:0 -2px -2px 0;white-space:nowrap;position:relative;
   }
-  .seg button + button{border-left:0}
-  .seg button[aria-pressed="true"]{background:var(--gold);color:var(--navy);border-color:var(--gold);font-weight:700}
+  .seg button[aria-pressed="true"]{background:var(--gold);color:var(--navy);border-color:var(--gold);font-weight:700;z-index:1}
+  .seg button[disabled]{opacity:.4;cursor:not-allowed}
+  /* a choice laid out by game: one labelled row each */
+  .controls.picker .ctl:not(.full){grid-column:span 3}
+  .pick{display:flex;flex-direction:column;gap:6px}
+  .game{display:flex;align-items:center;gap:10px}
+  .game .who{
+    font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--dim);flex:0 0 64px;
+  }
+  .game .seg{flex:1}
   input[type=range]{width:100%;-webkit-appearance:none;appearance:none;background:transparent;height:22px;margin:0}
   input[type=range]::-webkit-slider-runnable-track{height:6px;background:var(--edge)}
   input[type=range]::-moz-range-track{height:6px;background:var(--edge)}
@@ -122,7 +137,7 @@
     -webkit-appearance:none;width:14px;height:18px;background:var(--gold);margin-top:-6px;border:0;cursor:pointer
   }
   input[type=range]::-moz-range-thumb{width:14px;height:18px;background:var(--gold);border:0;border-radius:0;cursor:pointer}
-  .bgrow{display:flex;gap:8px;align-items:center}
+  .bgrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .swatch{
     width:34px;height:34px;border:2px solid var(--edge);cursor:pointer;padding:0;background-clip:padding-box
   }
@@ -154,13 +169,14 @@
   body:not(.anim) .anim-only{display:none !important}
   body.anim .still-only{display:none !important}
   body:not(.scene) .scene-only{display:none !important}
+  body.scene .scene-off{display:none !important}   /* the scene is the background */
   body:not(.has-intro) .intro-only{display:none !important}
   body:not(.card) .card-only{display:none !important}
   body.card .spring-only, body.static .spring-only{display:none !important}   /* own motion, or none */
   body:not(.fixed) .fixed-only{display:none !important}
   body:not(.card3k) .s3card-only{display:none !important}
   body:not(.card1):not(.card2) .s1card-only{display:none !important}
-  body.fixed #palCtl .bgrow, body.fixed #palCtl .saved, body.fixed #lineCtl{display:none !important}
+  body.fixed #palCtl .bgrow, body.fixed #palCtl .saved, body.fixed #lineCtl, body.fixed #palNote{display:none !important}
   .transport input[type=range]{flex:1;min-width:110px;max-width:260px}
   .btn.sm{padding:7px 14px;font-size:11px;box-shadow:none;border-width:2px;min-width:74px}
   .lbl.inline{display:inline-block;margin:0;white-space:nowrap}
@@ -216,14 +232,29 @@
 
   @media (max-width:760px){
     .controls{grid-template-columns:1fr 1fr}
-    .ctl:nth-child(3n){border-right:2px solid var(--edge)}
-    .ctl:nth-child(2n){border-right:0}
+    .ctl,.ctl.half{grid-column:span 1}
+    .ctl.odd,.controls.picker .ctl:not(.full){grid-column:1/-1}
     textarea{font-size:16px}
   }
   @media (max-width:460px){
+    body{padding:0 12px 48px}
+    header{padding:22px 0 14px}
+    .stage{padding:12px 8px;min-height:150px}
     .controls{grid-template-columns:1fr}
-    .ctl{border-right:0 !important}
+    .ctl,.ctl.half{grid-column:1/-1;padding:14px 12px}
+    .game{flex-direction:column;align-items:stretch;gap:4px}
+    .game .who{flex:none}
     .btn{flex:1}
+    .export .note{order:1}
+  }
+  /* fingers, not a mouse pointer: room to hit buttons and grab sliders */
+  @media (pointer:coarse){
+    .seg button{min-height:40px}
+    .chip{padding:9px 12px}
+    input[type=range]{height:32px}
+    input[type=range]::-webkit-slider-thumb{width:22px;height:28px;margin-top:-11px}
+    input[type=range]::-moz-range-thumb{width:22px;height:28px}
+    .swatch,input[type=color]{width:40px;height:40px}
   }
   @media (prefers-reduced-motion:reduce){.btn{transition:none}}
 </style>
@@ -251,16 +282,6 @@
       <button data-mode="still" aria-pressed="true">Still</button>
       <button data-mode="anim" aria-pressed="false">Animated</button>
     </div>
-    <div class="seg" id="scene" role="group" aria-label="Background">
-      <button data-scene="off" aria-pressed="true">No BG</button>
-      <button data-scene="s1" aria-pressed="false">S1 title</button>
-      <button data-scene="ghz" aria-pressed="false">GHZ</button>
-      <button data-scene="s2" aria-pressed="false">S2 title</button>
-      <button data-scene="ehz" aria-pressed="false">EHZ</button>
-      <button data-scene="s3" aria-pressed="false">S3 title</button>
-      <button data-scene="sk" aria-pressed="false">S&amp;K title</button>
-      <button data-scene="aiz" aria-pressed="false">AIZ intro</button>
-    </div>
     <div class="row anim-only">
       <button class="btn ghost sm" id="play">Play</button>
       <input type="range" id="scrub" min="0" max="99" step="1" value="0" aria-label="Frame">
@@ -282,22 +303,50 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
     </div>
   </div>
 
-  <div class="controls">
+  <!-- what to draw and what over: each game's styles and scenes on a row of their own -->
+  <div class="controls picker">
     <div class="ctl">
       <span class="lbl">Letter style</span>
-      <div class="seg" id="style" role="group" aria-label="Letter style">
-        <button data-style="outline" aria-pressed="true">Outlined</button>
-        <button data-style="plain" aria-pressed="false">Plain</button>
-        <button data-style="card" aria-pressed="false">Title card</button>
-        <button data-style="credits" aria-pressed="false">Sonic 1</button>
-        <button data-style="card1" aria-pressed="false">S1 title card</button>
-        <button data-style="logo" aria-pressed="false">S1 logo</button>
-        <button data-style="credits2" aria-pressed="false">Sonic 2</button>
-        <button data-style="card2" aria-pressed="false">S2 title card</button>
-        <button data-style="logo2" aria-pressed="false">S2 logo</button>
+      <div class="pick" id="style" role="group" aria-label="Letter style">
+        <div class="game"><span class="who">S3&amp;K</span><div class="seg">
+          <button data-style="outline" aria-pressed="true">Outlined</button>
+          <button data-style="plain" aria-pressed="false">Plain</button>
+          <button data-style="card" aria-pressed="false">Title card</button>
+        </div></div>
+        <div class="game"><span class="who">Sonic 1</span><div class="seg">
+          <button data-style="credits" aria-pressed="false">Credits</button>
+          <button data-style="card1" aria-pressed="false">Title card</button>
+          <button data-style="logo" aria-pressed="false">Logo</button>
+        </div></div>
+        <div class="game"><span class="who">Sonic 2</span><div class="seg">
+          <button data-style="credits2" aria-pressed="false">Credits</button>
+          <button data-style="card2" aria-pressed="false">Title card</button>
+          <button data-style="logo2" aria-pressed="false">Logo</button>
+        </div></div>
       </div>
     </div>
-    <div class="ctl card-only" id="cardCtl">
+    <div class="ctl">
+      <span class="lbl">Scene</span>
+      <div class="pick" id="scene" role="group" aria-label="Scene">
+        <div class="game"><span class="who">None</span><div class="seg">
+          <button data-scene="off" aria-pressed="true">No scene</button>
+        </div></div>
+        <div class="game"><span class="who">S3&amp;K</span><div class="seg">
+          <button data-scene="s3" aria-pressed="false">S3 title</button>
+          <button data-scene="sk" aria-pressed="false">S&amp;K title</button>
+          <button data-scene="aiz" aria-pressed="false">AIZ intro</button>
+        </div></div>
+        <div class="game"><span class="who">Sonic 1</span><div class="seg">
+          <button data-scene="s1" aria-pressed="false">Title</button>
+          <button data-scene="ghz" aria-pressed="false">Green Hill</button>
+        </div></div>
+        <div class="game"><span class="who">Sonic 2</span><div class="seg">
+          <button data-scene="s2" aria-pressed="false">Title</button>
+          <button data-scene="ehz" aria-pressed="false">Emerald Hill</button>
+        </div></div>
+      </div>
+    </div>
+    <div class="ctl card-only full" id="cardCtl">
       <span class="lbl">Title card</span>
       <div class="seg" id="cardZone" role="group" aria-label="ZONE line">
         <button data-zone="on" aria-pressed="true">ZONE</button>
@@ -315,13 +364,16 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
         <button data-act="0" aria-pressed="false">No act</button>
       </div>
     </div>
+  </div>
 
-    <div class="ctl">
+  <div class="controls">
+
+    <div class="ctl half">
       <span class="lbl">Pixel scale <b id="scaleVal">4×</b></span>
       <input type="range" id="scale" aria-label="Pixel scale" min="1" max="16" step="1" value="4">
     </div>
 
-    <div class="ctl">
+    <div class="ctl half">
       <span class="lbl">Alignment</span>
       <div class="seg" id="align" role="group" aria-label="Alignment">
         <button data-align="left" aria-pressed="false">Left</button>
@@ -340,15 +392,15 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
       <input type="range" id="lead" aria-label="Line spacing" min="-8" max="24" step="1" value="0">
     </div>
 
-    <div class="ctl">
+    <div class="ctl odd">
       <span class="lbl">Edge padding <b id="padVal">0</b></span>
       <input type="range" id="pad" aria-label="Edge padding" min="0" max="32" step="1" value="0">
     </div>
 
-    <div class="ctl" id="palCtl" style="grid-column:1/-1;border-right:0">
+    <div class="ctl full" id="palCtl">
       <span class="lbl">Palette</span>
-      <span class="note fixed-only">The title-card, Sonic 1 and Sonic 2 letters keep the game's
-      own colours, so the palette does not apply to them.</span>
+      <span class="note fixed-only">The game styles — title cards, credits and logos — keep the
+      game's own colours, so the palette does not apply to them.</span>
       <div class="bgrow">
         <div class="seg" id="palette" role="group" aria-label="Palette">
           <button data-pal="classic" aria-pressed="true">Classic</button>
@@ -358,11 +410,11 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
           <button data-pal="shadow" aria-pressed="false">Shadow</button>
           <button data-pal="emerald" aria-pressed="false">Emerald</button>
         </div>
-        <input type="color" id="tint" value="#FCB400" title="Custom face colour">
-        <span class="lbl" style="margin:0 0 0 4px">Recolours the letters only, never the
-        background. The custom picker derives the whole ramp — shadow, highlight, outline —
-        from one face colour, snapped to the Genesis palette's 36-step channels.</span>
+        <input type="color" id="tint" value="#FCB400" title="Custom face colour" aria-label="Custom face colour">
       </div>
+      <span class="note" id="palNote">Recolours the letters only, never the background. The custom picker
+      derives the whole ramp — shadow, highlight, outline — from one face colour, snapped to the
+      Genesis palette's 36-step channels.</span>
       <div class="saved">
         <span class="lbl" style="margin:0">Saved</span>
         <div class="saved" id="savedList" style="margin:0"></div>
@@ -379,42 +431,36 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
       </div>
     </div>
 
-    <div class="ctl" style="grid-column:1/-1;border-bottom:0;border-right:0">
+    <div class="ctl scene-off full">
       <span class="lbl">Background</span>
       <div class="bgrow">
         <button class="swatch trans" data-bg="none" aria-pressed="true" title="Transparent"></button>
         <button class="swatch" data-bg="#24006C" style="background:#24006C" title="Title navy"></button>
         <button class="swatch" data-bg="#0D4807" style="background:#0D4807" title="Sprite-sheet green"></button>
         <button class="swatch" data-bg="#FFFFFF" style="background:#fff" title="White"></button>
-        <input type="color" id="custom" value="#FC6C00" title="Custom colour">
-        <span class="lbl" style="margin:0 0 0 4px">Transparent stays transparent in PNG, WebP and AVIF</span>
+        <input type="color" id="custom" value="#FC6C00" title="Custom colour" aria-label="Custom background colour">
       </div>
+      <span class="note">Transparent stays transparent in PNG, WebP and AVIF.</span>
     </div>
   </div>
 
   <div class="controls scene-only" id="sceneCtl">
-    <div class="ctl anim-only intro-only" id="introCtl" style="grid-column:1/-1;border-right:0">
+    <div class="ctl anim-only intro-only full" id="introCtl">
       <span class="lbl">Intro</span>
       <div class="seg" id="intro" role="group" aria-label="Intro">
         <button data-intro="off" aria-pressed="false">Off</button>
         <button data-intro="on" aria-pressed="true">Full opening</button>
       </div>
-      <span class="note">Plays the S&amp;K opening ahead of the text. The Death Egg comes down
-      onto the volcano while the island rises to meet it, Sonic falls in after, then Knuckles and
-      the ground slide up from the bottom and he lands — the order the ROM does it in. It all hangs
-      on <b>Camera_Y_pos_P2</b>: the background, the mountain sprite and the egg's resting place are
-      all positioned from it, so the egg settles on <b>$F0&nbsp;&minus;&nbsp;128&nbsp;=&nbsp;$70</b>
-      and stays stuck to the terrain as the scene rides up. Speeds are scaled up from the ROM's,
-      keeping their ratios; adds 65 frames ahead of the text.</span>
+      <span class="note">Plays the scene's own opening ahead of the text, the way its game does —
+      the S&amp;K Death Egg landing, the S3 island, the AIZ fly-in, the Sonic 1 and 2 title screens
+      coming up. Off starts on the scene at rest.</span>
     </div>
-    <div class="ctl" style="grid-column:1/-1;border-bottom:0;border-right:0">
+    <div class="ctl full">
       <span class="lbl">Text position <b id="sceneYVal">176</b></span>
       <input type="range" id="sceneY" aria-label="Text vertical position" min="0" max="223" step="1" value="176">
-      <span class="note">Output locks to the Genesis frame, 320&times;224, and the background
-      colour swatches no longer apply. 176 is where the ROM puts <b>&amp; KNUCKLES</b> — banner rest
-      $D4 plus the $5C subtitle offset, less the $80 sprite-space origin. The background also
-      scrolls up 16px over the first 16 frames, which is <b>V_scroll_value</b> in the original
-      making room for the subtitle.</span>
+      <span class="note">Output locks to the Genesis frame, 320&times;224. Each scene starts the
+      text where its game puts its own — on S3 and S&amp;K that is 176, where <b>&amp; KNUCKLES</b>
+      sits.</span>
     </div>
   </div>
 
@@ -443,7 +489,7 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
       <span class="lbl">Headroom <b id="headVal">auto</b></span>
       <input type="range" id="head" aria-label="Headroom" min="-1" max="128" step="1" value="-1">
     </div>
-    <div class="ctl" style="grid-column:1/-1;border-right:0">
+    <div class="ctl full">
       <span class="lbl">Timebase</span>
       <div class="seg" id="timebase" role="group" aria-label="Timebase">
         <button data-tb="pal" aria-pressed="true">PAL · 50 Hz</button>
@@ -454,7 +500,7 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
       (1.66s). APNG delays are a fraction, so it expresses 59.92 Hz exactly as 100/5992 —
       pick APNG if the timing matters. Video is a real-time capture and is approximate either way.</span>
     </div>
-    <div class="ctl spring-only" style="grid-column:1/-1;border-bottom:0;border-right:0">
+    <div class="ctl spring-only full">
       <button class="btn ghost sm" id="romReset" style="min-width:0">Reset to ROM values</button>
       <span class="note">Defaults are read from Obj_TitleBanner_Main in the Sonic&nbsp;3 &amp; Knuckles
       disassembly: 96px entry, 4px/frame initial velocity, 0.25px/frame² spring, velocity halved
@@ -479,7 +525,9 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
 
   <footer>
     Sprite sheet ripped by <b>DarkNic the Half Demon1234</b> — credit kept as asked.<br>
-    Sonic the Hedgehog 3 &amp; Sonic &amp; Knuckles are © <b>Sega</b>. This is an unofficial fan tool; the artwork belongs to them.<br>
+    Sonic the Hedgehog, Sonic the Hedgehog 2, Sonic the Hedgehog 3 and Sonic &amp; Knuckles are © <b>Sega</b>. This is an
+    unofficial fan tool; the artwork belongs to them. The scenes and the game lettering are decoded from the
+    <b>Sonic Retro</b> disassemblies.<br>
     Character set: <b>A–Z, 0–9, space</b> and <b>! &quot; # $ % &amp; &#39; ( ) * + , - . / : ; &lt; = &gt; ? @ [ \ ] _ ` { | } ~</b>
     — everything on a standard keyboard. <b>^</b> is the sheet's triangle rather than a caret.<br>
     The ROM has no font at all — it stores &amp; KNUCKLES as a flat 168&times;24 bitmap — so only
@@ -849,6 +897,7 @@ function render(){
                       scrollAt(anim ? player.frame : 1e9), player.frame);
 
   canvas.classList.toggle('ghost', L.ghost);
+  fitPreview(scale);
   el('dims').textContent = W + ' × ' + H + ' px';
   el('scaleOut').textContent = scale + '×' + (scale !== state.scale ? ' (capped)' : '');
   el('skipped').textContent = L.skipped.length ? '· skipped ' + L.skipped.join(' ') : '';
@@ -876,6 +925,21 @@ function render(){
     queueEstimate();
   }
 }
+
+/* On a narrow screen the canvas is wider than the stage. Squeezing it to fit
+   gives uneven pixels, so it is shown at the largest whole multiple of the art's
+   own pixels that fits, and only squeezed when even 1x is too wide. */
+let fitScale = 1;
+function fitPreview(scale){
+  fitScale = scale;
+  const st = el('stage'), cs = getComputedStyle(st);
+  const room = st.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const base = canvas.width / scale, n = Math.floor(room / base);
+  const fit = canvas.width > room && n >= 1;
+  canvas.classList.toggle('fit', fit);
+  canvas.style.width = fit ? n * base + 'px' : '';
+}
+addEventListener('resize', () => { if(ready) fitPreview(fitScale); });
 
 /* ---------- playback ---------- */
 const FRAME_MS = 20;                 // GIF delay is whole centiseconds: 2cs
@@ -2738,7 +2802,7 @@ document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',()=>{
 el('style').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.style = b.dataset.style;
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   document.body.classList.toggle('card', isCard());
   document.body.classList.toggle('card3k', state.style === 'card');
   document.body.classList.toggle('card1', state.style === 'card1');
@@ -2879,7 +2943,7 @@ el('savedList').addEventListener('click', e=>{
 el('palette').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.palette = b.dataset.pal;
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   applyPalette(PALETTES[state.palette]);
   render();
 });
@@ -2895,7 +2959,7 @@ el('tint').addEventListener('input', e=>{
 el('align').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.align = b.dataset.align;
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   render();
 });
 
@@ -2929,7 +2993,7 @@ const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 el('mode').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.mode = b.dataset.mode;
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   document.body.classList.toggle('anim', state.mode === 'anim');
   pause();
   showRest();
@@ -2939,7 +3003,7 @@ el('mode').addEventListener('click', e=>{
 el('timebase').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.timebase = b.dataset.tb;
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   render();
 });
 
@@ -2950,7 +3014,7 @@ el('scene').addEventListener('click', e=>{
     state.sceneY = SCENES[state.scene].y;
     el('sceneY').value = state.sceneY; el('sceneYVal').textContent = state.sceneY;
   }
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   document.body.classList.toggle('scene', sceneOn());
   document.body.classList.toggle('has-intro', !!sceneIntro());
   curveCache.key = '';
@@ -2960,27 +3024,27 @@ el('scene').addEventListener('click', e=>{
 el('cardZone').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.cardZone = b.dataset.zone === 'on';
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   if(!player.playing) showRest();
   render();
 });
 el('cardBanner').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.cardBanner = b.dataset.banner;
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   render();
 });
 el('cardAct').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.cardAct = +b.dataset.act;
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   if(!player.playing) showRest();
   render();
 });
 el('intro').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.intro = b.dataset.intro === 'on';
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   player.frame = 0;
   render();
 });
