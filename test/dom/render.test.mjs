@@ -63,7 +63,7 @@ const previewMatchesExport = page => page.evaluate(() => {
   return {bad, checked: Math.ceil(keys.length / step)};
 });
 
-for(const scene of ['off', 's3', 'sk', 'aiz']){
+for(const scene of ['off', 's1', 's3', 'sk', 'aiz']){
   for(const intro of scene === 'off' ? ['off'] : ['off', 'on']){
     const name = scene === 'off' ? scene : `${scene}, intro ${intro}`;
     test(`${name}: sub-rectangle frames composite to a full repaint`, async () => {
@@ -94,6 +94,19 @@ test('the S&K intro ends on exactly the static scene', async () => {
     return n;
   });
   assert.equal(diff, 0, 'the handoff to the text phase would pop');
+});
+
+// Sonic 1's still is the title at the moment the text arrives, built offline.
+test('the S1 title settles onto exactly the still', async () => {
+  await setup(page, {mode: 'anim', scene: 's1', intro: 'on'});
+  const diff = await page.evaluate(() => {
+    const {W, H, scale} = gifFrames(true), rect = {x:0, y:0, w:W, h:H};
+    const a = new Uint16Array(W*H); fillIntro(a, rect, scale, 0, introLen());
+    const b = new Uint16Array(W*H); fillBackground(b, rect, scale, 0);
+    let n = 0; for(let k = 0; k < a.length; k++) if(PALETTE[a[k]].join() !== PALETTE[b[k]].join()) n++;
+    return n;
+  });
+  assert.equal(diff, 0, 'the frame the text arrives on does not match the still');
 });
 
 // AIZ is coloured per frame from palette indices, and its still is a flat image
@@ -136,8 +149,9 @@ test('the S3 opening settles onto the static scene, wink aside', async () => {
 
 test('every glyph in the table renders, in every style', async () => {
   // the title card: 22 letters decoded from the zone names, J Q W X derived, and
-  // & with eight punctuation marks and the ten digits drawn
-  for(const [style, count] of [['outline', 68], ['plain', 68], ['card', 45]]){
+  // & with eight punctuation marks and the ten digits drawn; the Sonic 1 credits:
+  // 23 letters and the 2 decoded, the rest derived
+  for(const [style, count] of [['outline', 68], ['plain', 68], ['card', 45], ['credits', 44]]){
     await setup(page, {style, text: 'X'});
     const r = await page.evaluate(async style => {
       const ta = document.getElementById('text');

@@ -101,6 +101,24 @@ after it (none are, so no animated tiles are needed).
 Mapping and DPLC files with several tables in one (`Map - Sonic.asm` has `Map_Sonic`
 and `Map_SuperSonic`) are read by `lib/sprite.mjs`, which all three scene builds share.
 
+## What build-s1 does
+
+The Sonic 1 title screen and credits face, from s1disasm. It decodes the GHZ background
+(Enigma blocks, Kosinski 256×256 chunks, the S1 layout format, `Nem_GHZ_1st`) as the 512px
+plane `GM_Title` first fills, the emblem (`Eni_Title`, whose words already carry its `$200`
+tile base), TitleSonic's eight frames and the TM, all as palette-index layers; computes the
+fade and water-cycle palettes; and writes `s1-meta.json` with the timeline's constants. It
+asserts that the page's timeline ends before the hills strip's column redraws would make
+the plane differ from that first fill.
+
+S1 mappings are macro calls (`spriteHeader` / `spritePiece x, y, w, h, tile, xflip, yflip,
+pal, pri`) rather than bytes; `lib/sprite.mjs` reads them into the same piece layout as the
+S3K ones, so one renderer draws both.
+
+The credits face comes straight off `Map_Cred`, whose pieces are commented with their
+characters, and the missing glyphs are derived and bevelled at the bottom of the file
+(`cred-atlas.png`, `cred-table.json`).
+
 ## What build-font does
 
 The one build here that is **not** a decode. The ROM has no title font at all:
