@@ -63,7 +63,7 @@ const previewMatchesExport = page => page.evaluate(() => {
   return {bad, checked: Math.ceil(keys.length / step)};
 });
 
-for(const scene of ['off', 's1', 'ghz', 's2', 's3', 'sk', 'aiz']){
+for(const scene of ['off', 's1', 'ghz', 's2', 'ehz', 's3', 'sk', 'aiz']){
   for(const intro of scene === 'off' ? ['off'] : ['off', 'on']){
     const name = scene === 'off' ? scene : `${scene}, intro ${intro}`;
     test(`${name}: sub-rectangle frames composite to a full repaint`, async () => {
@@ -131,6 +131,36 @@ test('the S2 title plays Obj0E\'s timeline and settles onto exactly the still', 
   assert.equal(r.white, '252,252,252', 'and white on it');
   assert.ok(r.masked > 0, 'Sonic is masked while he rises');
   assert.deepEqual(r.clip, [112, 176], 'on lines 112-175');
+});
+
+// Emerald Hill's still is the level standing, built offline; it is what the first frame
+// shows. With the Sonic 2 card the level waits for it: nothing but the backdrop until the
+// zone has loaded, the foreground drawn in from the bottom as the card's blue goes, and
+// the name ending where every zone name does, x 288.
+test('EHZ settles onto exactly the still, and with the S2 card waits for it', async () => {
+  await setup(page, {mode: 'anim', scene: 'ehz', intro: 'on'});
+  const diff = await page.evaluate(() => {
+    const {W, H, scale} = gifFrames(true), rect = {x:0, y:0, w:W, h:H};
+    const a = new Uint16Array(W*H); fillIntro(a, rect, scale, 0, introLen());
+    const b = new Uint16Array(W*H); fillBackground(b, rect, scale, 0);
+    let n = 0; for(let k = 0; k < a.length; k++) if(PALETTE[a[k]].join() !== PALETTE[b[k]].join()) n++;
+    return n;
+  });
+  assert.equal(diff, 0, 'the first frame does not match the still');
+  await setup(page, {mode: 'anim', scene: 'ehz', intro: 'on', style: 'card2', text: 'EMERALD HILL'});
+  const r = await page.evaluate(() => {
+    const C = S2CARD_FONT.card, keys = t => introDraws(t).map(d => d.key).join(',');
+    const fgClip = t => (introDraws(t).find(d => d.key === 'fg') || {}).clip;
+    const L = layout(), name = cardItems(C.tl[C.rest], L).filter(it => it.glyph);
+    return {rest: C.rest, frames: textFrames().length, before: keys(C.objsFrom - 1), firstReveal: fgClip(70),
+            mainClip: fgClip(C.mainFrom), right: Math.max(...name.map(it => it.x + it.glyph[2]))};
+  });
+  assert.equal(r.rest, 45, 'the name lands 45 frames in');
+  assert.equal(r.frames, 134, 'and the card is gone 133 frames in');
+  assert.equal(r.before, 'backdrop', 'nothing but the backdrop until the zone loads');
+  assert.deepEqual(r.firstReveal, [0, 193], 'the foreground comes in from the bottom, block-aligned');
+  assert.equal(r.mainClip, null, 'and is whole once the card\'s background has gone');
+  assert.equal(r.right, 288, 'the name ends where every zone name does');
 });
 
 // GHZ's still is the level faded in, built offline; it must meet the first frame
@@ -201,7 +231,7 @@ test('every glyph in the table renders, in every style', async () => {
   // 23 letters and the 2 decoded, the rest derived; the Sonic 2 credits: 26 letters,
   // 1 2 9 and five marks decoded, the rest drawn
   for(const [style, count] of [['outline', 68], ['plain', 68], ['card', 45], ['credits', 44], ['card1', 44], ['logo', 43],
-                               ['credits2', 46]]){
+                               ['credits2', 46], ['card2', 44]]){
     await setup(page, {style, text: 'X'});
     const r = await page.evaluate(async style => {
       const ta = document.getElementById('text');
@@ -297,7 +327,8 @@ test('the S1 logo takes the emblem\'s place, and its shadows lean to the centre'
 // the export, so it needs the same two invariants the scenes have.
 for(const opts of [{scene: 'aiz', intro: 'on'}, {scene: 'off', intro: 'off'}, {scene: 's1', intro: 'on', style: 'card1'},
                    {scene: 'ghz', intro: 'on', style: 'card1'}, {scene: 's1', intro: 'on', style: 'logo'},
-                   {scene: 'off', intro: 'off', style: 'logo'}, {scene: 's2', intro: 'on', style: 'credits2'}]){
+                   {scene: 'off', intro: 'off', style: 'logo'}, {scene: 's2', intro: 'on', style: 'credits2'},
+                   {scene: 'ehz', intro: 'on', style: 'card2'}, {scene: 'off', intro: 'off', style: 'card2'}]){
   test(`title-card text, ${opts.scene}: preview matches export, sub-rects composite cleanly`, async () => {
     await setup(page, {mode: 'anim', style: 'card', text: 'ANGEL ISLAND\nZONE', ...opts});
     const p = await previewMatchesExport(page);

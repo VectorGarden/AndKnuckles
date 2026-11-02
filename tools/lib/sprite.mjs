@@ -99,6 +99,29 @@ export function parseS1MapFrames(text){
   });
 }
 
+/* DPLCs written the same way (s2disasm):
+
+       DPLC_Foo:  mappingsTable
+                  mappingsTableEntry.w  .frame0
+       .frame0:   dplcHeader
+                  dplcEntry  count, offset
+
+   Per frame, the [count, offset] pairs, in tiles. */
+export function parseMacroDplcFrames(text){
+  const blocks = new Map(), order = [];
+  let cur = null;
+  for(const raw of text.split('\n')){
+    const line = raw.replace(/;.*/, '');
+    const entry = /mappingsTableEntry\.w\s+(\S+)/.exec(line);
+    if(entry){ order.push(entry[1]); continue; }
+    const label = /^(\.?\w+):/.exec(line);
+    if(label){ cur = []; blocks.set(label[1], cur); }
+    const e = /dplcEntry\s+(.+)/.exec(line);
+    if(e && cur) cur.push(e[1].split(',').map(num));
+  }
+  return order.map(l => { if(!blocks.has(l)) throw new Error('DPLC frame ' + l + ' not found'); return blocks.get(l); });
+}
+
 /* One frame as a cropped image of line*16 + colour (0 transparent), with its
    offset from the object's origin. `base`, `line` and `pri` are the object's
    art_tile split up: tile numbers are relative to `art`, so a DPLC frame's art

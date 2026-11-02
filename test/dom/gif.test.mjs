@@ -54,6 +54,7 @@ const cases = [
   {name: 'S1 title',      opts: {mode: 'anim', scene: 's1', intro: 'on', style: 'credits'}},
   {name: 'GHZ, S1 card',  opts: {mode: 'anim', scene: 'ghz', intro: 'on', style: 'card1'}},
   {name: 'S2 title',      opts: {mode: 'anim', scene: 's2', intro: 'on', style: 'credits2'}},
+  {name: 'EHZ, S2 card',  opts: {mode: 'anim', scene: 'ehz', intro: 'on', style: 'card2'}},
   {name: 'S3 title',        opts: {mode: 'anim', scene: 's3'}},
   {name: 'S3, intro on',   opts: {mode: 'anim', scene: 's3', intro: 'on'}},
   {name: 'S&K, intro on',   opts: {mode: 'anim', scene: 'sk', intro: 'on'}},

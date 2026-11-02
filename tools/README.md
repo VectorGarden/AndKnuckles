@@ -21,7 +21,7 @@ The steps underneath, if you want to run one on its own:
 node tools/build-sk-assets.mjs      # rom/ -> out/  (17 PNGs + intro-meta.json)
 node tools/build-s3-assets.mjs      # rom/ -> out/  (background + banner sheet)
 node tools/build-s1-assets.mjs      # rom/ -> out/  (Sonic 1: title, GHZ, credits, card, logo)
-node tools/build-s2-assets.mjs      # rom/ -> out/  (Sonic 2: title and credit font)
+node tools/build-s2-assets.mjs      # rom/ -> out/  (Sonic 2: title, credit font, card, EHZ)
 node tools/build-font.mjs           # font/ -> out/ (sprite font atlas + glyph table)
 node tools/embed-assets.mjs         # out/  -> src/generated/assets.js
 node tools/build-page.mjs           # src/  -> index.html
@@ -151,6 +151,23 @@ palette has settled by the time the text arrives.
 The credit font comes off `creditText`'s character map: each letter is an upper-case code
 and a lower-case one, two tiles. The glyphs the game never spells are drawn
 (`s2cred-atlas.png`, `s2cred-table.json`).
+
+**The title card.** The letters come from the title-card font at the offsets its character map
+gives, plus E N O Z from the card's own art. The parts (ZONE, the act numbers, SONIC THE
+HEDGEHOG, the stripes, and the three fills) come from `MapUnc_TitleCards`, which is excerpted
+unchanged into `rom/` because it sits inline in `s2.asm`.
+
+`Obj34` is run in slot order, and every frame's state goes into `s2card-table.json`. That state
+covers the fill rows and columns, each sprite's x, and where the level has been drawn over the
+blue. The hold lasts until the zone's pattern-load requests would have finished, at 6 tiles a
+frame, using the tile counts from the Nemesis headers.
+
+**Emerald Hill.** The zone's Kosinski art, blocks, chunks and act 1 layout are drawn at the
+start camera (0, `$22F`). The foreground is split by priority, and the background is drawn the
+way `DrawInitialBG` draws it. `APM_EHZ` is patched into the block table, and the flower cells it
+brings on screen are kept as overlays per `Animated_EHZ` frame. Sonic, Tails, his tails and the
+rings are rendered from their DPLC-loaded sheets and ring art, along with the palettes the card
+and the level go through (`ehz-*`).
 
 ## What build-font does
 

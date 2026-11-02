@@ -24,8 +24,9 @@ import path from 'path';
 import {fileURLToPath} from 'url';
 import {eniDecode} from './lib/enigma.mjs';
 import {nemDecode} from './lib/nemesis.mjs';
+import {kosDecode} from './lib/kosinski.mjs';
 import {encodeIndexedPng} from './lib/png.mjs';
-import {parseS1MapFrames} from './lib/sprite.mjs';
+import {parseS1MapFrames, parseMacroDplcFrames, renderFrame} from './lib/sprite.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const D    = path.join(HERE, 'rom') + path.sep;
@@ -442,3 +443,358 @@ fs.writeFileSync(OUT + 's2cred-atlas.png', encodeIndexedPng(catlas, CW, 8, credP
 fs.writeFileSync(OUT + 's2cred-table.json', JSON.stringify(ctable));
 console.log(`s2cred-atlas.png ${CW}x8  ${corder.length} glyphs (${corder.filter(c => cglyphs[c].from === 'drawn').join('')} drawn)`);
 console.log(`s2-meta.json     ${fs.statSync(OUT + 's2-meta.json').size}B, ${FRAMES} frames, ${pals.length} palettes`);
+
+
+// ==== the title card ==================================================================================
+// Obj34 over ArtNem_TitleCard (tiles $580-$5DD: E N O Z, the act numbers, SONIC THE HEDGEHOG, the red
+// stripes and the three fill tiles) and the letter font ArtNem_TitleCard2, which LoadTitleCard copies
+// into VRAM a zone's letters at a time. Palette lines 0 and 1 are Pal_BGND's, loaded for the card.
+const cardArt = new Uint8Array(0x800 * 32);
+cardArt.set(nemDecode(rd('S2_TitleCard.nem')), 0x580 * 32);
+const letterArt = nemDecode(rd('S2_TitleCard2.nem'));
+const cardPal = [...words(rd('S2_Pal_SonicAndTails.bin')), ...words(rd('S2_Pal_SonicAndTails2.bin'))];
+// a column-major block of tiles, 16 rows tall: what a 2-tall sprite piece draws
+function block(art, t, wt, ht = 2){
+  const w = wt*8, h = ht*8, px = new Array(w*h).fill(0);
+  for(let cx = 0; cx < wt; cx++) for(let cy = 0; cy < ht; cy++) for(let y = 0; y < 8; y++) for(let x = 0; x < 8; x++){
+    const b = art[(t + cx*ht + cy)*32 + y*4 + (x >> 1)];
+    px[(cy*8 + y)*w + cx*8 + x] = x & 1 ? b & 15 : b >> 4;
+  }
+  return {w, px};
+}
+// The font's letters, at the offsets the title-card charset gives them -- each 2x2 tiles, I 1x2, M
+// and W 3x2 -- and E N O Z, which the base art holds for ZONE. B, J, Q, V and X spell no zone, but
+// they are in the font.
+const kglyphs = {};
+const LETTER = {A: 0, B: 4, C: 8, D: 0xC, F: 0x10, G: 0x14, H: 0x18, I: 0x1C, J: 0x1E, K: 0x22, L: 0x26, M: 0x2A,
+                P: 0x30, Q: 0x34, R: 0x38, S: 0x3C, T: 0x40, U: 0x44, V: 0x48, W: 0x4C, X: 0x52, Y: 0x56};
+for(const [c, t] of Object.entries(LETTER)) kglyphs[c] = {...block(letterArt, t, c === 'I' ? 1 : c === 'M' || c === 'W' ? 3 : 2), from: 'card'};
+for(const [c, t] of Object.entries({E: 0x580, N: 0x584, O: 0x588, Z: 0x58C})) kglyphs[c] = {...block(cardArt, t, 2), from: 'card'};
+kglyphs['.'] = {...block(letterArt, 0x5A, 1), from: 'card'};
+// The face is white (6), anti-aliased grey (7, 8), with a black drop shadow two pixels right and two
+// down wherever the face is not. Checked against the real letters; the drawn glyphs get it too.
+const kshadow = (rows) => {
+  const w = rows[0].length, h = 16, px = new Array(w*h).fill(0);
+  const face = (x, y) => y >= 0 && y < rows.length && x >= 0 && x < w && rows[y][x] !== '.';
+  for(let y = 0; y < h; y++) for(let x = 0; x < w; x++){
+    if(face(x, y)) px[y*w + x] = +rows[y][x] || 6;
+    else if(face(x - 2, y - 2)) px[y*w + x] = 1;
+  }
+  return {w, px};
+};
+{
+  let hit = 0, all = 0;
+  for(const c of 'ADEHLT'){
+    const g = kglyphs[c], rows = Array.from({length: 16}, (_, y) => Array.from({length: g.w}, (_, x) => [6, 7, 8].includes(g.px[y*g.w + x]) ? '6' : '.').join(''));
+    const d = kshadow(rows);
+    for(let i = 0; i < g.px.length; i++) if(g.px[i] === 1){ all++; if(d.px[i] === 1) hit++; }
+  }
+  if(hit / all < 0.85) throw new Error(`the title-card shadow rule matches only ${hit}/${all} real shadow pixels`);
+  console.log(`  card: shadow rule matches ${hit}/${all} of the real letters' shadow pixels`);
+}
+// The letters are a thick stem with a thin line beside it, and one-pixel bars; the digits and marks
+// are drawn the same way, square like E, L and T. 0 is O.
+const kdrawn = {
+  1: ['..6666.6', '.66666.6', '666666.6', '..6666.6', '..6666.6', '..6666.6', '..6666.6', '..6666.6', '..6666.6', '..6666.6', '..6666.6', '..6666.6', '..6666.6', '.6666666'],
+  2: ['66666666666666', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '66666666666666', '6666.6........', '6666.6........', '6666.6........', '6666.6........', '6666.6........', '6666.6........', '66666666666666'],
+  3: ['66666666666666', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '..666666666666', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '66666666666666'],
+  4: ['6666.6..6666.6', '6666.6..6666.6', '6666.6..6666.6', '6666.6..6666.6', '6666.6..6666.6', '6666.6..6666.6', '66666666666666', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6'],
+  5: ['66666666666666', '6666.6........', '6666.6........', '6666.6........', '6666.6........', '6666.6........', '66666666666666', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '66666666666666'],
+  6: ['66666666666666', '6666.6........', '6666.6........', '6666.6........', '6666.6........', '6666.6........', '66666666666666', '6666.6..6666.6', '6666.6..6666.6', '6666.6..6666.6', '6666.6..6666.6', '6666.6..6666.6', '6666.6..6666.6', '66666666666666'],
+  7: ['66666666666666', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........6666.6', '........666666'],
+  8: ['66666666666666', '6666.6..6666.6', '6666.6..6666.6', '6666.6..6666.6', '6666.6..6666.6', '6666.6..6666.6', '66666666666666', '6666.6..6666.6', '6666.6..6666.6', '6666.6..6666.6', '6666.6..6666.6', '6666.6..6666.6', '6666.6..6666.6', '66666666666666'],
+  '!': ['6666.6', '6666.6', '6666.6', '6666.6', '6666.6', '6666.6', '6666.6', '6666.6', '6666.6', '......', '......', '......', '666666', '666666'],
+  '?': ['66666666666666', '6666.6..6666.6', '6666.6..6666.6', '........6666.6', '........6666.6', '........6666.6', '....6666666666', '....6666.6....', '....6666.6....', '....6666.6....', '..............', '..............', '....666666....', '....666666....'],
+  "'": ['6666.6', '6666.6', '6666.6', '6666.6', '6666.6'],
+  ',': ['......', '......', '......', '......', '......', '......', '......', '......', '......', '......', '......', '......', '666666', '666666', '..66..', '.66...'],
+  '-': ['........', '........', '........', '........', '........', '........', '66666666', '66666666'],
+  ':': ['......', '......', '......', '666666', '666666', '......', '......', '......', '......', '......', '......', '......', '666666', '666666'],
+  '&': ['.6666666666...', '.6666.6.666...', '.6666.6.666...', '..666666666...', '6666.6.666....', '6666.6..666...', '6666.6...666.6', '6666.6....6666', '6666.6....666.', '6666.6...6666.', '6666.6..666666', '6666.6.666..66', '66666666666..6', '66666666666...'],
+};
+kdrawn[9] = kdrawn[6].slice().reverse().map(r => [...r].reverse().join(''));
+for(const [c, rows] of Object.entries(kdrawn)) kglyphs[c] = {...kshadow(rows), from: 'drawn'};
+kglyphs[0] = {...kglyphs.O, from: 'card'};
+
+const korder = Object.keys(kglyphs).sort();
+const KW = korder.reduce((a, c) => a + kglyphs[c].w + 2, 0), katlas = new Uint8Array(KW * 16);
+const ktable = {rowh: 16, space: 16, glyphs: {}, parts: {}};
+let kx = 0;
+for(const c of korder){
+  const g = kglyphs[c];
+  for(let y = 0; y < 16; y++) for(let x = 0; x < g.w; x++) katlas[y*KW + kx + x] = g.px[y*g.w + x];
+  ktable.glyphs[c] = [kx, 0, g.w, 16, 0];
+  kx += g.w + 2;
+}
+const cardRgb = cardPal.map(rgb);
+fs.writeFileSync(OUT + 's2card-atlas.png', encodeIndexedPng(katlas, KW, 16, cardRgb.slice(0, 16), 0));
+// ZONE ($11), the act numbers ($12-$14), SONIC THE HEDGEHOG ($15) and the red stripes ($16), from
+// MapUnc_TitleCards; and the three tiles DrawLevelTitleCard fills plane A with -- blue $5DA, red
+// $5D8 stacked down a column, yellow $5DC -- as the areas they cover.
+// (the zone-name frames come first, through zoneOffsetTableEntry, which this skips: the six after them)
+const cframes = parseS1MapFrames(rd('S2_TitleCards_map.asm').toString());
+if(cframes.length !== 6) throw new Error('expected the six frames after the zone names');
+function writePart(name, r){
+  fs.writeFileSync(OUT + `s2card-${name}.png`, encodeIndexedPng(r.px, r.w, r.h, cardRgb, 0));
+  ktable.parts[name] = {ox: r.ox, oy: r.oy, w: r.w, h: r.h};
+}
+for(const [name, f] of [['zone', 0], ['act1', 1], ['act2', 2], ['act3', 3], ['sth', 4], ['stripes', 5]])
+  writePart(name, renderFrame(cframes[f], cardArt));
+const fill = (t, w, h, vertical, line) => {
+  const px = new Uint8Array(w*h);
+  for(let y = 0; y < h; y++) for(let x = 0; x < w; x++){
+    const tt = vertical ? t + ((y >> 3) & 1) : t + ((x >> 3) & 1), b = cardArt[tt*32 + (y & 7)*4 + ((x & 7) >> 1)];
+    const c = x & 1 ? b & 15 : b >> 4;
+    px[y*w + x] = c ? line*16 + c : 0;
+  }
+  return {px, w, h, ox: 0, oy: 0};
+};
+writePart('blue', fill(0x5DA, 320, 224, false, 0));
+writePart('red', fill(0x5D8, 112, 224, true, 0));
+writePart('yellow', fill(0x5DC, 320, 64, false, 1));
+
+// ---- Obj34, run frame by frame -----------------------------------------------------------------
+// Six objects from Obj34_TitleCardData, in slot order: the zone name, ZONE, the act number, the blue
+// background, the yellow bottom part, the red left part. Each waits its count (Obj34_Wait), then
+// moves $10 a frame to its target; the background and the two bands also write plane A, which
+// DrawLevelTitleCard turns into rows and columns of their fill tiles. Sprites show only while their
+// x is within VDP $0-$200. Coordinates here are screen pixels, sprite x less 128.
+const PLC_TILES = [24, 8, 20, 28, 38, 22, 16, 60, 32, 34];   // PlrList_Ehz1 then PlrList_Std2, from each file's header
+const plcFrames = PLC_TILES.reduce((a, n) => a + Math.ceil(n / 6), 0);  // ProcessDPLC: 6 patterns a frame
+const cam = {x: 0, y: 0x28F - 0x60};                     // EHZ1's start, less $A0 and $60, clamped at 0
+const card = (() => {
+  const o = {
+    name:   {x: 448, to: 160, from: 448, wait: 0x1B, first: 2},
+    zone:   {x: -88, to: 200, from: -88, wait: 0x1C, first: 1},
+    act:    {x: -24, to: 264, from: -24, wait: 0x1C, first: 1},
+    bottom: {x: 552, to: 232, from: 552, wait: 8, first: 1, loc: 0x26},
+    left:   {x: -128, to: 112, from: -128, wait: 0x15, first: 1, loc: 0},
+  };
+  let bgLoc = 0, bgRows = 0, yel = null, red = 0, reveal = null, phase = 'in';
+  const shown = {};
+  const tl = [];
+  const vis = x => x + 128 >= 0 && x + 128 <= 0x200;
+  const towards = (e, to, v) => { if(e.x !== to){ e.x += e.x < to ? v : -v; } shown[e.k] = vis(e.x); };
+  const waitDone = e => { if(e.wait > 1){ e.wait--; return false; } e.wait = 1; return true; };
+  for(const [k, e] of Object.entries(o)) e.k = k;
+  const record = (extra = {}) => tl.push({bg: bgRows, yel, red, reveal,
+    ...Object.fromEntries(Object.entries(o).filter(([k]) => shown[k] && o[k].alive !== false).map(([k, e]) => [k, e.x])), ...extra});
+  tl.push({none: 1});                                    // frame 0: before the card exists
+  let f = 0, nameAt = -1, rest = -1;
+  for(;;){                                              // Level_TtlCard
+    f++;
+    for(const k of ['name', 'zone', 'act']){ const e = o[k]; if(f < e.first) continue; shown[k] = false; if(waitDone(e)) towards(e, e.to, 16); }
+    if(bgLoc !== 0x10){ bgLoc++; bgRows = bgLoc*2; }
+    { const e = o.bottom; shown.bottom = false;
+      if(waitDone(e)){ if(e.loc >= 0){ yel = e.loc; e.loc -= 2; if(e.loc === 6) e.loc = -1; } towards(e, e.to, 16); } }
+    { const e = o.left; shown.left = false;
+      if(waitDone(e)){ if(e.loc >= 0){ e.loc += 2; red = e.loc; if(e.loc === 0xE) e.loc = -1; } towards(e, e.to, 16); } }
+    record();
+    if(o.name.x === o.name.to && rest < 0) rest = tl.length - 1;
+    if(o.name.x === o.name.to && f >= 1 + plcFrames) break;
+  }
+  const loaded = tl.length;
+  record();                                              // the WaitForVint before Hud_Base
+  // the level loads here, in no frames this page models; then the card goes
+  o.left.loc = 0xA; let bottomOut = false, bgOut = false, bgDone = false;
+  const objsFrom = tl.length;
+  while(!bgDone){
+    // slot order: the background, then the bottom part, then the left part
+    if(bgOut){
+      bgLoc = bgLoc === 'init' ? 0xF0 - 0x20 : bgLoc - 0x20;
+      if(bgLoc === -0x30) bgDone = true; else reveal = bgLoc - (cam.y & 15);
+    }
+    if(bottomOut && o.bottom.alive !== false){
+      const e = o.bottom;
+      if(e.loc === 0x28){ bgOut = true; bgLoc = 'init'; e.alive = false; shown.bottom = false; yel = null; }
+      else { yel = e.loc + 4 >= 40 ? null : e.loc + 4; e.loc += 4; towards(e, e.from, 32); }
+    }
+    if(o.left.alive !== false){
+      const e = o.left;
+      if(e.loc < 0){ bottomOut = true; o.bottom.loc = 0; e.alive = false; shown.left = false; }
+      else { red = e.loc; yel = Math.min(yel ?? 40, e.loc); e.loc -= 4; if(e.loc === -2) e.loc = 0; towards(e, e.from, 32); }
+    }
+    record({objs: 1});
+  }
+  const mainFrom = tl.length;
+  for(const k of ['name', 'zone', 'act']){ o[k].hold = 0x2D; }
+  while(['name', 'zone', 'act'].some(k => o[k].alive !== false)){
+    for(const k of ['name', 'zone', 'act']){
+      const e = o[k]; if(e.alive === false) continue;
+      if(e.hold){ e.hold--; shown[k] = vis(e.x); continue; }
+      if(e.x === e.from){ e.alive = false; shown[k] = false; continue; }
+      e.x += e.x < e.from ? 32 : -32;
+      if(!vis(e.x)){ e.alive = false; shown[k] = false; continue; }
+      shown[k] = true;
+    }
+    record({objs: 1, main: tl.length - mainFrom});
+  }
+  return {tl, rest, loaded, objsFrom, mainFrom, plcFrames};
+})();
+ktable.card = {...card, name: {right: 128, y: 56}, zone: {y: 80}, act: {y: 80}, sth: {y: 160}, stripes: {y: 112}};
+fs.writeFileSync(OUT + 's2card-table.json', JSON.stringify(ktable));
+console.log(`s2card-atlas.png ${KW}x16  ${korder.length} glyphs (${korder.filter(c => kglyphs[c].from === 'drawn').join('')} drawn); ` +
+            `${card.tl.length} card frames, at rest on ${card.rest}, level from ${card.loaded}`);
+
+
+// ==== Emerald Hill Zone act 1 ==========================================================================
+// The level at its start: Sonic at ($60,$28F), Tails $20 behind and 4 lower, the camera at (0,$22F).
+// EHZ_HTZ art (Kosinski) at tile 0; 16x16 blocks of four tile words; 128x128 chunks of 8x8 block words
+// (bits 0-9 the block, 10-11 its flips); the layout's rows alternate foreground and background, $80
+// bytes each. Pal_EHZ is lines 1-3, over Pal_BGND's line 0.
+const kos = f => Buffer.from(kosDecode(rd(f)).data);
+const lvArt = kos('S2_EHZ_Art.kos'), lvBlocks = kos('S2_EHZ_Blocks.kos'), lvChunks = kos('S2_EHZ_Chunks.kos'), lvLayout = kos('S2_EHZ1_Layout.kos');
+const lvVram = new Uint8Array(0x800 * 32); lvVram.set(lvArt, 0);
+// LoadAnimatedBlocks: APM_EHZ's blocks go in at the end of the table (Block_Table + $1800 - their
+// length), drawn from the tiles Animated_EHZ reloads. make_block_tile(tile, xflip, yflip, pal, pri).
+const mbt = (t, xf, yf, pal, pri) => (pri << 15) | (pal << 13) | (yf << 12) | (xf << 11) | t;
+const MTN = 0x500, PULSE = 0x39C, CHECK = 0x158, FL = [0x394, 0x396, 0x398, 0x39A];
+const APM = [
+  ...[[0, 4, 1, 5], [8, 0xC, 9, 0xD], [0x10, 0x14, 0x11, 0x15], [2, 6, 3, 7], [0xA, 0xE, 0xB, 0xF], [0x12, 0x16, 0x13, 0x17]]
+     .flatMap(q => q.map(o => mbt(MTN + o, 0, 0, 2, 0))),
+  ...[[0x18, 0x1A, 0x19, 0x1B], [0x1C, 0x1E, 0x1D, 0x1F]].flatMap(q => q.map(o => mbt(MTN + o, 0, 0, 3, 0))),
+  mbt(PULSE, 0, 0, 2, 0), mbt(PULSE, 1, 0, 2, 0), mbt(PULSE + 1, 0, 0, 2, 0), mbt(PULSE + 1, 1, 0, 2, 0),
+  mbt(CHECK, 0, 0, 2, 0), mbt(PULSE, 0, 0, 2, 0), mbt(CHECK + 1, 0, 0, 2, 0), mbt(PULSE + 1, 0, 0, 2, 0),
+  mbt(PULSE, 1, 0, 2, 0), mbt(CHECK, 1, 0, 2, 0), mbt(PULSE + 1, 1, 0, 2, 0), mbt(CHECK + 1, 1, 0, 2, 0),
+  ...FL.flatMap((t, i) => [mbt(t, 0, 0, 3, i & 1), mbt(t, 1, 0, 3, i & 1), mbt(t + 1, 0, 0, 3, i & 1), mbt(t + 1, 1, 0, 3, i & 1)]),
+];
+const blockWords = Array.from({length: 0x300*4}, (_, i) => i*2 < lvBlocks.length ? lvBlocks.readUInt16BE(i*2) : 0);
+const apmAt = (0x1800 - APM.length*2) / 2;
+if(apmAt*2 < lvBlocks.length) throw new Error('the animated blocks would overwrite real ones');
+APM.forEach((w, i) => { blockWords[apmAt + i] = w; });
+// Animated_EHZ: [the art, its VRAM tile, the frames as [tile offset, duration]]. Each script's first
+// frame is loaded by AniArt_Load before the level starts; then Dynamic_Normal steps it once a frame
+// of the main loop -- a frame lasts its duration + 1.
+const ANIM = [
+  {art: 'S2_EHZ_Flowers1.unc', tile: FL[0], frames: [[0, 0x7F], [2, 0x13], [0, 7], [2, 7], [0, 7], [2, 7]]},
+  {art: 'S2_EHZ_Flowers2.unc', tile: FL[1], frames: [[2, 0x7F], [0, 0xB], [2, 0xB], [0, 0xB], [2, 5], [0, 5], [2, 5], [0, 5]]},
+  {art: 'S2_EHZ_Flowers3.unc', tile: FL[2], frames: [[0, 7], [2, 7]]},
+  {art: 'S2_EHZ_Flowers4.unc', tile: FL[3], frames: [[0, 0x7F], [2, 7], [0, 7], [2, 7], [0, 7], [2, 0xB], [0, 0xB], [2, 0xB]]},
+  {art: 'S2_EHZ_PulseBall.unc', tile: PULSE, frames: [[0, 0x17], [2, 9], [4, 0xB], [6, 0x17], [4, 0xB], [2, 9]]},
+];
+for(const a of ANIM){ a.sheet = rd(a.art); lvVram.set(a.sheet.subarray(a.frames[0][0]*32, (a.frames[0][0] + 2)*32), a.tile*32); }
+const animOf = t => ANIM.findIndex(a => t >= a.tile && t < a.tile + 2);
+function lvWord(x, y, bg){
+  const id = lvLayout[(y >> 7)*0x100 + (bg ? 0x80 : 0) + (x >> 7)];
+  const cw = lvChunks.readUInt16BE(id*128 + ((y >> 4) & 7)*16 + ((x >> 4) & 7)*2), b = cw & 0x3FF;
+  let qx = (x >> 3) & 1, qy = (y >> 3) & 1;
+  if(cw & 0x400) qx ^= 1; if(cw & 0x800) qy ^= 1;
+  let w = blockWords[b*4 + qy*2 + qx];
+  if(cw & 0x400) w ^= 0x800; if(cw & 0x800) w ^= 0x1000;
+  return w;
+}
+function lvPixel(w, X, Y){
+  const t = w & 0x7FF, sx = w & 0x800 ? 7 - (X & 7) : X & 7, sy = w & 0x1000 ? 7 - (Y & 7) : Y & 7;
+  const b = lvVram[t*32 + sy*4 + (sx >> 1)], c = sx & 1 ? b & 15 : b >> 4;
+  return c ? ((w >> 13) & 3)*16 + c : 0;
+}
+// plane A: the foreground at the camera, split by priority. Cells drawn from an animated script's
+// tiles are left out and kept, per script and frame, as overlays the page swaps.
+const fgLo = new Uint8Array(W*H), fgHi = new Uint8Array(W*H), animCells = [];
+for(let y = 0; y < H; y++) for(let x = 0; x < W; x++){
+  const X = x + cam.x, Y = y + cam.y, w = lvWord(X, Y, false), a = animOf(w & 0x7FF);
+  if(a >= 0){ animCells.push({x, y, w, a, X, Y}); continue; }
+  const v = lvPixel(w, X, Y);
+  if(v) (w & 0x8000 ? fgHi : fgLo)[y*W + x] = v;
+}
+writeIdx('ehz-fg.png', fgLo, W, H);
+writeIdx('ehz-fg-hi.png', fgHi, W, H);
+const ehzAnim = [];
+for(const ai of new Set(animCells.map(c => c.a))){
+  const a = ANIM[ai], cells = animCells.filter(c => c.a === ai);
+  const x0 = Math.min(...cells.map(c => c.x)), y0 = Math.min(...cells.map(c => c.y));
+  const w = Math.max(...cells.map(c => c.x)) - x0 + 1, h = Math.max(...cells.map(c => c.y)) - y0 + 1;
+  const layers = {};
+  for(const off of new Set(a.frames.map(f => f[0]))){
+    lvVram.set(a.sheet.subarray(off*32, (off + 2)*32), a.tile*32);
+    for(const hi of [0, 1]){
+      const px = new Uint8Array(w*h);
+      for(const c of cells) if(!!(c.w & 0x8000) === !!hi){ const v = lvPixel(c.w, c.X, c.Y); if(v) px[(c.y - y0)*w + c.x - x0] = v; }
+      if(!px.some(v => v)) continue;
+      const name = `ehz-anim${ai}-${off}-${hi}.png`;
+      writeIdx(name, px, w, h);
+      layers[`${off}-${hi}`] = name;
+    }
+  }
+  lvVram.set(a.sheet.subarray(a.frames[0][0]*32, (a.frames[0][0] + 2)*32), a.tile*32);
+  ehzAnim.push({x: x0, y: y0, frames: a.frames, layers});
+}
+console.log(`  EHZ: animated tiles on screen from ${ehzAnim.length} script(s): ${[...new Set(animCells.map(c => c.a))].join(', ')}`);
+// plane B: DrawInitialBG draws 512px of background from the BG camera, (0,0) here (InitCam_EHZ), and
+// nothing redraws it while the camera stands still.
+const ehzBg = new Uint8Array(BG_W * H);
+for(let y = 0; y < H; y++) for(let x = 0; x < BG_W; x++){
+  const w = lvWord(x, y, true);
+  if(w & 0x8000) throw new Error('a background tile is high priority');
+  if(animOf(w & 0x7FF) >= 0) throw new Error('animated tiles in the background');
+  const v = lvPixel(w, x, y); if(v) ehzBg[y*BG_W + x] = v;
+}
+writeIdx('ehz-bg.png', ehzBg, BG_W, H);
+
+// ---- the sprites ----------------------------------------------------------------------------------
+// Sonic and Tails load their art per frame (DPLCs) from their uncompressed sheets; Tails' tails are
+// his own sheet's frames 9-$D. All three on palette line 0, low priority. Rings: ArtNem_Ring on line 1.
+function dplcFrame(map, dplc, sheet, f, line){
+  const tiles = [];
+  for(const [n, off] of dplc[f]) for(let i = 0; i < n; i++) tiles.push(sheet.subarray((off + i)*32, (off + i + 1)*32));
+  const art = new Uint8Array(tiles.length * 32); tiles.forEach((t, i) => art.set(t, i*32));
+  return renderFrame(map[f], art, {line});
+}
+const sonicMap = parseS1MapFrames(rd('S2_Sonic_map.asm').toString()), sonicDplc = parseMacroDplcFrames(rd('S2_Sonic_dplc.asm').toString());
+const tailsMap = parseS1MapFrames(rd('S2_Tails_map.asm').toString()), tailsDplc = parseMacroDplcFrames(rd('S2_Tails_dplc.asm').toString());
+const sonicSheet = rd('S2_Sonic.unc'), tailsSheet = rd('S2_Tails.unc');
+const ehzSprites = {}, ehzSpritePx = {};
+const spr = (name, r) => { writeIdx(`ehz-${name}.png`, r.px, r.w, r.h); ehzSprites[name] = {ox: r.ox, oy: r.oy}; ehzSpritePx[name] = r; };
+spr('sonic', dplcFrame(sonicMap, sonicDplc, sonicSheet, 1, 0));             // SonAni_Wait's frame for its first 180
+// TailsAni_Wait: duration 7, frames 1 x10, 3, 2 (a blink), 1 ...; Obj05Ani_Swish: duration 7, 9-$D
+const TAILS_WAIT = [1,1,1,1,1,1,1,1,1,1,3,2,1,1,1,1,1,1,1,1,3,2,1,1,1,1,1,1,1,1,1,5];
+for(const f of new Set(TAILS_WAIT)) spr(`tails${f}`, dplcFrame(tailsMap, tailsDplc, tailsSheet, f, 0));
+for(const f of [9, 10, 11, 12, 13]) spr(`tail${f}`, dplcFrame(tailsMap, tailsDplc, tailsSheet, f, 0));
+const ringArt = nemDecode(rd('S2_Ring.nem')), ringMap = parseS1MapFrames(rd('S2_Ring_map.asm').toString());
+for(const f of [0, 1, 2, 3]) spr(`ring${f}`, renderFrame(ringMap[f], ringArt, {line: 1}));
+// Rings_EHZ_1 puts three in a row at ($124,$240), 24 apart: the first two are on screen. BuildRings'
+// +8 and -8 cancel, so each is drawn at its position less the camera's.
+const rings = [0x124, 0x13C].map(x => ({x: x - cam.x, y: 0x240 - cam.y}));
+
+// ---- palettes ---------------------------------------------------------------------------------------
+// While the card is up, Pal_BGND is lines 0-1 and lines 2-3 are still black from the fade; the level
+// brings Pal_EHZ's lines 1-3 (line 1 is the card's line 1 again). In the level PalCycle_EHZ steps the
+// water colours -- line 1, colours 3-4 and 14-15 -- every 8 frames through four states.
+const lvPal = words(rd('S2_Pal_EHZ.bin')), water = words(rd('S2_Pal_EHZWater.bin'));
+if(lvPal.length !== 48 || water.length !== 16) throw new Error('unexpected EHZ palette sizes');
+const phex = p => p.map(c => c.toString(16).padStart(3, '0')).join('');
+const ehzPals = [phex([...cardPal, ...new Array(32).fill(0)])];
+for(let k = 0; k < 4; k++){
+  const p = [...cardPal.slice(0, 16), ...lvPal];
+  [p[16 + 3], p[16 + 4], p[16 + 14], p[16 + 15]] = water.slice(k*4, k*4 + 4);
+  ehzPals.push(phex(p));
+}
+const ehzMeta = {pals: ehzPals, tailsWait: TAILS_WAIT, anim: ehzAnim, sprites: ehzSprites, rings, ripple,
+                 sonic: {x: 0x60 - cam.x, y: 0x28F - cam.y}, tails: {x: 0x40 - cam.x, y: 0x293 - cam.y},
+                 rippleTop: 80, rippleLines: 21, bgOutInit: card.tl.findIndex(e => e.reveal !== null && e.reveal !== undefined),
+                 objsFrom: card.objsFrom, mainFrom: card.mainFrom, cardFrames: card.tl.length};
+
+// ---- the still: the level standing, frame 0 of its own loop -------------------------------------------
+// The water lines ripple from the start of SwScrl_RippleData; the page takes the frame counter as one
+// short of a step there, so its first step back comes 8 frames on.
+{
+  const out = new Uint8Array(W*H).fill(32);
+  for(let y = 0; y < H; y++){
+    const s = y >= 80 && y < 101 ? ripple[y - 80] : 0;
+    for(let x = 0; x < W; x++){ const v = ehzBg[y*BG_W + ((x - s) & 511)]; if(v) out[y*W + x] = v; }
+  }
+  for(let i = 0; i < W*H; i++) if(fgLo[i]) out[i] = fgLo[i];
+  for(const c of animCells) if(!(c.w & 0x8000)){ const v = lvPixel(c.w, c.X, c.Y); if(v) out[c.y*W + c.x] = v; }
+  const put = (name, X, Y) => { const f = ehzSpritePx[name]; for(let y = 0; y < f.h; y++) for(let x = 0; x < f.w; x++){
+    const v = f.px[y*f.w + x], sx = X + f.ox + x, sy = Y + f.oy + y; if(v && sx >= 0 && sx < W && sy >= 0 && sy < H) out[sy*W + sx] = v; } };
+  // back to front: the rings, Tails' tails, Tails, Sonic (slot order, all priority 2 bar the rings)
+  for(const r of rings) put('ring1', r.x, r.y);
+  put('tail9', ehzMeta.tails.x, ehzMeta.tails.y);
+  put('tails1', ehzMeta.tails.x, ehzMeta.tails.y);
+  put('sonic', ehzMeta.sonic.x, ehzMeta.sonic.y);
+  for(let i = 0; i < W*H; i++) if(fgHi[i]) out[i] = fgHi[i];
+  for(const c of animCells) if(c.w & 0x8000){ const v = lvPixel(c.w, c.X, c.Y); if(v) out[c.y*W + c.x] = v; }
+  const p = ehzPals[1];
+  fs.writeFileSync(OUT + 'ehz-still.png', encodeIndexedPng(out, W, H, Array.from({length: 64}, (_, i) => rgb(parseInt(p.slice(i*3, i*3 + 3), 16))), -1));
+  console.log(`ehz-still.png    320x224  ${fs.statSync(OUT + 'ehz-still.png').size}B`);
+}
+fs.writeFileSync(OUT + 'ehz-meta.json', JSON.stringify(ehzMeta));

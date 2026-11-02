@@ -101,10 +101,10 @@ says so, because the loop will visibly jump.
 
 ## The backgrounds
 
-Six of them — **S1 title**, **GHZ**, **S2 title**, **S3 title**, **S&K title** and **AIZ intro** — any of which
+Seven of them — **S1 title**, **GHZ**, **S2 title**, **EHZ**, **S3 title**, **S&K title** and **AIZ intro** — any of which
 swaps the transparent canvas for the real thing and locks output to the Genesis frame,
-320&times;224. The S3 and S&K title screens are described here; Sonic 1, Green Hill, Sonic 2 and
-the AIZ intro have their own sections below. Text sits where the ROM puts
+320&times;224. The S3 and S&K title screens are described here; Sonic 1, Green Hill, Sonic 2,
+Emerald Hill and the AIZ intro have their own sections below. Text sits where the ROM puts
 `& KNUCKLES` — screen y 176, from banner rest `$D4` plus the `$5C` subtitle offset,
 less the `$80` sprite-space origin — and the background scrolls up 16px across the
 first 16 frames, which is `V_scroll_value` in the original making room for the
@@ -342,6 +342,47 @@ double tick.
 in the face's own style, the digits on the outlines of the real 2 and 9. Lines are spaced
 a blank tile row apart, as in the staff roll. Like the other game faces, it keeps its own
 colours: white, from the intro's palette.
+
+### The Sonic 2 title card
+
+**S2 title card** is Sonic 2's own card, `Obj34`, played the way it plays. Like the title screen,
+the build runs it frame by frame and the page plays the result back. It never depends on the
+text, which only decides where the name sits.
+
+- **Coming in:** the blue background fills plane A from the top, two rows a frame. The yellow
+  part grows left along the bottom with *SONIC THE HEDGEHOG* sliding in on it, and the red part
+  grows from the left with its stripes. Then the name, ZONE and the act number slide in at $10 a
+  frame. Each part waits its own count first.
+- **The hold:** the card holds until the zone's art has loaded. That is computed rather than
+  guessed: ten pattern-load requests, decompressed 6 tiles a frame, finish 52 frames in.
+- **Going out:** the level loads, the red and yellow give way to blue, and the blue is drawn
+  over with the level from the bottom up, 32 rows a frame. The words hold 45 frames, then leave at
+  $20 a frame.
+
+**The name is right-aligned at x 288,** where every zone name in the game ends; extra lines
+stack above it. ZONE and the act number don't move. Sonic 2 has a Metropolis act 3, so this
+card offers **Act 3** too.
+
+**The lettering** is the card's own white "broken" face, a thick stem with a thin line beside
+it, with a black drop shadow two pixels right and two down. That shadow rule matches every
+shadow pixel of the real letters. The font holds **all 26 letters**: B, J, Q, V and X spell no
+zone, but they are in it. **0** is O. The other digits and **& ! ? , ' - :** are drawn square in
+the same style, like its E, L and T, and shadowed by the same rule.
+
+It belongs on the **EHZ** scene: Emerald Hill Zone act 1 at its start. Sonic stands at
+($60, $28F) and Tails stands $20 behind him. Two rings turn at the top right, flowers dot the grass,
+the water ripples, and its colours cycle. Sonic 2 never fades a level in, so with any other
+letter style the level is simply there from the first frame. With the card it follows the card's
+timeline: nothing behind it until the zone has loaded, the foreground drawn in from the bottom
+as the blue goes, and then the level's main loop. Some details:
+
+- **The level load takes no frames here.** On hardware it takes a few, while the card holds.
+- **The flowers come from animated blocks.** They are among the blocks `LoadAnimatedBlocks`
+  patches into the block table, drawn from tiles `Animated_EHZ` reloads, so the build applies
+  the patch and keeps them as overlays the page swaps. Their first frame lasts 128 frames,
+  longer than anything here plays.
+- **The idle animations are timed from the frame the objects start.** That is Tails' wait
+  (a blink 80 frames in) and his tails' swish, a frame every 8. The HUD is left off.
 
 ## The S3 opening
 
