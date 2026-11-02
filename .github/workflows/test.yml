@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
 
@@ -33,7 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -48,3 +48,25 @@ jobs:
 
       - name: Run DOM tests
         run: node --test test/dom/*.test.mjs
+
+  go:
+    name: go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      # each Go step's test runs its JS step too and compares every file
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: tools/go/go.mod
+          cache: false
+
+      - name: Vet
+        run: go -C tools/go vet ./...
+
+      - name: Run Go tests
+        # On x86-64, lib's maths test also holds atan2, sin, cos and hypot to
+        # V8's bit for bit.
+        run: go -C tools/go test ./...

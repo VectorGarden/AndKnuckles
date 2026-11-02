@@ -8,6 +8,8 @@ rebuilt, checked, or changed.
 ```bash
 node tools/build-all.mjs            # everything, in order
 node tools/build-all.mjs --check    # verify without changing anything
+go -C tools/go run .                # the same, in Go: the same bytes
+go -C tools/go run . --check
 ```
 
 `--check` restores whatever it found and exits non-zero if the pipeline and the
@@ -254,6 +256,61 @@ and `delay`; on S3 the logo `hold`, the loop's `idle` and Tails' `x0` — is rea
 out of `index.html` and kept. AIZ has no hand-tuned numbers, so its entry is
 regenerated whole; only its text position is kept. Regenerating the art
 cannot silently undo tuning that was arrived at by eye.
+
+## The Go pipeline
+
+[`go/`](go/) is the whole pipeline again in Go: every build step, the embed and the page
+assembly. It writes the same bytes as the Node pipeline, file for file, and CI holds both
+to the committed page. It runs in about half the time (0.65s against 1.3s for a full
+`--check` here), with no dependencies outside Go's standard library.
+
+```bash
+go -C tools/go run .                 # build-all
+go -C tools/go run . --check         # build-all --check
+go -C tools/go run . s2 /tmp/out     # one step: sk s3 aiz font cardfont s1 s2 embed page
+go -C tools/go test ./...            # every step against its JS, file for file
+```
+
+- **`lib/`** is `tools/lib` in Go: the decompressors, PNG, sprite mappings, shading. It also
+  holds what the port needed:
+  - a JSON writer that matches `JSON.stringify` (key order, integer-like keys first,
+    JavaScript's number formatting);
+  - a reader for the data literals in `tools/font`;
+  - `Math.hypot`, `atan2`, `sin`, `cos` and `round` as V8 computes them.
+- **`fonts/`** reads `tools/font/s1-logo.mjs`, evaluating its shape calls.
+- **`steps/<name>/`** is one build step each, structured and named like its `.mjs`, with
+  the same comments. Each step's test runs the JS step and the Go one into two fresh
+  directories and requires every file to be byte-identical.
+
+Three things had to be matched exactly for byte-identical output, and each is tested:
+
+- **Compression.** Node's zlib is Chromium's patched one, which nothing else reproduces, so
+  both pipelines compress with their own transcription of stock zlib's level-9 deflate
+  ([`lib/deflate.mjs`](lib/deflate.mjs), [`go/lib/deflate.go`](go/lib/deflate.go)).
+  `test/deflate.test.mjs` checks the JS one against the system zlib on every PNG the
+  pipeline writes, and `go/lib/png_test.go` re-encodes them all in Go.
+- **Floating point.** A few font shapes are tested point by point against a distance or an
+  angle, and an edge can turn on the last bit:
+  - The ported maths is fdlibm, which is what V8 runs.
+  - Go may fuse `a*b + c` into a single multiply-add, where V8 on x86 never does. So every
+    product that feeds a sum is rounded explicitly with `float64(...)`.
+  - The maths test holds the results to V8's bit for bit on x86-64. On arm64, V8 is itself
+    compiled with fused multiply-adds and can differ by one unit in the last place, so the
+    test allows that there. Node still builds identical files on both kinds of machine,
+    so no shape today sits on an edge that one ulp would move.
+- **JavaScript's semantics.** These have to be reproduced explicitly in Go:
+  - out-of-range reads give `undefined`, out-of-range stores are dropped;
+  - `Math.round` rounds halves up;
+  - objects and `Map`s iterate in insertion order;
+  - `.sort()` is stable;
+  - a loop over a growing array sees the new items.
+
+What stays in JavaScript, and why:
+
+- **The page.** Its code is what the browser runs.
+- **The font designs in `tools/font/`.** They are the source both pipelines read, so there
+  is one copy of every shape.
+- **The tests in `test/`.** They test the page's own code, in Node and a real browser.
 
 ## rom/
 

@@ -606,12 +606,19 @@ and the extractor throws instead of silently testing nothing.
   on the ROM's own `y_vel == -$5B` test rather than a guard. Also that tuned parameters
   still close on rest, and that damping which never dissipates is *reported* rather than
   hanging.
+- [`test/deflate.test.mjs`](test/deflate.test.mjs) — the pipeline's own deflate against the
+  system's stock zlib, through Python: every PNG the pipeline writes, plus empty, tiny, flat,
+  noisy and multi-window inputs, byte for byte.
 - [`test/png-scanlines.test.mjs`](test/png-scanlines.test.mjs) — the PNG row packer, tested
   directly because for a long time the APNG round-trip could not reach half of it: every
   export carried the whole shared palette, so `buildApng` always picked 8-bit depth and a
   mutation that swapped the 4-bit nibble order was invisible. Exports now compact their
   palette to the colours they use — the shared one runs past 256 once AIZ is loaded — so
   text alone packs at 4 bits and the round-trip covers that branch as well.
+
+The Go pipeline's tests run with `go -C tools/go test ./...`: each build step against its
+JS, file for file, the compressor against every PNG, and the maths against V8. See
+[`tools/README.md`](tools/README.md#the-go-pipeline).
 
 They were checked by breaking the code on purpose: widening the LZW width one step early
 fails 41 assertions, damping 0.5→0.6 fails 5, acceleration 0.25→0.26 fails 4, and shifting
