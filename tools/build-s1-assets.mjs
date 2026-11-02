@@ -28,6 +28,7 @@ import {eniDecode} from './lib/enigma.mjs';
 import {nemDecode} from './lib/nemesis.mjs';
 import {encodeIndexedPng} from './lib/png.mjs';
 import {parseS1MapFrames, renderFrame} from './lib/sprite.mjs';
+import {DESIGNS, SMALL} from './font/s1-logo.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const D    = path.join(HERE, 'rom') + path.sep;
@@ -472,4 +473,75 @@ console.log(`s1card-atlas.png ${KW}x16  ${korder.length} glyphs (${korder.filter
   fs.writeFileSync(OUT + 'ghz-still.png', encodeIndexedPng(out, W, H, hexToPal(gp[22]), -1));
   fs.writeFileSync(OUT + 'ghz-meta.json', JSON.stringify(gmeta));
   console.log(`ghz-still.png    320x224  ${fs.statSync(OUT + 'ghz-still.png').size}B`);
+}
+
+// ---- the logo, cleared and turned into faces --------------------------------------------------
+// The S1 logo style replaces SONIC and THE HEDGEHOG with the user's text, so the build
+// needs the emblem without them, and their two faces.
+//
+// Clearing: the ribbon behind the letters is a flag -- red, a white stripe on rows 86-100,
+// red -- read off the gap between I and C, which is pure ribbon. Between x 59 and 196 the
+// letters cover nothing else, so rows 76-115 are refilled from that pattern. Either side,
+// S and C touch the ribbon's star-field ends, which are mirror images of each other about
+// x 127.5 and the letters are not: rows above 89 have no star field, so those are refilled
+// too; below, a pixel that matches its mirror is star field, black is always letter, and
+// one side showing ribbon where the other does not is letter over ribbon.
+{
+  const EWD = EW*8, ribbon = y => y >= 86 && y <= 100 ? 6 : 12;
+  const clean = Uint8Array.from(emblem);
+  const MIR = x => 255 - x;
+  for(let y = 76; y <= 115; y++){
+    for(let x = 59; x <= 196; x++) clean[y*EWD + x] = ribbon(y);
+    for(let x = 52; x <= 58; x++){
+      const a = emblem[y*EWD + x], b = emblem[y*EWD + MIR(x)], rb = ribbon(y);
+      if(y < 89){ clean[y*EWD + x] = clean[y*EWD + MIR(x)] = rb; continue; }
+      if(a === b && (a & 15) !== 15) continue;
+      if((a & 15) === 15 || b === rb) clean[y*EWD + x] = rb;
+      if((b & 15) === 15 || a === rb) clean[y*EWD + MIR(x)] = rb;
+      if(a !== b && a !== rb && b !== rb && (a & 15) !== 15 && (b & 15) !== 15) clean[y*EWD + x] = clean[y*EWD + MIR(x)] = rb;
+    }
+  }
+  writeIdx('s1-emblem-clean.png', clean, EWD, EH*8);
+
+  // The chrome face. S O N I C are lifted as shapes: their fill colours (the blues and
+  // golds), plus white with fill above it in the column -- the band through the middle and
+  // the rim along the bottom -- leaving out the white caps and the black. Stray pixels of
+  // the star field that share the fill colours are kept out by column and row.
+  const FILL = new Set([3, 4, 5, 11, 9, 8, 7]);
+  const LIFT = {S: [56, 84], O: [84, 117], N: [117, 150], I: [154, 169], C: [169, 199]};
+  const shapes = {...DESIGNS};
+  for(const [k, [a, b]] of Object.entries(LIFT)){
+    const m = new Set();
+    for(let x = a; x < b; x++){ let f = false;
+      for(let y = 76; y <= 103; y++){
+        if((x < 59 || x > 196) && y >= 89) continue;
+        const v = emblem[y*EWD + x] & 15;
+        if(FILL.has(v)){ f = true; m.add(x*1000 + y); } else if(v === 6 && f) m.add(x*1000 + y); else if(v === 15) f = false;
+      } }
+    // drop specks: pixels with fewer than two of their four neighbours in the shape
+    for(const v of [...m]){ const x = Math.floor(v/1000), y = v % 1000;
+      if([[1,0],[-1,0],[0,1],[0,-1]].filter(([dx, dy]) => m.has((x+dx)*1000 + y+dy)).length < 2) m.delete(v); }
+    const xs = [...m].map(v => Math.floor(v/1000)), x0 = Math.min(...xs), x1 = Math.max(...xs);
+    shapes[k] = Array.from({length: 26}, (_, i) => Array.from({length: x1 - x0 + 1}, (_, j) => m.has((x0 + j)*1000 + 77 + i) ? '#' : '.').join(''));
+  }
+  // the fill by row, read down the I, which is straight-sided top to bottom
+  const gradient = Array.from({length: 26}, (_, i) => emblem[(77 + i)*EWD + 160] & 15);
+  // The small face: T H E D G O lifted from rows 108-113 (white), the rest designed.
+  const small = {...SMALL}, words = ['T', 'H', 'E', null, 'H', 'E', 'D', 'G', 'E', 'H', 'O', 'G'];
+  let col = 86, k = 0;
+  while(col < 170 && k < words.length){
+    while(col < 170 && ![...Array(6)].some((_, i) => (emblem[(108 + i)*EWD + col] & 15) === 6)) col++;
+    const s = col; while([...Array(6)].some((_, i) => (emblem[(108 + i)*EWD + col] & 15) === 6)) col++;
+    if(words[k] === null) k++;
+    const ch = words[k++];
+    if(ch && !small[ch]) small[ch] = Array.from({length: 6}, (_, i) =>
+      Array.from({length: col - s}, (_, j) => (emblem[(108 + i)*EWD + s + j] & 15) === 6 ? '#' : '.').join(''));
+  }
+  for(const c of 'THEDGO') if(!small[c]) throw new Error('small ' + c + ' was not lifted');
+  // Placement, in screen coordinates (the emblem sits at 24, 32): SONIC's shapes start on
+  // emblem row 77, THE HEDGEHOG's on 108; both centred on the emblem's middle, x 127.5.
+  const logo = {chrome: shapes, gradient, small, top: 77 + EY, smallTop: 108 + EY, cx: 128 + EX,
+                gap: 3, space: 12, smallGap: 1, smallSpace: 7, depth: 3, spread: 16, lean: 3};
+  fs.writeFileSync(OUT + 's1-logo.json', JSON.stringify(logo));
+  console.log(`  logo: ${Object.keys(shapes).length} chrome shapes (SONIC lifted), ${Object.keys(small).length} small`);
 }

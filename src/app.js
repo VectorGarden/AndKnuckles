@@ -8,7 +8,7 @@ const SPACE_W = 8;
 // look is authentic, but it reads as overlap. 0 lets the outlines touch while
 // each glyph and line stays its own; -3 or so reproduces the ROM spacing.
 const DEFAULTS = { outline:{track:0, lead:0}, plain:{track:2, lead:4}, card:{track:0, lead:4},
-                   credits:{track:0, lead:4}, card1:{track:0, lead:4} };
+                   credits:{track:0, lead:4}, card1:{track:0, lead:4}, logo:{track:0, lead:0} };
 
 /* The title-card lettering (tools/build-card-font.mjs) is a third style with its
    own atlas. Its letters already carry their spacing -- each glyph's dark bar
@@ -25,6 +25,84 @@ const s1cardAtlas = new Image();
 let S1CARD_IDX = null, S1CARD_W = 0;
 const s1cardParts = {};
 const isCard = () => state.style === 'card' || state.style === 'card1';
+
+/* ---------- the Sonic 1 logo ------------------------------------------------
+   Your first line in the chrome face of SONIC, your second in the small face of
+   THE HEDGEHOG, both centred on the emblem's ribbon where those sat. The chrome
+   letters are shapes (tools/font/s1-logo.mjs, with S O N I C lifted from the
+   emblem); each is filled down the logo's gradient, capped white along its top,
+   outlined black, and shadowed by a copy of itself one to three rows down,
+   leaning toward the logo's centre -- so every letter casts its shadow the way
+   the real ones do, wherever it lands. The small letters are white, outlined
+   black to the sides and below. All in palette line 0, the emblem's. */
+FONT.logo = {rowh: 26, glyphs: Object.fromEntries(Object.entries(S1LOGO.chrome).map(([c, r]) => [c, [0, 0, r[0].length, 26, 0]]))};
+const logoCache = {key: '', lay: null};
+function logoLayer(){
+  const lines = state.text.toUpperCase().split('\n');
+  const key = lines.slice(0, 2).join('\n');
+  if(logoCache.key === key && logoCache.lay) return logoCache.lay;
+  const Lg = S1LOGO, g = new Uint8Array(BG_W * BG_H);
+  const put = (x, y, v) => { if(x >= 0 && x < BG_W && y >= 0 && y < BG_H) g[y*BG_W + x] = v; };
+  // chrome: every shadow first, then every cap, then every fill, so no letter's black covers a face
+  const glyphs = [...(lines[0] || '')].map(c => c === ' ' ? null : Lg.chrome[c]).filter(c => c !== undefined);
+  const width = glyphs.reduce((a, s) => a + (s ? s[0].length + Lg.gap : Lg.space), 0) - (glyphs.length ? Lg.gap : 0);
+  let x = Math.round(Lg.cx - width / 2);
+  const placed = [];
+  for(const s of glyphs){
+    if(!s){ x += Lg.space; continue; }
+    const m = new Set();
+    s.forEach((row, i) => [...row].forEach((c, j) => { if(c === '#') m.add((x + j)*1024 + Lg.top + i); }));
+    const lean = Math.max(-Lg.lean, Math.min(Lg.lean, Math.round((Lg.cx - (x + s[0].length / 2)) / Lg.spread)));
+    placed.push({m, lean}); x += s[0].length + Lg.gap;
+  }
+  const inAny = v => placed.some(p => p.m.has(v));
+  for(const {m, lean} of placed){
+    const has = (a, b) => m.has(a*1024 + b), black = new Set();
+    for(const v of m){ const a = v >> 10, b = v & 1023;
+      for(let i = 1; i <= Lg.depth; i++) for(let oy = -1; oy <= 1; oy++) for(let ox = -1; ox <= 1; ox++) black.add((a + lean + ox)*1024 + b + i + oy);
+      for(const [ox, oy] of [[-1, 0], [1, 0], [0, 1], [-1, 1], [1, 1]]) black.add((a + ox)*1024 + b + oy); }
+    for(const v of black){ if(inAny(v)) continue; const a = v >> 10, b = v & 1023;
+      let above = false; for(let ox = -1; ox <= 1; ox++) if(has(a + ox, b + 1) && !has(a + ox, b)) above = true;
+      if(!above || has(a, b - 1)) put(a, b, 15); }
+  }
+  for(const {m} of placed) for(const v of m){ const a = v >> 10, b = v & 1023;
+    if(!m.has(a*1024 + b - 1)) for(const ox of [-1, 0, 1]) if(!inAny((a + ox)*1024 + b - 1)) put(a + ox, b - 1, 6); }
+  for(const {m} of placed) for(const v of m){ const a = v >> 10, b = v & 1023; put(a, b, Lg.gradient[b - Lg.top]); }
+  // small: white, black to the sides and below
+  const small = [...(lines[1] || '')].map(c => c === ' ' ? null : Lg.small[c]).filter(c => c !== undefined);
+  const sw = small.reduce((a, s) => a + (s ? s[0].length + Lg.smallGap : Lg.smallSpace), 0) - (small.length ? Lg.smallGap : 0);
+  let sx = Math.round(Lg.cx - sw / 2);
+  const white = new Set();
+  for(const s of small){
+    if(!s){ sx += Lg.smallSpace; continue; }
+    s.forEach((row, i) => [...row].forEach((c, j) => { if(c === '#') white.add((sx + j)*1024 + Lg.smallTop + i); }));
+    sx += s[0].length + Lg.smallGap;
+  }
+  for(const v of white){ const a = v >> 10, b = v & 1023;
+    for(const [ox, oy] of [[-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]) if(!white.has((a + ox)*1024 + b + oy)) put(a + ox, b + oy, 15); }
+  for(const v of white) put(v >> 10, v & 1023, 6);
+  logoCache.key = key;
+  return logoCache.lay = {g, w: BG_W, h: BG_H, id: layerIds++};
+}
+/* Off the S1 title the logo has no scene palette to fade with: the title palette's
+   line 0, fixed. */
+let logoLutCache = null;
+function logoLut(){
+  if(logoLutCache) return logoLutCache;
+  const hex = SCENES.s1.intro.pals[SCENES.s1.intro.pals.length - 1];
+  const seen = new Map();
+  PALETTE.forEach((c, i) => { if(i > FONT_SLOTS) seen.set((c[0]<<16)|(c[1]<<8)|c[2], i); });
+  return logoLutCache = Uint16Array.from({length: 64}, (_, i) => {
+    const w = parseInt(hex.slice(i*3, i*3+3), 16);
+    const c = [((w >> 1) & 7)*36, ((w >> 5) & 7)*36, ((w >> 9) & 7)*36], k = (c[0]<<16)|(c[1]<<8)|c[2];
+    if(!seen.has(k)){ seen.set(k, PALETTE.length); PALETTE.push(c); }
+    return seen.get(k);
+  });
+}
+/* On the S1 title the scene draws the logo itself, as part of its emblem, even in
+   still mode -- where it shows the screen at rest. */
+const logoOnScene = () => state.style === 'logo' && state.scene === 's1' && !!introLayers.s1;
+const sceneDrawn = () => introOn() || logoOnScene();
 /* Faces that keep the game's colours: their own atlas and palette slots, no ramp. */
 const fixedFont = () => state.style === 'card' ? {img: cardAtlas, idx: CARD_IDX, w: CARD_W}
                       : state.style === 'card1' ? {img: s1cardAtlas, idx: S1CARD_IDX, w: S1CARD_W}
@@ -99,7 +177,8 @@ function paint(target, scale, L, dy, G, scroll, frame){
   c.imageSmoothingEnabled = false;
   c.clearRect(0,0,W,H);
   const img = sceneImg();
-  if(G.scene && introOn() && INTROS[state.scene].indexed){
+  if(G.scene && sceneDrawn() && INTROS[state.scene].indexed){
+    if(!introOn()) frame = introLen();                          // still: the screen at rest
     // Coloured per frame from palette indices, so there is no image to draw:
     // composite exactly as the exporter does, at 1x, and scale it up.
     const buf = new Uint16Array(BG_W * BG_H);
@@ -137,6 +216,17 @@ function paint(target, scale, L, dy, G, scroll, frame){
   } else if(state.bg !== 'none'){
     c.fillStyle = state.bg; c.fillRect(0,0,W,H);
   }
+  if(state.style === 'logo'){
+    if(logoOnScene()) return {W,H};                             // the scene drew it
+    const lay = logoLayer(), lut = logoLut(), off = document.createElement('canvas');
+    off.width = BG_W; off.height = BG_H;
+    const ox = off.getContext('2d'), im = ox.createImageData(BG_W, BG_H);
+    for(let i = 0; i < lay.g.length; i++){ if(!lay.g[i]) continue; const col = PALETTE[lut[lay.g[i]]];
+      im.data[i*4] = col[0]; im.data[i*4+1] = col[1]; im.data[i*4+2] = col[2]; im.data[i*4+3] = 255; }
+    ox.putImageData(im, 0, 0);
+    c.drawImage(off, 0, 0, W, H);
+    return {W,H};
+  }
   if(isCard()){
     // the title card: every part, wherever this frame has it
     const atlasImg = fixedFont().img;
@@ -165,7 +255,7 @@ function paint(target, scale, L, dy, G, scroll, frame){
 
 function geom(L){
   if(sceneOn()) return { head: 0, w0: BG_W, h0: BG_H, scene: true };
-  if(isCard()) return { head: 0, w0: BG_W, h0: BG_H, scene: false };   // a screen-sized card
+  if(isCard() || state.style === 'logo') return { head: 0, w0: BG_W, h0: BG_H, scene: false };   // screen-sized
   const head = headroom();
   return { head, w0: L.w + state.pad*2, h0: L.h + state.pad*2 + head };
 }
@@ -357,7 +447,12 @@ function motion(){
    offsets, or for the title card an index into its distinct poses. Everything
    that walks the timeline -- playback, the scrubber, every export -- goes through
    here, and hands the entry to paint() as its dy. */
-function textFrames(){ return isCard() ? cardTimeline().frames : motion().frames; }
+function textFrames(){
+  if(state.style === 'logo') return LOGO_FRAMES;                // the logo does not move
+  return isCard() ? cardTimeline().frames : motion().frames;
+}
+// 48 frames: Sonic's wag (16) and the water cycle (24) both come round
+const LOGO_FRAMES = new Array(48).fill(0);
 
 /* ---------- the title card ------------------------------------------------
    Obj_TitleCard and its elements, stepped the way the ROM steps them. Each
@@ -706,6 +801,7 @@ function buildIndexed(){
    carry the rectangle the block actually occupies -- the rest is cleared for
    us. Vertical travel makes that a large saving. */
 function frameRect(L, scale, dy, G, W, H){
+  if(state.style === 'logo') return {x:0, y:0, w:W, h:H};          // static; drawn whole
   if(isCard()){
     let r = null;
     for(const it of cardItems(cardPose(dy), L)){
@@ -1025,7 +1121,8 @@ const INTROS = {
         if(!seen.has(k)){ seen.set(k, PALETTE.length); PALETTE.push(c); }
         return seen.get(k);
       }));
-      return {back: gidx(spec.back.img), emblem: gidx(spec.emblemImg.img), tm: gidx(spec.tmImg.img),
+      return {back: gidx(spec.back.img), emblem: gidx(spec.emblemImg.img), emblemClean: gidx(spec.emblemClean.img),
+              tm: gidx(spec.tmImg.img),
               sonic: spec.sonic.map(q => Object.assign(gidx(q.img), {ox: q.ox, oy: q.oy})), luts};
     },
     len(s){ return s.intro; },
@@ -1048,8 +1145,10 @@ const INTROS = {
       const d = [
         {key:'backdrop', fill:lut[32], x:0, y:0, tag:p, plane:true},
         {key:'bg', lay:L.back, x:0, y:0, rows, wrapAll:true, lut, tag:p + ':' + rows.join(','), plane:true},
-        {key:'emblem', lay:L.emblem, x:s.emblem.x, y:s.emblem.y, lut, tag:p},
+        {key:'emblem', lay:state.style === 'logo' ? L.emblemClean : L.emblem, x:s.emblem.x, y:s.emblem.y, lut, tag:p},
       ];
+      // the logo is part of the emblem: under Sonic, fading with the screen
+      if(state.style === 'logo') d.push({key:'logo', lay:logoLayer(), x:0, y:0, lut, tag:p + ':' + logoCache.key});
       if(t >= s.fadeFrames && T >= s.appear){
         const y = Math.max(s.sonicTop, s.sonicY - 8 * (T - s.appear));
         const f = T < s.frame1 ? 0 : T < s.wag ? 1 + ((T - s.frame1) >> 3) : 6 + (((T - s.wag) >> 3) & 1);
@@ -1285,7 +1384,7 @@ function paintIndexed(rect, scale, L, dy, G, bgIdx, scroll, banks, frame){
   // 16-bit: with AIZ's palettes loaded the shared palette runs past 256, and
   // exports compact it back down to what a file actually uses
   const buf = new Uint16Array(W * H);
-  if(G.scene && introOn()) fillIntro(buf, rect, scale, scroll||0, frame);
+  if(G.scene && sceneDrawn()) fillIntro(buf, rect, scale, scroll||0, introOn() ? frame : introLen());
   else if(G.scene) fillBackground(buf, rect, scale, scroll||0);
   else if(bgIdx) buf.fill(bgIdx);
   // Copy a box of an index image into the buffer at (dx0,dy0), scaled up.
@@ -1309,6 +1408,10 @@ function paintIndexed(rect, scale, L, dy, G, bgIdx, scroll, banks, frame){
       }
     }
   };
+  if(state.style === 'logo'){
+    if(!logoOnScene()) blitIndexed(buf, rect, scale, {lay: logoLayer(), x: 0, y: 0, lut: logoLut()}, 0);
+    return buf;
+  }
   if(isCard()){
     // the title card keeps the game's colours: its own indices, no ramp bank
     const fx = fixedFont();
@@ -1531,7 +1634,7 @@ function exportCanvas(){
   const L = layout();
   // force zero headroom so still output is unaffected by animation settings;
   // a scene or the title card is the whole Genesis frame either way
-  const G = sceneOn() || isCard() ? geom(L)
+  const G = sceneOn() || isCard() || state.style === 'logo' ? geom(L)
                         : {head:0, w0:L.w + state.pad*2, h0:L.h + state.pad*2};
   const scale = clampScale(G.w0, G.h0, state.scale, STILL_BUDGET);
   paint(off, scale, L, 0, G, scrollAt(1e9));
@@ -1905,7 +2008,8 @@ el('style').addEventListener('click', e=>{
   document.body.classList.toggle('card', isCard());
   document.body.classList.toggle('card3k', state.style === 'card');
   document.body.classList.toggle('card1', state.style === 'card1');
-  document.body.classList.toggle('fixed', !!fixedFont());
+  document.body.classList.toggle('fixed', !!fixedFont() || state.style === 'logo');
+  document.body.classList.toggle('static', state.style === 'logo');
   // S3&K's card has no act 3
   if(state.style === 'card' && state.cardAct > 2) el('cardAct').querySelector('button[data-act="1"]').click();
   if(!player.playing) showRest();

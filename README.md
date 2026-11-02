@@ -260,6 +260,38 @@ Each derived glyph is re-shadowed by the rule the real ones follow — shadow wh
 is a pixel up or a pixel left, which matches 86% of the real shadow pixels (the artist rounded
 some by hand).
 
+### The Sonic 1 logo
+
+**S1 logo** is a letter style that replaces the emblem's own lettering: your first line in the
+chrome face of **SONIC**, your second in the small face of **THE HEDGEHOG**, each centred where
+those sat. On the **S1 title** scene it is part of the emblem, so it fades in with the palette
+and Sonic rises behind it; off that scene it is drawn on its own in the title palette's
+colours. It does not spring in — the real logo never moves — so the spring controls hide, and
+like the other game faces it keeps its colours, so the palette controls do too. Lines after
+the second are ignored.
+
+- **The ribbon is cleared first.** Behind the letters the emblem's banner is a flag — red with
+  a white stripe on rows 86–100 — and the build repaints it row by row from the gap between
+  the I and the C. The star-field ornaments at the ribbon's ends are mirror images about the
+  emblem's centre, which is how the build tells an ornament pixel from a letter pixel where
+  the S and the C overlap them.
+- **The chrome face is a rule, not a drawing.** S, O, N, I and C are lifted from the emblem;
+  the other letters, the digits and **& ! ? . , ' -** are shapes drawn at the real letters'
+  weights (stems 9 wide, bars 7 tall), in `tools/font/s1-logo.mjs`. Every glyph, lifted or
+  drawn, is then rendered the same way: filled by the logo's gradient, which runs by screen
+  row (read down the real I), capped white along each top edge, outlined black on the sides
+  and bottom, and shadowed by copies of itself one to three rows down, shifted sideways. The
+  shift is what makes it read as a 3D logo: the real letters' shadows **lean toward the
+  logo's centre** — S's to the right, C's to the left, N's not at all — so each letter's
+  shift is its distance from the centre over 16, up to 3px. A letter's shadow therefore
+  depends on where it lands, not on which letter it is.
+- **The small face** is the real T, H, E, D, G and O, plus drawn glyphs for the rest: white
+  strokes 2px wide and 6 rows tall, with black beside and below them but never above.
+
+The rebuilt SONIC / THE HEDGEHOG is close to the original but not exact — the artist's letters
+carry hand-placed highlights the rule does not reproduce — and the emblem was laid out for five
+letters, so a first line much longer than SONIC runs past the ribbon onto the ornaments.
+
 ## The S3 opening
 
 On by default once you pick the S3 background in animated mode, and the same toggle as

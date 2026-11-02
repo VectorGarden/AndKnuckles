@@ -125,6 +125,12 @@ scene: GHZ1's foreground at the start camera (0, `$300`), split by priority, ove
 of the GHZ art; Sonic's standing frame; and the level palette's fade and water cycle
 (`ghz-*`).
 
+For the S1 logo style it also writes the emblem with its lettering cleared
+(`s1-emblem-clean.png`: the ribbon's flag pattern repainted row by row, the ornaments kept by
+their mirror symmetry), and `s1-logo.json`: the lifted S O N I C and T H E D G O masks, the
+drawn glyphs from `font/s1-logo.mjs`, the gradient read down the real I, and the face's
+placement and shadow constants.
+
 ## What build-font does
 
 The one build here that is **not** a decode. The ROM has no title font at all:
