@@ -202,10 +202,12 @@ test('act 3 and the banner choice belong to one card each', async () => {
   assert.equal(await page.evaluate(() => state.cardAct), 1, 'S3&K has no act 3, so it falls back to 1');
 });
 
-test('the S1 logo is static, so the spring controls hide', async () => {
-  await setup(page, {mode: 'anim', style: 'logo'});
-  assert.equal(await shown(page, '.spring-only'), false);
-  assert.equal(await shown(page, '#palCtl .bgrow'), false, 'it keeps the game\'s colours');
+test('the S1 and S2 logos are static, so the spring controls hide', async () => {
+  for(const style of ['logo', 'logo2']){
+    await setup(page, {mode: 'anim', style});
+    assert.equal(await shown(page, '.spring-only'), false, style);
+    assert.equal(await shown(page, '#palCtl .bgrow'), false, `${style} keeps the game's colours`);
+  }
 });
 
 test('the title card swaps the spring controls for its own', async () => {

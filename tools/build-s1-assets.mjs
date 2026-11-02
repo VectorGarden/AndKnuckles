@@ -28,7 +28,7 @@ import {eniDecode} from './lib/enigma.mjs';
 import {nemDecode} from './lib/nemesis.mjs';
 import {encodeIndexedPng} from './lib/png.mjs';
 import {parseS1MapFrames, renderFrame} from './lib/sprite.mjs';
-import {DESIGNS, SMALL} from './font/s1-logo.mjs';
+import {DESIGNS, SMALL, SONIC} from './font/s1-logo.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const D    = path.join(HERE, 'rom') + path.sep;
@@ -524,6 +524,7 @@ console.log(`s1card-atlas.png ${KW}x16  ${korder.length} glyphs (${korder.filter
     const xs = [...m].map(v => Math.floor(v/1000)), x0 = Math.min(...xs), x1 = Math.max(...xs);
     shapes[k] = Array.from({length: 26}, (_, i) => Array.from({length: x1 - x0 + 1}, (_, j) => m.has((x0 + j)*1000 + 77 + i) ? '#' : '.').join(''));
   }
+  for(const c of 'SONIC') if(shapes[c].join() !== SONIC[c].join()) throw new Error(`the lifted ${c} is not font/s1-logo.mjs's`);
   // the fill by row, read down the I, which is straight-sided top to bottom
   const gradient = Array.from({length: 26}, (_, i) => emblem[(77 + i)*EWD + 160] & 15);
   // The small face: T H E D G O lifted from rows 108-113 (white), the rest designed.

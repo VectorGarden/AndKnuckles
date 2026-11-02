@@ -127,6 +127,7 @@ if(has('s2-meta.json')){
   const m = JSON.parse(fs.readFileSync(OUT + 's2-meta.json', 'utf8'));
   const n = m.sprites.flat().filter(Boolean).length;
   const spec = {...m, back: {src: b64('s2-bg.png')}, emblemImg: {src: b64('s2-emblem.png')},
+                emblemClean: {src: b64('s2-emblem-clean.png')}, topCleanImg: {src: b64('s2-spr-top-clean.png')},
                 spr: Array.from({length: n}, (_, i) => ({src: b64(`s2-spr${i}.png`)}))};
   const cur = html.match(/^  s2: \{ label:"S2 title".*$/m);
   // centred where Obj0F's menu sits, y 92 below the screen's centre
@@ -172,6 +173,15 @@ if(has('s1card-atlas.png') && has('s1card-table.json')){
   else {
     const a = html.match(/^const CARD_SRC = "[^"]*";$/m);
     html = html.slice(0, a.index + a[0].length) + '\n' + lines + html.slice(a.index + a[0].length);
+  }
+}
+if(has('s2-logo.json')){
+  const line = `const S2LOGO = ${fs.readFileSync(OUT + 's2-logo.json', 'utf8').trim()};`;
+  const cur = html.match(/^const S2LOGO = .*;$/m);
+  if(cur) html = html.slice(0, cur.index) + line + html.slice(cur.index + cur[0].length);
+  else {
+    const a = html.match(/^const CARD_SRC = "[^"]*";$/m);
+    html = html.slice(0, a.index + a[0].length) + '\n' + line + html.slice(a.index + a[0].length);
   }
 }
 if(has('s1-logo.json')){
