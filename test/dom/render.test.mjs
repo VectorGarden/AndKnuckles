@@ -63,7 +63,7 @@ const previewMatchesExport = page => page.evaluate(() => {
   return {bad, checked: Math.ceil(keys.length / step)};
 });
 
-for(const scene of ['off', 's1', 's3', 'sk', 'aiz']){
+for(const scene of ['off', 's1', 'ghz', 's3', 'sk', 'aiz']){
   for(const intro of scene === 'off' ? ['off'] : ['off', 'on']){
     const name = scene === 'off' ? scene : `${scene}, intro ${intro}`;
     test(`${name}: sub-rectangle frames composite to a full repaint`, async () => {
@@ -109,6 +109,30 @@ test('the S1 title settles onto exactly the still', async () => {
   assert.equal(diff, 0, 'the frame the text arrives on does not match the still');
 });
 
+// GHZ's still is the level faded in, built offline; it must meet the first frame
+// the level runs on. And with the Sonic 1 card the level waits for the card: the
+// screen is black until the act lands, then Sonic appears lit while lines 1-3 fade.
+test('GHZ settles onto exactly the still, and with the S1 card waits for it', async () => {
+  await setup(page, {mode: 'anim', scene: 'ghz', intro: 'on'});
+  const diff = await page.evaluate(() => {
+    const {W, H, scale} = gifFrames(true), rect = {x:0, y:0, w:W, h:H};
+    const a = new Uint16Array(W*H); fillIntro(a, rect, scale, 0, introLen());
+    const b = new Uint16Array(W*H); fillBackground(b, rect, scale, 0);
+    let n = 0; for(let k = 0; k < a.length; k++) if(PALETTE[a[k]].join() !== PALETTE[b[k]].join()) n++;
+    return n;
+  });
+  assert.equal(diff, 0, 'the first running frame does not match the still');
+  await setup(page, {mode: 'anim', scene: 'ghz', intro: 'on', style: 'card1', text: 'GREEN HILL'});
+  const r = await page.evaluate(() => {
+    const rest = cardTimeline().rest, keys = t => introDraws(t).map(d => d.key).join(',');
+    return {during: keys(rest), after: keys(rest + 1), black: introDraws(rest + 1).filter(d => d.lut)
+      .every(d => d.key === 'sonic' || PALETTE[d.lut[33]].join() === '0,0,0')};
+  });
+  assert.equal(r.during, 'backdrop', 'nothing but the card until the act lands');
+  assert.equal(r.after, 'backdrop,bg,fg,sonic,fgHi', 'then the level loads');
+  assert.ok(r.black, 'with lines 1-3 still black');
+});
+
 // AIZ is coloured per frame from palette indices, and its still is a flat image
 // built offline from the same layers. They must meet on the cutscene's last frame.
 test('the AIZ intro ends on exactly the still', async () => {
@@ -151,7 +175,7 @@ test('every glyph in the table renders, in every style', async () => {
   // the title card: 22 letters decoded from the zone names, J Q W X derived, and
   // & with eight punctuation marks and the ten digits drawn; the Sonic 1 credits:
   // 23 letters and the 2 decoded, the rest derived
-  for(const [style, count] of [['outline', 68], ['plain', 68], ['card', 45], ['credits', 44]]){
+  for(const [style, count] of [['outline', 68], ['plain', 68], ['card', 45], ['credits', 44], ['card1', 44]]){
     await setup(page, {style, text: 'X'});
     const r = await page.evaluate(async style => {
       const ta = document.getElementById('text');
@@ -194,9 +218,28 @@ test('the title card arrives, holds and leaves the way the ROM steps it', async 
   assert.deepEqual(r.last, {}, 'the timeline ends with the card gone');
 });
 
+// The Sonic 1 card: GREEN HILL rests exactly where Card_ConData puts Green Hill's
+// card -- which is what checks the width rule ZONE and the act are placed by --
+// the act lands on frame 44, the card holds 26 + 61 frames, and all four leave at once.
+test('the Sonic 1 title card lands where the game puts Green Hill\'s, and leaves together', async () => {
+  await setup(page, {mode: 'anim', style: 'card1', text: 'GREEN HILL'});
+  const r = await page.evaluate(() => {
+    const t = cardTimeline(), at = f => t.poses[t.frames[f]];
+    const move = k => t.frames.findIndex((id, f) => f > t.rest && t.poses[id][k] !== at(t.rest)[k]);
+    return {rest: t.rest, pose: at(t.rest), before: at(0), leave: ['name', 'zone', 'act', 'oval'].map(move),
+            last: at(t.frames.length - 1)};
+  });
+  assert.deepEqual(r.before, {});
+  assert.equal(r.rest, 44, 'the act number lands on frame 44');
+  assert.deepEqual(r.pose, {name: 160, zone: 188, act: 212, oval: 212}, "Card_ConData's Green Hill positions");
+  assert.deepEqual(r.leave, [132, 132, 132, 132], 'all four start back on the same frame');
+  assert.deepEqual(r.last, {}, 'the timeline ends with the card gone');
+});
+
 // The card style draws from its own atlas in the preview and its own indices in
 // the export, so it needs the same two invariants the scenes have.
-for(const opts of [{scene: 'aiz', intro: 'on'}, {scene: 'off', intro: 'off'}]){
+for(const opts of [{scene: 'aiz', intro: 'on'}, {scene: 'off', intro: 'off'}, {scene: 's1', intro: 'on', style: 'card1'},
+                   {scene: 'ghz', intro: 'on', style: 'card1'}]){
   test(`title-card text, ${opts.scene}: preview matches export, sub-rects composite cleanly`, async () => {
     await setup(page, {mode: 'anim', style: 'card', text: 'ANGEL ISLAND\nZONE', ...opts});
     const p = await previewMatchesExport(page);
