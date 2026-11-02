@@ -146,7 +146,8 @@
   body:not(.has-intro) .intro-only{display:none !important}
   body:not(.card) .card-only{display:none !important}
   body.card .spring-only{display:none !important}   /* the card has its own motion */
-  body.card #palCtl .bgrow, body.card #palCtl .saved, body.card #lineCtl{display:none !important}
+  body:not(.fixed) .fixed-only{display:none !important}
+  body.fixed #palCtl .bgrow, body.fixed #palCtl .saved, body.fixed #lineCtl{display:none !important}
   .transport input[type=range]{flex:1;min-width:110px;max-width:260px}
   .btn.sm{padding:7px 14px;font-size:11px;box-shadow:none;border-width:2px;min-width:74px}
   .lbl.inline{display:inline-block;margin:0;white-space:nowrap}

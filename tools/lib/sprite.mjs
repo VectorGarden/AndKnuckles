@@ -11,7 +11,13 @@
    Pieces are 6 bytes: signed y, the size nibble (width-1 << 2 | height-1, in
    tiles), the 16-bit art word (tile, flips, palette line), and a signed 16-bit x. */
 
-const num = t => { t = t.trim(); return t.startsWith('$') ? parseInt(t.slice(1), 16) : parseInt(t, 10); };
+const num = t => {
+  t = t.trim();
+  const neg = t.startsWith('-'); if(neg) t = t.slice(1).trim();
+  const v = t.startsWith('$') ? parseInt(t.slice(1), 16) : parseInt(t, 10);
+  if(Number.isNaN(v)) throw new Error('not a number: ' + t);
+  return neg ? -v : v;
+};
 
 /* The labelled blocks of a mapping or DPLC file -- each one's dc.b rows and
    dc.w values -- and its offset tables, keyed by table label. One file can
@@ -56,6 +62,41 @@ export function parseDplcTables(text){
   const {tables, get} = parseBlocks(text), out = {};
   for(const [t, labels] of tables) out[t.replace(/_$/, '')] = labels.map(l => get(l).w.slice(1));
   return out;
+}
+
+/* Sonic 1 mappings, as s1disasm writes them: macro calls rather than bytes.
+
+       Map_Foo_internal:  mappingsTable
+                          mappingsTableEntry.w  .frame
+       .frame:            spriteHeader
+                          spritePiece  x, y, width, height, tile, xflip, yflip, pal, pri
+
+   Returned in the S3K piece layout the renderer takes -- [y, size, tileHi,
+   tileLo, xHi, xLo] -- since the fields are the same, only packed differently
+   (S1 stores a byte x and a 5-byte piece). Frames in table order. */
+export function parseS1MapFrames(text){
+  const blocks = new Map(), order = [];
+  let cur = null;
+  for(const raw of text.split('\n')){
+    const line = raw.replace(/;.*/, '');
+    const entry = /mappingsTableEntry\.w\s+(\S+)/.exec(line);
+    if(entry){ order.push(entry[1]); continue; }
+    const label = /^(\.?\w+):/.exec(line);
+    if(label){ cur = []; blocks.set(label[1], cur); }
+    const p = /spritePiece\s+(.+)/.exec(line);
+    if(p && cur){
+      const [x, y, w, h, tile, xf, yf, pal, pri] = p[1].split(',').map(num);
+      const word = ((pri << 15) | (pal << 13) | (yf << 12) | (xf << 11)) + tile;
+      cur.push([y & 0xFF, ((w-1) << 2) | (h-1), (word >> 8) & 0xFF, word & 0xFF, (x >> 8) & 0xFF, x & 0xFF]);
+    }
+  }
+  return order.map(l => {
+    // a frame can point one byte into another (.psb+1, an empty frame)
+    const m = /^(\.?\w+)\+1$/.exec(l);
+    if(m) return [];
+    if(!blocks.has(l)) throw new Error('mapping frame ' + l + ' not found');
+    return blocks.get(l);
+  });
 }
 
 /* One frame as a cropped image of line*16 + colour (0 transparent), with its

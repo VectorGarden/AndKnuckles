@@ -101,9 +101,10 @@ says so, because the loop will visibly jump.
 
 ## The backgrounds
 
-Three of them — **S3 title**, **S&K title** and **AIZ intro** — any of which swaps the
-transparent canvas for the real thing and locks output to the Genesis frame, 320&times;224.
-The two title screens are described here; the AIZ intro has its own section below. Text sits where the ROM puts
+Four of them — **S1 title**, **S3 title**, **S&K title** and **AIZ intro** — any of which swaps
+the transparent canvas for the real thing and locks output to the Genesis frame, 320&times;224.
+The S3 and S&K title screens are described here; Sonic 1 and the AIZ intro have their own
+sections below. Text sits where the ROM puts
 `& KNUCKLES` — screen y 176, from banner rest `$D4` plus the `$5C` subtitle offset,
 less the `$80` sprite-space origin — and the background scrolls up 16px across the
 first 16 frames, which is `V_scroll_value` in the original making room for the
@@ -180,6 +181,52 @@ real colour. The S&K composite did exactly that: black, for Sonic's pupils. Mark
 index transparent punched 313 holes through the picture, which showed up in GIF, APNG and
 WebM but *not* MP4 — H.264 has no alpha, so it flattened them back to black and looked
 correct by accident.
+
+## The Sonic 1 title
+
+The **S1 title** scene is the Sonic 1 title screen, decoded from
+[s1disasm](https://github.com/sonicretro/s1disasm) — REV01 with its bugs kept, since that is
+the game people played. In animated mode it plays `GM_Title` from the fade-in: the palette
+comes up over 22 frames (blue first, then green, then red), Sonic rises out of the emblem
+29 frames into the main loop, plays his five appear frames, and from frame 86 wags his
+finger every 8 frames — which is where your text springs in, over the Green Hill
+background still panning behind it.
+
+- **Plane B** is the GHZ background as `GM_Title` draws it: one 512px fill of the BG layout,
+  line-scrolled by `Deform_GHZ` into six bands — three cloud bands creeping on their own,
+  mountains at 3/8 of the camera, hills at half, and a water ramp that steepens toward the
+  camera line by line. The camera pans 2px a frame from main-loop frame 42, following an
+  empty object. Only the hills strip is ever redrawn as it pans, and not until long after
+  the scene's timeline ends — the build asserts that — so the first fill, wrapped, is exact.
+- **Plane A** is the emblem, sat at cell (3,4): **8px left of centre**, as in the shipped
+  game (s1disasm's FixBugs build centres it).
+- **Sonic is hidden below the banner by the sprite limit, not by priority.** Everything on
+  this screen is low priority. A row of thirty off-screen 32px sprites fills the VDP's
+  320-dot-per-line budget on lines 104–199 before Sonic is reached in the sprite list, so he
+  is simply not drawn there. The page clips him to that band.
+- **There is no PRESS START BUTTON** in the original: its object shares a RAM slot with the
+  SONIC TEAM PRESENTS text and is only half-cleared, so it never initialises. The page leaves
+  it out too.
+- The water's colours (line 2, colours 8–11) rotate every 6 frames.
+
+The background never loops — the camera pans until the demo starts — so an export ends
+wherever the text settles and jumps back to the fade-in.
+
+### The Sonic 1 lettering
+
+**Sonic 1** is a letter style: the face of *SONIC TEAM PRESENTS* and the staff roll, a blue
+bevel round a black interior with a white rim. The credits mappings comment every piece
+with its character, so the build reads the letters straight off them: **23 letters and the
+digit 2**, each pixel-identical wherever it is used — except D, which the *SOUND* credits
+draw from a second tile set a pixel narrower; the regular one is kept.
+
+The roll never spells **Q, V, W or Z**, the other digits, or any punctuation. **W** is M upside
+down and **Z** is N on its side; **0** is O. The rest are drawn as black interiors and bevelled
+by a rule read off the real letters — one step out (diagonals too) is the white rim, two the
+mid blue, a shade darker at a pure corner, and three the outline. Run on the interiors of
+the real L, T, H and E it lands within 8 pixels of each; the artist hand-shaded a few right
+edges, and the build checks the rule stays that close. Like the title card, it keeps the
+game's colours, so the palette controls hide while it is selected.
 
 ## The S3 opening
 
@@ -395,7 +442,7 @@ no server and no fixture, and what is under test is exactly the file that deploy
 
 - **Sub-rectangle frames composite to a full repaint.** Each frame is a delta against the
   one before it; this replays them the way a GIF player would, honouring disposal, and
-  compares against a full repaint. Run for seven scene and intro combinations.
+  compares against a full repaint. Run for nine scene and intro combinations.
 - **The canvas preview matches the indexed exporter**, pixel for pixel. These are separate
   code paths and have drifted apart more than once.
 - **The intro's last frame equals the static scene**, or the handoff to the text pops. On S3

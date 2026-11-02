@@ -7,12 +7,21 @@ const SPACE_W = 8;
 // packed even tighter than that -- 168px against our 180 at -2 -- so the tight
 // look is authentic, but it reads as overlap. 0 lets the outlines touch while
 // each glyph and line stays its own; -3 or so reproduces the ROM spacing.
-const DEFAULTS = { outline:{track:0, lead:0}, plain:{track:2, lead:4}, card:{track:0, lead:4} };
+const DEFAULTS = { outline:{track:0, lead:0}, plain:{track:2, lead:4}, card:{track:0, lead:4},
+                   credits:{track:0, lead:4} };
 
 /* The title-card lettering (tools/build-card-font.mjs) is a third style with its
    own atlas. Its letters already carry their spacing -- each glyph's dark bar
    runs to its right edge so a word reads as one bar -- hence track 0. */
 FONT.card = CARD_FONT;
+/* The Sonic 1 credits face (tools/build-s1-assets.mjs), likewise its own atlas
+   in the game's colours. Its letters sit 16px apart in the roll, edge to edge. */
+FONT.credits = CRED_FONT;
+const credAtlas = new Image();
+let CRED_IDX = null, CRED_W = 0;
+/* Faces that keep the game's colours: their own atlas and palette slots, no ramp. */
+const fixedFont = () => state.style === 'card' ? {img: cardAtlas, idx: CARD_IDX, w: CARD_W}
+                      : state.style === 'credits' ? {img: credAtlas, idx: CRED_IDX, w: CRED_W} : null;
 const cardAtlas = new Image();
 let CARD_IDX = null, CARD_W = 0;
 const cardParts = {};          // banner-s3/-s3k/-sk, zone, act1, act2: {img, idx, w, h}
@@ -136,7 +145,8 @@ function paint(target, scale, L, dy, G, scroll, frame){
     if(state.align==='center') ox = Math.round((L.w - line.w)/2);
     if(state.align==='right')  ox = L.w - line.w;
     const oy = i*(L.rowh + state.lead);
-    const atlasForLine = tintedAtlas(rampForLine(i));
+    const fx = fixedFont();
+    const atlasForLine = fx ? fx.img : tintedAtlas(rampForLine(i));
     for(const {g,x} of line.items){
       c.drawImage(atlasForLine, g[0],g[1],g[2],g[3],
         (o.x + ox + x)*scale, (o.y + oy + g[4] + dy)*scale, g[2]*scale, g[3]*scale);
@@ -918,6 +928,60 @@ const INTROS = {
     },
   },
 
+  /* GM_Title. The 22-frame fade-in, then main-loop iteration T on frame 22+T:
+     Sonic rises out of the emblem at T=29, plays his appear frames, and from
+     T=86 wags his finger every 8 frames -- which is where the text springs in.
+     The camera pans 2px a frame from T=42 and Deform_GHZ scrolls the bands off
+     it; the water colours cycle every 6 frames. Sonic draws over the emblem but
+     never on lines 104-199, where a row of off-screen sprites fills the VDP's
+     per-line limit before he is reached. */
+  s1: {
+    indexed: true,
+    build(spec, index, gidx){
+      const seen = new Map();
+      PALETTE.forEach((c, i) => { if(i > FONT_SLOTS) seen.set((c[0]<<16)|(c[1]<<8)|c[2], i); });
+      const luts = spec.pals.map(hex => Uint16Array.from({length: 64}, (_, i) => {
+        const w = parseInt(hex.slice(i*3, i*3+3), 16);
+        const c = [((w >> 1) & 7)*36, ((w >> 5) & 7)*36, ((w >> 9) & 7)*36], k = (c[0]<<16)|(c[1]<<8)|c[2];
+        if(!seen.has(k)){ seen.set(k, PALETTE.length); PALETTE.push(c); }
+        return seen.get(k);
+      }));
+      return {back: gidx(spec.back.img), emblem: gidx(spec.emblemImg.img), tm: gidx(spec.tmImg.img),
+              sonic: spec.sonic.map(q => Object.assign(gidx(q.img), {ox: q.ox, oy: q.oy})), luts};
+    },
+    len(s){ return s.intro; },
+    palAt(t){
+      const s = sceneIntro();
+      if(t < s.fadeFrames) return t;
+      const T = t - s.fadeFrames;
+      return s.fadeFrames + (T < 1 ? 0 : Math.floor((T - 1)/6) & 3);
+    },
+    draws(t){
+      const s = sceneIntro(), L = introLayers.s1, p = this.palAt(t), lut = L.luts[p];
+      const T = Math.max(0, t - s.fadeFrames);
+      const run = Math.max(0, T - s.camStart);
+      const bg2 = run, bg3 = Math.floor(0.75 * run);              // camX/2 and 3/8 camX
+      const n = T + 2, cU = n, cM = Math.floor(0.75 * n), cL = n >> 1;   // cloud bands, by deform call
+      const step = Math.trunc((bg2 << 8) / 0x68) << 8;            // the water ramp, toward camX
+      const rows = Array.from({length: BG_H}, (_, y) =>
+        y < 24 ? cU + bg3 : y < 40 ? cM + bg3 : y < 56 ? cL + bg3 : y < 104 ? bg3 : y < 144 ? bg2
+               : ((bg2 << 16) + (y - 144) * step) >> 16);
+      const d = [
+        {key:'backdrop', fill:lut[32], x:0, y:0, tag:p, plane:true},
+        {key:'bg', lay:L.back, x:0, y:0, rows, wrapAll:true, lut, tag:p + ':' + rows.join(','), plane:true},
+        {key:'emblem', lay:L.emblem, x:s.emblem.x, y:s.emblem.y, lut, tag:p},
+      ];
+      if(t >= s.fadeFrames && T >= s.appear){
+        const y = Math.max(s.sonicTop, s.sonicY - 8 * (T - s.appear));
+        const f = T < s.frame1 ? 0 : T < s.wag ? 1 + ((T - s.frame1) >> 3) : 6 + (((T - s.wag) >> 3) & 1);
+        const q = L.sonic[f];
+        d.push({key:'sonic', lay:q, x:s.sonicX + q.ox, y:y + q.oy, clip:[s.maskTop, s.maskBottom], lut, tag:p});
+      }
+      d.push({key:'tm', lay:L.tm, x:s.tm.x, y:s.tm.y, lut, tag:p});
+      return d;
+    },
+  },
+
   /* AIZ1's intro, played back from the timeline tools/build-aiz-assets.mjs
      computed by stepping the level's objects. Its layers hold palette indices,
      not colours -- the palette moves the whole time -- so each frame is
@@ -956,7 +1020,7 @@ const INTROS = {
       // low sprites, plane A's high tiles, high sprites -- the VDP's order
       const d = [
         {key:'backdrop', fill:lut[32], x:0, y:0, tag:p, plane:true},
-        {key:'bg', lay:L.back, x:0, y:0, rows:aizBands(v), lut, tag:p + ':' + v, plane:true},
+        {key:'bg', lay:L.back, x:0, y:0, rows:aizRows(v), lut, tag:p + ':' + v, plane:true},
         {key:'fg', lay:L.fg, x:fx, y:0, lut, tag:p, plane:true},
       ];
       const hi = [], spr = s.spr[t];
@@ -981,6 +1045,11 @@ function aizBands(v){
   const step = acc >> 5;
   for(let i = 1; i <= 36; i++){ acc = (acc + step) | 0; e[i] = s16i(acc >> 16) + 0x580; }
   return e;
+}
+/* AIZ1_IntroDeform's bands, one scroll value per screen line. */
+function aizRows(v){
+  const e = aizBands(v);
+  return Array.from({length: BG_H}, (_, y) => e[y < 80 ? 0 : 1 + ((y - 80) >> 2)]);
 }
 const introDraws = t => INTROS[state.scene].draws(t);
 /* What a frame shows, as a string: equal strings are identical pictures. */
@@ -1039,19 +1108,21 @@ function blitLayer(buf, rect, scale, lay, ox, oy, scroll, clampEdges){
     }
   }
 }
-/* A palette-index layer -- AIZ's -- through the frame's palette. `rows`
-   line-scrolls it: screen row y reads from x + rows[band of y], and anything
-   left of 0 wraps into the 512-px plane the VDP actually holds. */
+/* A palette-index layer -- AIZ's, S1's -- through the frame's palette. `rows`
+   line-scrolls it: screen row y reads from x + rows[y]. Left of 0 wraps into the
+   512px plane the VDP holds; with `wrapAll` everything does, the layer being
+   exactly that plane. `clip` is a band of screen rows the layer is not drawn on. */
 function blitIndexed(buf, rect, scale, d, scroll){
   const lay = d.lay, lut = d.lut;
   for(let ty = 0; ty < rect.h; ty++){
     const sy = Math.floor((ty + rect.y)/scale), ly = sy + scroll - d.y;
     if(ly < 0 || ly >= lay.h) continue;
-    const off = d.rows ? d.rows[sy < 80 ? 0 : 1 + ((sy - 80) >> 2)] : -d.x;
+    if(d.clip && sy >= d.clip[0] && sy < d.clip[1]) continue;
+    const off = d.rows ? d.rows[sy] : -d.x;
     const srow = ly*lay.w, trow = ty*rect.w;
     for(let tx = 0; tx < rect.w; tx++){
       let lx = Math.floor((tx + rect.x)/scale) + off;
-      if(d.rows && lx < 0) lx = ((lx % 512) + 512) % 512;
+      if(d.rows && (d.wrapAll || lx < 0)) lx = ((lx % 512) + 512) % 512;
       if(lx < 0 || lx >= lay.w) continue;
       const v = lay.g[srow + lx];
       if(v) buf[trow + tx] = lut[v];
@@ -1125,10 +1196,11 @@ function paintIndexed(rect, scale, L, dy, G, bgIdx, scroll, banks, frame){
     if(state.align === 'center') ox = Math.round((L.w - line.w)/2);
     if(state.align === 'right')  ox = L.w - line.w;
     const oy = i*(L.rowh + state.lead);
+    const fx = fixedFont();
     for(const {g, x} of line.items){
       const [sx, sy, sw, sh] = g;
-      blit(ATLAS_IDX, ATLAS_W, sx, sy, sw, sh, (o.x + ox + x)*scale - rect.x,
-           (o.y + oy + g[4] + dy)*scale - rect.y, banks ? banks[i] : 0);
+      blit(fx ? fx.idx : ATLAS_IDX, fx ? fx.w : ATLAS_W, sx, sy, sw, sh, (o.x + ox + x)*scale - rect.x,
+           (o.y + oy + g[4] + dy)*scale - rect.y, fx ? 0 : banks ? banks[i] : 0);
     }
   });
   return buf;
@@ -1702,6 +1774,7 @@ el('style').addEventListener('click', e=>{
   state.style = b.dataset.style;
   [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   document.body.classList.toggle('card', state.style === 'card');
+  document.body.classList.toggle('fixed', !!fixedFont());
   if(!player.playing) showRest();
   const d = DEFAULTS[state.style];
   if(!state.touchedTrack){ state.track = d.track; el('track').value = d.track; el('trackVal').textContent = d.track; }
@@ -2011,6 +2084,10 @@ atlas.onload = ()=>{
   let pending = ids.length + 1;
   const done = ()=>{ if(--pending === 0){ ready = true; render(); } };
   cardAtlas.onload = ()=>{ buildCard(); done(); };
+  pending++;
+  credAtlas.onload = ()=>{ const r = indexCardImage(credAtlas); CRED_IDX = r.idx; CRED_W = r.w; done(); };
+  credAtlas.onerror = ()=>{ el('style').querySelector('button[data-style="credits"]').disabled = true; done(); };
+  credAtlas.src = CRED_SRC;
   for(const [name, part] of Object.entries(CARD_FONT.parts)){
     pending++;
     const im = new Image();

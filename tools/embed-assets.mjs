@@ -92,6 +92,33 @@ if(has('card-atlas.png') && has('card-table.json')){
   }
 }
 
+// ---- Sonic 1: the title screen scene, and the credits lettering ----
+if(has('s1-meta.json')){
+  const m = JSON.parse(fs.readFileSync(OUT + 's1-meta.json', 'utf8'));
+  const spec = {...m, back: {src: b64('s1-bg.png')}, emblemImg: {src: b64('s1-emblem.png')},
+                tmImg: {src: b64('s1-tm.png')},
+                sonic: m.sonic.map((q, i) => ({...q, src: b64(`s1-sonic${i}.png`)}))};
+  const cur = html.match(/^  s1: \{ label:"S1 title".*$/m);
+  const y = cur ? cur[0].match(/y:\d+, /)[0] : 'y:184, ';
+  const next = `  s1: { label:"S1 title", ${y}vscroll:0, intro:${JSON.stringify(spec)}, src:"${b64('s1-still.png')}" },`;
+  if(cur) html = html.slice(0, cur.index) + next + html.slice(cur.index + cur[0].length);
+  else {
+    const s3 = html.match(/^  s3: \{ label:"S3 title".*$/m);
+    if(!s3) throw new Error('SCENES.s3 entry not found to put S1 before');
+    html = html.slice(0, s3.index) + next + '\n' + html.slice(s3.index);
+  }
+}
+if(has('cred-atlas.png') && has('cred-table.json')){
+  const lines = `const CRED_FONT = ${fs.readFileSync(OUT + 'cred-table.json', 'utf8').trim()};\nconst CRED_SRC = "${b64('cred-atlas.png')}";`;
+  const cur = html.match(/^const CRED_FONT = .*;\nconst CRED_SRC = "[^"]*";$/m);
+  if(cur) html = html.slice(0, cur.index) + lines + html.slice(cur.index + cur[0].length);
+  else {
+    const a = html.match(/^const CARD_SRC = "[^"]*";$/m);
+    if(!a) throw new Error('CARD_SRC not found to put the credits font after');
+    html = html.slice(0, a.index + a[0].length) + '\n' + lines + html.slice(a.index + a[0].length);
+  }
+}
+
 // ---- font: the atlas and the glyph table ----
 if(has('font-atlas.png') && has('font-table.json')){
   const a = html.match(/^const ATLAS_SRC = "data:image\/png;base64,[^"]*";$/m);
