@@ -231,7 +231,7 @@ test('every glyph in the table renders, in every style', async () => {
   // 23 letters and the 2 decoded, the rest derived; the Sonic 2 credits: 26 letters,
   // 1 2 9 and five marks decoded, the rest drawn
   for(const [style, count] of [['outline', 68], ['plain', 68], ['card', 45], ['credits', 44], ['card1', 44], ['logo', 43],
-                               ['credits2', 46], ['card2', 44]]){
+                               ['credits2', 46], ['card2', 44], ['logo2', 43]]){
     await setup(page, {style, text: 'X'});
     const r = await page.evaluate(async style => {
       const ta = document.getElementById('text');
@@ -323,12 +323,33 @@ test('the S1 logo takes the emblem\'s place, and its shadows lean to the centre'
   assert.deepEqual([l0, r0], [r1, l1], 'and mirror each other');
 });
 
+// The S2 logo does the same on S2's emblem. The top of the banner there is also a sprite, in
+// front of Sonic and Tails; it is cleared too, and the logo drawn again just after it, over its
+// rows only.
+test('the S2 logo takes the emblem\'s place, in front of the banner top too', async () => {
+  await setup(page, {mode: 'still', style: 'logo2', scene: 's2', text: 'SONIC\nTHE HEDGEHOG'});
+  const r = await page.evaluate(() => {
+    const d = introDraws(introLen()), L = introLayers.s2, keys = d.map(q => q.key);
+    const top = d.find(q => q.lay === L.topClean), logoTop = d.find(q => q.key === 'logoTop');
+    const {g, w: W} = logoLayer();
+    return {clean: d.find(q => q.key === 'emblem').lay === L.emblemClean, top: !!top,
+            order: [keys.indexOf('emblem'), keys.indexOf('logo'), d.indexOf(top), keys.indexOf('logoTop')],
+            clip: logoTop && logoTop.clip, small: [...g.slice(S2LOGO.smallTop*W, (S2LOGO.smallTop + 6)*W)].filter(v => v === S2LOGO.white).length};
+  });
+  assert.ok(r.clean && r.top, 'the emblem and the banner-top sprite are the cleared ones');
+  const [e, l, t, lt] = r.order;
+  assert.ok(e < l && l < t && t < lt, `emblem, logo, banner top, logo again (${r.order})`);
+  assert.deepEqual(r.clip, [112, 224], 'the second logo only over the banner top\'s rows');
+  assert.ok(r.small > 100, 'THE HEDGEHOG should be drawn in the small face');
+});
+
 // The card style draws from its own atlas in the preview and its own indices in
 // the export, so it needs the same two invariants the scenes have.
 for(const opts of [{scene: 'aiz', intro: 'on'}, {scene: 'off', intro: 'off'}, {scene: 's1', intro: 'on', style: 'card1'},
                    {scene: 'ghz', intro: 'on', style: 'card1'}, {scene: 's1', intro: 'on', style: 'logo'},
                    {scene: 'off', intro: 'off', style: 'logo'}, {scene: 's2', intro: 'on', style: 'credits2'},
-                   {scene: 'ehz', intro: 'on', style: 'card2'}, {scene: 'off', intro: 'off', style: 'card2'}]){
+                   {scene: 'ehz', intro: 'on', style: 'card2'}, {scene: 'off', intro: 'off', style: 'card2'},
+                   {scene: 's2', intro: 'on', style: 'logo2'}, {scene: 'off', intro: 'off', style: 'logo2'}]){
   test(`title-card text, ${opts.scene}: preview matches export, sub-rects composite cleanly`, async () => {
     await setup(page, {mode: 'anim', style: 'card', text: 'ANGEL ISLAND\nZONE', ...opts});
     const p = await previewMatchesExport(page);

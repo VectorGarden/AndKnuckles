@@ -169,6 +169,14 @@ brings on screen are kept as overlays per `Animated_EHZ` frame. Sonic, Tails, hi
 rings are rendered from their DPLC-loaded sheets and ring art, along with the palettes the card
 and the level go through (`ehz-*`).
 
+**The logo.** It writes the emblem with SONIC and THE HEDGEHOG cleared (`s2-emblem-clean.png`):
+the arched ribbon is refilled from a parabola that it checks against every pure-ribbon column,
+and the curled ends are kept by their mirror symmetry. It clears the banner-top sprite the same
+way (`s2-spr-top-clean.png`). Then it writes `s2-logo.json` with the face's placement, the
+gradient down S2's I, and T H E D G O lifted from S2's small lettering. The chrome shapes are
+`font/s1-logo.mjs`'s: its `SONIC` is what the S1 build lifts, which that build checks, and the
+S2 build checks S2's letters against the same shapes.
+
 ## What build-font does
 
 The one build here that is **not** a decode. The ROM has no title font at all:

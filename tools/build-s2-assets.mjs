@@ -27,6 +27,7 @@ import {nemDecode} from './lib/nemesis.mjs';
 import {kosDecode} from './lib/kosinski.mjs';
 import {encodeIndexedPng} from './lib/png.mjs';
 import {parseS1MapFrames, parseMacroDplcFrames, renderFrame} from './lib/sprite.mjs';
+import {DESIGNS, SMALL, SONIC} from './font/s1-logo.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const D    = path.join(HERE, 'rom') + path.sep;
@@ -388,6 +389,120 @@ function compose(t){
     Array.from({length: 64}, (_, i) => rgb(parseInt(pal.slice(i*3, i*3 + 3), 16))), -1));
   console.log(`s2-still.png     320x224  ${fs.statSync(OUT + 's2-still.png').size}B`);
   meta.still = t;
+}
+// ---- the logo, cleared and turned into faces ----------------------------------------------------
+// The S2 logo style replaces SONIC and THE HEDGEHOG with the user's text, as the S1 logo does: the
+// same chrome lettering, the same small face, on the same kind of ribbon -- red, a white stripe --
+// with star-field ends that mirror each other, here about x 159.5. Plane A colours are line 3:
+// black 1, white $A, red $C.
+{
+  const L3 = 48, BLACK = 1, WHITE = 0xA, RED = 0xC, at = (x, y) => emblem[y*W + x] & 15, MIR = x => 319 - x;
+  // The ribbon is arched: its stripe runs from row 117 to 133 at the middle and drops toward the
+  // ends. Read off the columns that show nothing but ribbon, both edges fit a parabola about the
+  // middle exactly; the letters' columns are refilled from it.
+  const stripeTop = x => Math.round(117 + 0.00115*(x - 159.5)**2), stripeEnd = x => Math.round(133 + 0.0005*(x - 159.5)**2);
+  const ribbon = (x, y) => y >= stripeTop(x) && y < stripeEnd(x) ? WHITE : RED;
+  let checked = 0;
+  for(let x = 84; x <= 235; x++){
+    let st = -1, sb = -1, ok = true;
+    for(let y = 108; y <= 139; y++){ const v = at(x, y); if(v !== RED && v !== WHITE){ ok = false; break; } if(v === WHITE){ if(st < 0) st = y; sb = y + 1; } }
+    if(!ok || st < 0) continue;
+    if(st !== stripeTop(x) || sb !== stripeEnd(x)) throw new Error(`the ribbon arch is off at column ${x}`);
+    checked++;
+  }
+  if(checked < 10) throw new Error('too few ribbon columns to check the arch against');
+  // Clearing rows 108-146, columns 84-235: the ribbon's curled ends and the star field reach in up to
+  // column 91 from either end; there a pixel that matches its mirror is theirs, as S and C never do.
+  // The glint on the 2 runs up between O and N and is kept.
+  const clean = Uint8Array.from(emblem);
+  const glint = (x, y) => [7, 8].includes(at(x, y)) && x >= 148 && x <= 172 && y >= 133 && y <= 147 && (y >= 134 || x < 153);
+  for(let y = 108; y <= 146; y++) for(let x = 84; x <= 235; x++){
+    const v = at(x, y);
+    const e = Math.min(x, MIR(x));                         // columns in from either end
+    if(e <= 91 && v === at(MIR(x), y) && [0, 2, 3, 0xB, WHITE, RED, 0xD].includes(v)) continue;
+    if(glint(x, y)) continue;
+    clean[y*W + x] = L3 + ribbon(x, y);
+  }
+  writeIdx('s2-emblem-clean.png', clean, W, H);
+  // The top of the banner is also a sprite (Obj0E frame $B), so it can sit in front of Sonic and
+  // Tails: a copy of plane A there, which gets the same clearing.
+  const top = sprites[0xB][1], tx = 160 + top.ox, ty = 104 + top.oy;
+  const topClean = Uint8Array.from(top.px); let same = 0, opaque = 0;
+  for(let y = 0; y < top.h; y++) for(let x = 0; x < top.w; x++){
+    const i = y*top.w + x; if(!top.px[i]) continue; opaque++;
+    const X = tx + x, Y = ty + y; if(X < 0 || X >= W) continue;
+    if(top.px[i] === emblem[Y*W + X]){ same++; topClean[i] = clean[Y*W + X]; }
+  }
+  if(same / opaque < 0.9) throw new Error('the banner-top sprite is not a copy of plane A');
+  writeIdx('s2-spr-top-clean.png', topClean, top.w, top.h);
+  meta.topClean = {ox: top.ox, oy: top.oy, frame: 0xB};
+
+  // The chrome face is S1's: S2's S O N I C are the same letters. They are lifted here as in S1 --
+  // their fill colours, and white with fill above it in the column -- only to check that, and to
+  // measure where they sit; the shapes used are S1's, which the curled ends and the glint do not
+  // reach into.
+  // (the curled ends' pixels, which match their mirrors, are left out, as in the clearing)
+  const end = (x, y) => Math.min(x, MIR(x)) <= 91 && at(x, y) === at(MIR(x), y);
+  const FILL = new Set([3, 4, 5, 0xB, 9, 8, 7]), LIFT = {S: [86, 114], O: [114, 150], N: [150, 185], I: [185, 204], C: [204, 238]};
+  const TOP = 108, ROWS = 26;
+  const shapes = {...DESIGNS}, spans = {};
+  for(const [k, [a, b]] of Object.entries(LIFT)){
+    const m = new Set();
+    for(let x = a; x < b; x++){ let f = false;
+      for(let y = TOP; y <= TOP + ROWS + 2; y++){
+        if(glint(x, y) || end(x, y)) continue;
+        const v = at(x, y);
+        if(FILL.has(v)){ f = true; m.add(x*1000 + y); } else if(v === WHITE && f) m.add(x*1000 + y); else if(v === BLACK) f = false;
+      } }
+    for(const v of [...m]){ const x = Math.floor(v/1000), y = v % 1000;
+      if([[1,0],[-1,0],[0,1],[0,-1]].filter(([dx, dy]) => m.has((x+dx)*1000 + y+dy)).length < 2) m.delete(v); }
+    const xs = [...m].map(v => Math.floor(v/1000)), ys = [...m].map(v => v % 1000);
+    spans[k] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+  }
+  // the I is straight-sided, so its first and last rows are the face's
+  const y0 = spans.I[2];
+  if(spans.I[3] - y0 + 1 !== ROWS) throw new Error(`the I is ${spans.I[3] - y0 + 1} rows, not ${ROWS}`);
+  for(const [k, [a, b]] of Object.entries(LIFT)){
+    const [x0, x1] = spans[k], m = new Set();
+    for(let x = a; x < b; x++){ let f = false;
+      for(let y = TOP; y <= y0 + ROWS + 2; y++){
+        if(glint(x, y) || end(x, y)) continue;
+        const v = at(x, y);
+        if(FILL.has(v)){ f = true; m.add(x*1000 + y); } else if(v === WHITE && f) m.add(x*1000 + y); else if(v === BLACK) f = false;
+      } }
+    const lifted = Array.from({length: ROWS}, (_, i) => Array.from({length: x1 - x0 + 1}, (_, j) => m.has((x0 + j)*1000 + y0 + i) ? '#' : '.').join(''));
+    let diff = 0, all = 0;
+    for(let y = 0; y < ROWS; y++) for(let x = 0; x < Math.max(lifted[0].length, SONIC[k][0].length); x++){
+      const a = lifted[y][x] === '#', b = SONIC[k][y][x] === '#'; if(a || b) all++; if(a !== b) diff++; }
+    if(diff / all > 0.07) throw new Error(`S2's ${k} is ${diff} pixels off S1's`);
+    shapes[k] = SONIC[k];
+  }
+  const ix = Math.round((spans.I[0] + spans.I[1]) / 2);
+  const gradient = Array.from({length: ROWS}, (_, i) => L3 + at(ix, y0 + i));
+  // the gaps between the lifted letters
+  const order = ['S', 'O', 'N', 'I', 'C'], gaps = order.slice(1).map((k, i) => spans[k][0] - spans[order[i]][1] - 1);
+  const gap = gaps.slice().sort((p, q) => p - q)[2];
+  // The small face: T H E D G O lifted from rows 140-145 (white); the rest are S1's.
+  const small = {...SMALL}, words = ['T', 'H', 'E', null, 'H', 'E', 'D', 'G', 'E', 'H', 'O', 'G'];
+  let col = 110, k = 0;
+  const lit = c => [...Array(6)].some((_, i) => at(c, 140 + i) === WHITE);
+  const lifted = {};
+  while(col < 210 && k < words.length){
+    while(col < 210 && !lit(col)) col++;
+    const s0 = col; while(lit(col)) col++;
+    if(words[k] === null) k++;
+    const ch = words[k++];
+    if(ch && !lifted[ch]) lifted[ch] = Array.from({length: 6}, (_, i) =>
+      Array.from({length: col - s0}, (_, j) => at(s0 + j, 140 + i) === WHITE ? '#' : '.').join(''));
+  }
+  for(const c of 'THEDGO') if(!lifted[c]) throw new Error('small ' + c + ' was not lifted');
+  Object.assign(small, lifted);
+  const logo = {chrome: shapes, gradient, small, top: y0, smallTop: 140, cx: 160, gap, space: 12, smallGap: 1, smallSpace: 7,
+                depth: 3, spread: 16, lean: 3, black: L3 + BLACK, white: L3 + WHITE};
+  fs.writeFileSync(OUT + 's2-logo.json', JSON.stringify(logo));
+  console.log(`  logo: arch checked on ${checked} columns; SONIC from row ${y0}, gaps ${gaps.join(',')}; ` +
+              `S1's designs ${Object.keys(DESIGNS).length}, small ${Object.keys(small).length}`);
+  for(const c of 'SONIC') console.log(`    ${c} ${shapes[c][0].length} wide`);
 }
 fs.writeFileSync(OUT + 's2-meta.json', JSON.stringify(meta));
 

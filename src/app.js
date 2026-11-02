@@ -9,7 +9,7 @@ const SPACE_W = 8;
 // each glyph and line stays its own; -3 or so reproduces the ROM spacing.
 const DEFAULTS = { outline:{track:0, lead:0}, plain:{track:2, lead:4}, card:{track:0, lead:4},
                    credits:{track:0, lead:4}, card1:{track:0, lead:4}, logo:{track:0, lead:0},
-                   credits2:{track:0, lead:8}, card2:{track:0, lead:4} };
+                   credits2:{track:0, lead:8}, card2:{track:0, lead:4}, logo2:{track:0, lead:0} };
 
 /* The title-card lettering (tools/build-card-font.mjs) is a third style with its
    own atlas. Its letters already carry their spacing -- each glyph's dark bar
@@ -47,13 +47,19 @@ const isCard = () => state.style === 'card' || state.style === 'card1' || state.
    leaning toward the logo's centre -- so every letter casts its shadow the way
    the real ones do, wherever it lands. The small letters are white, outlined
    black to the sides and below. All in palette line 0, the emblem's. */
-FONT.logo = {rowh: 26, glyphs: Object.fromEntries(Object.entries(S1LOGO.chrome).map(([c, r]) => [c, [0, 0, r[0].length, 26, 0]]))};
+const logoFont = L => ({rowh: 26, glyphs: Object.fromEntries(Object.entries(L.chrome).map(([c, r]) => [c, [0, 0, r[0].length, 26, 0]]))});
+FONT.logo = logoFont(S1LOGO);
+/* The Sonic 2 logo is the same lettering on S2's emblem (tools/build-s2-assets.mjs):
+   placed by its own measure, in the emblem's palette line, 3. */
+FONT.logo2 = logoFont(S2LOGO);
+const isLogo = () => state.style === 'logo' || state.style === 'logo2';
+const logoSpec = () => state.style === 'logo2' ? S2LOGO : S1LOGO;
 const logoCache = {key: '', lay: null};
 function logoLayer(){
   const lines = state.text.toUpperCase().split('\n');
-  const key = lines.slice(0, 2).join('\n');
+  const key = state.style + '|' + lines.slice(0, 2).join('\n');
   if(logoCache.key === key && logoCache.lay) return logoCache.lay;
-  const Lg = S1LOGO, g = new Uint8Array(BG_W * BG_H);
+  const Lg = logoSpec(), g = new Uint8Array(BG_W * BG_H), BLACK = Lg.black || 15, WHITE = Lg.white || 6;
   const put = (x, y, v) => { if(x >= 0 && x < BG_W && y >= 0 && y < BG_H) g[y*BG_W + x] = v; };
   // chrome: every shadow first, then every cap, then every fill, so no letter's black covers a face
   const glyphs = [...(lines[0] || '')].map(c => c === ' ' ? null : Lg.chrome[c]).filter(c => c !== undefined);
@@ -75,10 +81,10 @@ function logoLayer(){
       for(const [ox, oy] of [[-1, 0], [1, 0], [0, 1], [-1, 1], [1, 1]]) black.add((a + ox)*1024 + b + oy); }
     for(const v of black){ if(inAny(v)) continue; const a = v >> 10, b = v & 1023;
       let above = false; for(let ox = -1; ox <= 1; ox++) if(has(a + ox, b + 1) && !has(a + ox, b)) above = true;
-      if(!above || has(a, b - 1)) put(a, b, 15); }
+      if(!above || has(a, b - 1)) put(a, b, BLACK); }
   }
   for(const {m} of placed) for(const v of m){ const a = v >> 10, b = v & 1023;
-    if(!m.has(a*1024 + b - 1)) for(const ox of [-1, 0, 1]) if(!inAny((a + ox)*1024 + b - 1)) put(a + ox, b - 1, 6); }
+    if(!m.has(a*1024 + b - 1)) for(const ox of [-1, 0, 1]) if(!inAny((a + ox)*1024 + b - 1)) put(a + ox, b - 1, WHITE); }
   for(const {m} of placed) for(const v of m){ const a = v >> 10, b = v & 1023; put(a, b, Lg.gradient[b - Lg.top]); }
   // small: white, black to the sides and below
   const small = [...(lines[1] || '')].map(c => c === ' ' ? null : Lg.small[c]).filter(c => c !== undefined);
@@ -91,29 +97,31 @@ function logoLayer(){
     sx += s[0].length + Lg.smallGap;
   }
   for(const v of white){ const a = v >> 10, b = v & 1023;
-    for(const [ox, oy] of [[-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]) if(!white.has((a + ox)*1024 + b + oy)) put(a + ox, b + oy, 15); }
-  for(const v of white) put(v >> 10, v & 1023, 6);
+    for(const [ox, oy] of [[-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]]) if(!white.has((a + ox)*1024 + b + oy)) put(a + ox, b + oy, BLACK); }
+  for(const v of white) put(v >> 10, v & 1023, WHITE);
   logoCache.key = key;
   return logoCache.lay = {g, w: BG_W, h: BG_H, id: layerIds++};
 }
-/* Off the S1 title the logo has no scene palette to fade with: the title palette's
-   line 0, fixed. */
-let logoLutCache = null;
+/* Off its title the logo has no scene palette to fade with: the title's own
+   palette at rest, fixed. */
+const logoLutCache = {};
 function logoLut(){
-  if(logoLutCache) return logoLutCache;
-  const hex = SCENES.s1.intro.pals[SCENES.s1.intro.pals.length - 1];
+  if(logoLutCache[state.style]) return logoLutCache[state.style];
+  const S = state.style === 'logo2' ? SCENES.s2.intro : SCENES.s1.intro;
+  const hex = state.style === 'logo2' ? S.pals[S.tl[S.still][0]] : S.pals[S.pals.length - 1];
   const seen = new Map();
   PALETTE.forEach((c, i) => { if(i > FONT_SLOTS) seen.set((c[0]<<16)|(c[1]<<8)|c[2], i); });
-  return logoLutCache = Uint16Array.from({length: 64}, (_, i) => {
+  return logoLutCache[state.style] = Uint16Array.from({length: 64}, (_, i) => {
     const w = parseInt(hex.slice(i*3, i*3+3), 16);
     const c = [((w >> 1) & 7)*36, ((w >> 5) & 7)*36, ((w >> 9) & 7)*36], k = (c[0]<<16)|(c[1]<<8)|c[2];
     if(!seen.has(k)){ seen.set(k, PALETTE.length); PALETTE.push(c); }
     return seen.get(k);
   });
 }
-/* On the S1 title the scene draws the logo itself, as part of its emblem, even in
+/* On its title the scene draws the logo itself, as part of its emblem, even in
    still mode -- where it shows the screen at rest. */
-const logoOnScene = () => state.style === 'logo' && state.scene === 's1' && !!introLayers.s1;
+const logoOnScene = () => (state.style === 'logo' && state.scene === 's1' && !!introLayers.s1)
+                       || (state.style === 'logo2' && state.scene === 's2' && !!introLayers.s2);
 const sceneDrawn = () => introOn() || logoOnScene();
 /* Faces that keep the game's colours: their own atlas and palette slots, no ramp. */
 const fixedFont = () => state.style === 'card' ? {img: cardAtlas, idx: CARD_IDX, w: CARD_W}
@@ -230,7 +238,7 @@ function paint(target, scale, L, dy, G, scroll, frame){
   } else if(state.bg !== 'none'){
     c.fillStyle = state.bg; c.fillRect(0,0,W,H);
   }
-  if(state.style === 'logo'){
+  if(isLogo()){
     if(logoOnScene()) return {W,H};                             // the scene drew it
     const lay = logoLayer(), lut = logoLut(), off = document.createElement('canvas');
     off.width = BG_W; off.height = BG_H;
@@ -271,7 +279,7 @@ function paint(target, scale, L, dy, G, scroll, frame){
 
 function geom(L){
   if(sceneOn()) return { head: 0, w0: BG_W, h0: BG_H, scene: true };
-  if(isCard() || state.style === 'logo') return { head: 0, w0: BG_W, h0: BG_H, scene: false };   // screen-sized
+  if(isCard() || isLogo()) return { head: 0, w0: BG_W, h0: BG_H, scene: false };   // screen-sized
   const head = headroom();
   return { head, w0: L.w + state.pad*2, h0: L.h + state.pad*2 + head };
 }
@@ -464,7 +472,7 @@ function motion(){
    that walks the timeline -- playback, the scrubber, every export -- goes through
    here, and hands the entry to paint() as its dy. */
 function textFrames(){
-  if(state.style === 'logo') return LOGO_FRAMES;                // the logo does not move
+  if(isLogo()) return LOGO_FRAMES;                // the logo does not move
   return isCard() ? cardTimeline().frames : motion().frames;
 }
 // 48 frames: Sonic's wag (16) and the water cycle (24) both come round
@@ -861,7 +869,7 @@ function buildIndexed(){
    carry the rectangle the block actually occupies -- the rest is cleared for
    us. Vertical travel makes that a large saving. */
 function frameRect(L, scale, dy, G, W, H){
-  if(state.style === 'logo') return {x:0, y:0, w:W, h:H};          // static; drawn whole
+  if(isLogo()) return {x:0, y:0, w:W, h:H};          // static; drawn whole
   if(isCard()){
     let r = null;
     for(const it of cardItems(cardPose(dy), L)){
@@ -1240,7 +1248,8 @@ const INTROS = {
         return seen.get(k);
       }));
       const spr = spec.spr.map(q => gidx(q.img));
-      return {back: gidx(spec.back.img), emblem: gidx(spec.emblemImg.img), luts,
+      return {back: gidx(spec.back.img), emblem: gidx(spec.emblemImg.img), emblemClean: gidx(spec.emblemClean.img), luts,
+              topClean: Object.assign(gidx(spec.topCleanImg.img), {ox: spec.topClean.ox, oy: spec.topClean.oy}),
               parts: spec.sprites.map(p => p.map(q => q && Object.assign({}, spr[q.n], {ox: q.ox, oy: q.oy})))};
     },
     len(s){ return s.intro; },
@@ -1255,17 +1264,25 @@ const INTROS = {
         {key:'backdrop', fill:lut[32], x:0, y:0, tag:p, plane:true},
         {key:'bg', lay:L.back, x:0, y:0, rows, wrapAll:true, lut, tag:p + ':' + e[1] + ':' + e[2], plane:true},
       ];
-      const lo = [], hi = [], m = e[3].indexOf('m');
+      // With the S2 logo the emblem and the banner-top sprite (a copy of plane A there) are
+      // cleared, and the logo is drawn on plane A -- and again just after that sprite, over
+      // its rows only, since the sprite sits in front of everything but the star.
+      const logo = state.style === 'logo2', lo = [], hi = [], m = e[3].indexOf('m');
       e[3].forEach((q, i) => {
         if(q === 'm') return;
         const clip = m >= 0 && i > m ? [s.maskTop, s.maskBottom] : null;
         for(const part of [0, 1]){
-          const lay = L.parts[q[0]][part]; if(!lay) continue;
-          (part || q[3] ? hi : lo).unshift({key:'s' + i + ':' + part, lay, x:q[1] + lay.ox, y:q[2] + lay.oy,
-                                            clip, lut, tag:p + ':' + !!clip});
+          const top = logo && part === 1 && q[0] === s.topClean.frame;
+          const lay = top ? L.topClean : L.parts[q[0]][part]; if(!lay) continue;
+          const items = [{key:'s' + i + ':' + part, lay, x:q[1] + lay.ox, y:q[2] + lay.oy, clip, lut, tag:p + ':' + !!clip}];
+          // (the banner's pieces are one tile tall; the TM below them is clear of the logo)
+          if(top) items.push({key:'logoTop', lay:logoLayer(), x:0, y:0, clip:[q[2] + lay.oy + 8, BG_H], lut, tag:p + ':' + logoCache.key});
+          (part || q[3] ? hi : lo).unshift(...items);
         }
       });
-      d.push(...lo, {key:'emblem', lay:L.emblem, x:0, y:0, lut, tag:p}, ...hi);
+      d.push(...lo, {key:'emblem', lay:logo ? L.emblemClean : L.emblem, x:0, y:0, lut, tag:p});
+      if(logo) d.push({key:'logo', lay:logoLayer(), x:0, y:0, lut, tag:p + ':' + logoCache.key});
+      d.push(...hi);
       return d;
     },
   },
@@ -1592,7 +1609,7 @@ function paintIndexed(rect, scale, L, dy, G, bgIdx, scroll, banks, frame){
       }
     }
   };
-  if(state.style === 'logo'){
+  if(isLogo()){
     if(!logoOnScene()) blitIndexed(buf, rect, scale, {lay: logoLayer(), x: 0, y: 0, lut: logoLut()}, 0);
     return buf;
   }
@@ -1819,7 +1836,7 @@ function exportCanvas(){
   const L = layout();
   // force zero headroom so still output is unaffected by animation settings;
   // a scene or the title card is the whole Genesis frame either way
-  const G = sceneOn() || isCard() || state.style === 'logo' ? geom(L)
+  const G = sceneOn() || isCard() || isLogo() ? geom(L)
                         : {head:0, w0:L.w + state.pad*2, h0:L.h + state.pad*2};
   const scale = clampScale(G.w0, G.h0, state.scale, STILL_BUDGET);
   paint(off, scale, L, 0, G, scrollAt(1e9));
@@ -2194,8 +2211,8 @@ el('style').addEventListener('click', e=>{
   document.body.classList.toggle('card3k', state.style === 'card');
   document.body.classList.toggle('card1', state.style === 'card1');
   document.body.classList.toggle('card2', state.style === 'card2');
-  document.body.classList.toggle('fixed', !!fixedFont() || state.style === 'logo');
-  document.body.classList.toggle('static', state.style === 'logo');
+  document.body.classList.toggle('fixed', !!fixedFont() || isLogo());
+  document.body.classList.toggle('static', isLogo());
   // S3&K's card has no act 3
   if(state.style === 'card' && state.cardAct > 2) el('cardAct').querySelector('button[data-act="1"]').click();
   if(!player.playing) showRest();

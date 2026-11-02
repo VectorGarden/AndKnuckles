@@ -384,6 +384,32 @@ as the blue goes, and then the level's main loop. Some details:
 - **The idle animations are timed from the frame the objects start.** That is Tails' wait
   (a blink 80 frames in) and his tails' swish, a frame every 8. The HUD is left off.
 
+### The Sonic 2 logo
+
+**S2 logo** does for the S2 emblem what the S1 logo does for Sonic 1's: your first line in the
+chrome face of **SONIC**, your second in the small face of **THE HEDGEHOG**, centred where those
+sat. The **2** stays. On the **S2 title** scene it is part of the emblem, so it fades in with the
+emblem and Sonic and Tails rise behind it. Off that scene it is drawn on its own in the title's
+colours.
+
+**It is the same lettering.** Sonic 2's S, O, N, I and C are Sonic 1's: lifted the same way, O
+and I match pixel for pixel, and N, S and C differ only where the glint on the 2 and the ribbon's
+curled ends touch them. So the S1 logo's shapes, gradient rule, white cap, outline and leaning
+shadow are used as they are. They are placed by S2's own measure: the letters start on row 109,
+centred on x 160, with S2's wider spacing.
+
+What is new is the emblem around them:
+
+- **The ribbon is arched.** Its white stripe runs from row 117 to 133 in the middle and drops
+  toward the ends. On the columns that show nothing but ribbon, both edges fit a parabola about
+  the middle exactly, so the letters' columns are refilled from it.
+- **The curled ends and the star field** reach in to column 91 from either side and mirror each
+  other about x 159.5, so there a pixel that matches its mirror is kept. A glint on the 2 runs up
+  between O and N, and it is kept too.
+- **The top of the banner is also a sprite,** a copy of plane A that sits in front of Sonic and
+  Tails. It is cleared the same way, and the logo is drawn a second time just after it, over its
+  eight rows only, so the tops of your letters stay in front.
+
 ## The S3 opening
 
 On by default once you pick the S3 background in animated mode, and the same toggle as
