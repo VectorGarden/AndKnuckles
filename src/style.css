@@ -54,7 +54,9 @@
   }
   .stage::before{top:6px;left:6px;border-right:0;border-bottom:0}
   .stage::after{bottom:6px;right:6px;border-left:0;border-top:0}
+  /* shown at a whole multiple of the art's pixels when it is too wide for the stage (app.js) */
   #preview{image-rendering:pixelated;image-rendering:crisp-edges;max-width:100%;height:auto;display:block}
+  #preview.fit{max-width:none}
   #preview.ghost{opacity:.28}
   .readout{
     display:flex;gap:10px;flex-wrap:wrap;align-items:center;
@@ -86,24 +88,37 @@
   .chip:hover{color:var(--gold);border-color:var(--gold)}
 
   /* ---- controls ---- */
+  /* panels of controls: the gaps between them, over the edge colour, are the rules */
   .controls{
-    margin-top:26px;border:3px solid var(--edge);box-shadow:var(--drop);background:var(--panel);
-    display:grid;grid-template-columns:repeat(3,1fr);
+    margin-top:26px;border:3px solid var(--edge);box-shadow:var(--drop);background:var(--edge);
+    display:grid;grid-template-columns:repeat(6,1fr);gap:2px;
   }
-  .ctl{padding:16px;border-right:2px solid var(--edge);border-bottom:2px solid var(--edge)}
-  .ctl:nth-child(3n){border-right:0}
+  .ctl{padding:16px;background:var(--panel);grid-column:span 2;min-width:0}
+  .ctl.half{grid-column:span 3}
+  .ctl.full{grid-column:1/-1}
   label,.lbl{
     display:block;font-family:var(--mono);font-size:10px;letter-spacing:.2em;
     text-transform:uppercase;color:var(--dim);margin-bottom:10px;
   }
   .lbl b{color:var(--gold);font-weight:600;float:right;letter-spacing:.08em}
-  .seg{display:flex}
+  /* a row of joined buttons that wraps: each overlaps its neighbours' borders by their width */
+  .seg{display:flex;flex-wrap:wrap;padding:0 2px 2px 0}
   .seg button{
-    flex:1;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;
-    background:transparent;color:var(--dim);border:2px solid var(--edge);padding:8px 4px;cursor:pointer;
+    flex:1 1 auto;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase;
+    background:transparent;color:var(--dim);border:2px solid var(--edge);padding:8px 10px;cursor:pointer;
+    margin:0 -2px -2px 0;white-space:nowrap;position:relative;
   }
-  .seg button + button{border-left:0}
-  .seg button[aria-pressed="true"]{background:var(--gold);color:var(--navy);border-color:var(--gold);font-weight:700}
+  .seg button[aria-pressed="true"]{background:var(--gold);color:var(--navy);border-color:var(--gold);font-weight:700;z-index:1}
+  .seg button[disabled]{opacity:.4;cursor:not-allowed}
+  /* a choice laid out by game: one labelled row each */
+  .controls.picker .ctl:not(.full){grid-column:span 3}
+  .pick{display:flex;flex-direction:column;gap:6px}
+  .game{display:flex;align-items:center;gap:10px}
+  .game .who{
+    font-family:var(--mono);font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--dim);flex:0 0 64px;
+  }
+  .game .seg{flex:1}
   input[type=range]{width:100%;-webkit-appearance:none;appearance:none;background:transparent;height:22px;margin:0}
   input[type=range]::-webkit-slider-runnable-track{height:6px;background:var(--edge)}
   input[type=range]::-moz-range-track{height:6px;background:var(--edge)}
@@ -111,7 +126,7 @@
     -webkit-appearance:none;width:14px;height:18px;background:var(--gold);margin-top:-6px;border:0;cursor:pointer
   }
   input[type=range]::-moz-range-thumb{width:14px;height:18px;background:var(--gold);border:0;border-radius:0;cursor:pointer}
-  .bgrow{display:flex;gap:8px;align-items:center}
+  .bgrow{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .swatch{
     width:34px;height:34px;border:2px solid var(--edge);cursor:pointer;padding:0;background-clip:padding-box
   }
@@ -143,13 +158,14 @@
   body:not(.anim) .anim-only{display:none !important}
   body.anim .still-only{display:none !important}
   body:not(.scene) .scene-only{display:none !important}
+  body.scene .scene-off{display:none !important}   /* the scene is the background */
   body:not(.has-intro) .intro-only{display:none !important}
   body:not(.card) .card-only{display:none !important}
   body.card .spring-only, body.static .spring-only{display:none !important}   /* own motion, or none */
   body:not(.fixed) .fixed-only{display:none !important}
   body:not(.card3k) .s3card-only{display:none !important}
   body:not(.card1):not(.card2) .s1card-only{display:none !important}
-  body.fixed #palCtl .bgrow, body.fixed #palCtl .saved, body.fixed #lineCtl{display:none !important}
+  body.fixed #palCtl .bgrow, body.fixed #palCtl .saved, body.fixed #lineCtl, body.fixed #palNote{display:none !important}
   .transport input[type=range]{flex:1;min-width:110px;max-width:260px}
   .btn.sm{padding:7px 14px;font-size:11px;box-shadow:none;border-width:2px;min-width:74px}
   .lbl.inline{display:inline-block;margin:0;white-space:nowrap}
@@ -205,13 +221,28 @@
 
   @media (max-width:760px){
     .controls{grid-template-columns:1fr 1fr}
-    .ctl:nth-child(3n){border-right:2px solid var(--edge)}
-    .ctl:nth-child(2n){border-right:0}
+    .ctl,.ctl.half{grid-column:span 1}
+    .ctl.odd,.controls.picker .ctl:not(.full){grid-column:1/-1}
     textarea{font-size:16px}
   }
   @media (max-width:460px){
+    body{padding:0 12px 48px}
+    header{padding:22px 0 14px}
+    .stage{padding:12px 8px;min-height:150px}
     .controls{grid-template-columns:1fr}
-    .ctl{border-right:0 !important}
+    .ctl,.ctl.half{grid-column:1/-1;padding:14px 12px}
+    .game{flex-direction:column;align-items:stretch;gap:4px}
+    .game .who{flex:none}
     .btn{flex:1}
+    .export .note{order:1}
+  }
+  /* fingers, not a mouse pointer: room to hit buttons and grab sliders */
+  @media (pointer:coarse){
+    .seg button{min-height:40px}
+    .chip{padding:9px 12px}
+    input[type=range]{height:32px}
+    input[type=range]::-webkit-slider-thumb{width:22px;height:28px;margin-top:-11px}
+    input[type=range]::-moz-range-thumb{width:22px;height:28px}
+    .swatch,input[type=color]{width:40px;height:40px}
   }
   @media (prefers-reduced-motion:reduce){.btn{transition:none}}

@@ -35,16 +35,6 @@
       <button data-mode="still" aria-pressed="true">Still</button>
       <button data-mode="anim" aria-pressed="false">Animated</button>
     </div>
-    <div class="seg" id="scene" role="group" aria-label="Background">
-      <button data-scene="off" aria-pressed="true">No BG</button>
-      <button data-scene="s1" aria-pressed="false">S1 title</button>
-      <button data-scene="ghz" aria-pressed="false">GHZ</button>
-      <button data-scene="s2" aria-pressed="false">S2 title</button>
-      <button data-scene="ehz" aria-pressed="false">EHZ</button>
-      <button data-scene="s3" aria-pressed="false">S3 title</button>
-      <button data-scene="sk" aria-pressed="false">S&amp;K title</button>
-      <button data-scene="aiz" aria-pressed="false">AIZ intro</button>
-    </div>
     <div class="row anim-only">
       <button class="btn ghost sm" id="play">Play</button>
       <input type="range" id="scrub" min="0" max="99" step="1" value="0" aria-label="Frame">
@@ -66,22 +56,50 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
     </div>
   </div>
 
-  <div class="controls">
+  <!-- what to draw and what over: each game's styles and scenes on a row of their own -->
+  <div class="controls picker">
     <div class="ctl">
       <span class="lbl">Letter style</span>
-      <div class="seg" id="style" role="group" aria-label="Letter style">
-        <button data-style="outline" aria-pressed="true">Outlined</button>
-        <button data-style="plain" aria-pressed="false">Plain</button>
-        <button data-style="card" aria-pressed="false">Title card</button>
-        <button data-style="credits" aria-pressed="false">Sonic 1</button>
-        <button data-style="card1" aria-pressed="false">S1 title card</button>
-        <button data-style="logo" aria-pressed="false">S1 logo</button>
-        <button data-style="credits2" aria-pressed="false">Sonic 2</button>
-        <button data-style="card2" aria-pressed="false">S2 title card</button>
-        <button data-style="logo2" aria-pressed="false">S2 logo</button>
+      <div class="pick" id="style" role="group" aria-label="Letter style">
+        <div class="game"><span class="who">S3&amp;K</span><div class="seg">
+          <button data-style="outline" aria-pressed="true">Outlined</button>
+          <button data-style="plain" aria-pressed="false">Plain</button>
+          <button data-style="card" aria-pressed="false">Title card</button>
+        </div></div>
+        <div class="game"><span class="who">Sonic 1</span><div class="seg">
+          <button data-style="credits" aria-pressed="false">Credits</button>
+          <button data-style="card1" aria-pressed="false">Title card</button>
+          <button data-style="logo" aria-pressed="false">Logo</button>
+        </div></div>
+        <div class="game"><span class="who">Sonic 2</span><div class="seg">
+          <button data-style="credits2" aria-pressed="false">Credits</button>
+          <button data-style="card2" aria-pressed="false">Title card</button>
+          <button data-style="logo2" aria-pressed="false">Logo</button>
+        </div></div>
       </div>
     </div>
-    <div class="ctl card-only" id="cardCtl">
+    <div class="ctl">
+      <span class="lbl">Scene</span>
+      <div class="pick" id="scene" role="group" aria-label="Scene">
+        <div class="game"><span class="who">None</span><div class="seg">
+          <button data-scene="off" aria-pressed="true">No scene</button>
+        </div></div>
+        <div class="game"><span class="who">S3&amp;K</span><div class="seg">
+          <button data-scene="s3" aria-pressed="false">S3 title</button>
+          <button data-scene="sk" aria-pressed="false">S&amp;K title</button>
+          <button data-scene="aiz" aria-pressed="false">AIZ intro</button>
+        </div></div>
+        <div class="game"><span class="who">Sonic 1</span><div class="seg">
+          <button data-scene="s1" aria-pressed="false">Title</button>
+          <button data-scene="ghz" aria-pressed="false">Green Hill</button>
+        </div></div>
+        <div class="game"><span class="who">Sonic 2</span><div class="seg">
+          <button data-scene="s2" aria-pressed="false">Title</button>
+          <button data-scene="ehz" aria-pressed="false">Emerald Hill</button>
+        </div></div>
+      </div>
+    </div>
+    <div class="ctl card-only full" id="cardCtl">
       <span class="lbl">Title card</span>
       <div class="seg" id="cardZone" role="group" aria-label="ZONE line">
         <button data-zone="on" aria-pressed="true">ZONE</button>
@@ -99,13 +117,16 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
         <button data-act="0" aria-pressed="false">No act</button>
       </div>
     </div>
+  </div>
 
-    <div class="ctl">
+  <div class="controls">
+
+    <div class="ctl half">
       <span class="lbl">Pixel scale <b id="scaleVal">4×</b></span>
       <input type="range" id="scale" aria-label="Pixel scale" min="1" max="16" step="1" value="4">
     </div>
 
-    <div class="ctl">
+    <div class="ctl half">
       <span class="lbl">Alignment</span>
       <div class="seg" id="align" role="group" aria-label="Alignment">
         <button data-align="left" aria-pressed="false">Left</button>
@@ -124,15 +145,15 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
       <input type="range" id="lead" aria-label="Line spacing" min="-8" max="24" step="1" value="0">
     </div>
 
-    <div class="ctl">
+    <div class="ctl odd">
       <span class="lbl">Edge padding <b id="padVal">0</b></span>
       <input type="range" id="pad" aria-label="Edge padding" min="0" max="32" step="1" value="0">
     </div>
 
-    <div class="ctl" id="palCtl" style="grid-column:1/-1;border-right:0">
+    <div class="ctl full" id="palCtl">
       <span class="lbl">Palette</span>
-      <span class="note fixed-only">The title-card, Sonic 1 and Sonic 2 letters keep the game's
-      own colours, so the palette does not apply to them.</span>
+      <span class="note fixed-only">The game styles — title cards, credits and logos — keep the
+      game's own colours, so the palette does not apply to them.</span>
       <div class="bgrow">
         <div class="seg" id="palette" role="group" aria-label="Palette">
           <button data-pal="classic" aria-pressed="true">Classic</button>
@@ -142,11 +163,11 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
           <button data-pal="shadow" aria-pressed="false">Shadow</button>
           <button data-pal="emerald" aria-pressed="false">Emerald</button>
         </div>
-        <input type="color" id="tint" value="#FCB400" title="Custom face colour">
-        <span class="lbl" style="margin:0 0 0 4px">Recolours the letters only, never the
-        background. The custom picker derives the whole ramp — shadow, highlight, outline —
-        from one face colour, snapped to the Genesis palette's 36-step channels.</span>
+        <input type="color" id="tint" value="#FCB400" title="Custom face colour" aria-label="Custom face colour">
       </div>
+      <span class="note" id="palNote">Recolours the letters only, never the background. The custom picker
+      derives the whole ramp — shadow, highlight, outline — from one face colour, snapped to the
+      Genesis palette's 36-step channels.</span>
       <div class="saved">
         <span class="lbl" style="margin:0">Saved</span>
         <div class="saved" id="savedList" style="margin:0"></div>
@@ -163,42 +184,36 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
       </div>
     </div>
 
-    <div class="ctl" style="grid-column:1/-1;border-bottom:0;border-right:0">
+    <div class="ctl scene-off full">
       <span class="lbl">Background</span>
       <div class="bgrow">
         <button class="swatch trans" data-bg="none" aria-pressed="true" title="Transparent"></button>
         <button class="swatch" data-bg="#24006C" style="background:#24006C" title="Title navy"></button>
         <button class="swatch" data-bg="#0D4807" style="background:#0D4807" title="Sprite-sheet green"></button>
         <button class="swatch" data-bg="#FFFFFF" style="background:#fff" title="White"></button>
-        <input type="color" id="custom" value="#FC6C00" title="Custom colour">
-        <span class="lbl" style="margin:0 0 0 4px">Transparent stays transparent in PNG, WebP and AVIF</span>
+        <input type="color" id="custom" value="#FC6C00" title="Custom colour" aria-label="Custom background colour">
       </div>
+      <span class="note">Transparent stays transparent in PNG, WebP and AVIF.</span>
     </div>
   </div>
 
   <div class="controls scene-only" id="sceneCtl">
-    <div class="ctl anim-only intro-only" id="introCtl" style="grid-column:1/-1;border-right:0">
+    <div class="ctl anim-only intro-only full" id="introCtl">
       <span class="lbl">Intro</span>
       <div class="seg" id="intro" role="group" aria-label="Intro">
         <button data-intro="off" aria-pressed="false">Off</button>
         <button data-intro="on" aria-pressed="true">Full opening</button>
       </div>
-      <span class="note">Plays the S&amp;K opening ahead of the text. The Death Egg comes down
-      onto the volcano while the island rises to meet it, Sonic falls in after, then Knuckles and
-      the ground slide up from the bottom and he lands — the order the ROM does it in. It all hangs
-      on <b>Camera_Y_pos_P2</b>: the background, the mountain sprite and the egg's resting place are
-      all positioned from it, so the egg settles on <b>$F0&nbsp;&minus;&nbsp;128&nbsp;=&nbsp;$70</b>
-      and stays stuck to the terrain as the scene rides up. Speeds are scaled up from the ROM's,
-      keeping their ratios; adds 65 frames ahead of the text.</span>
+      <span class="note">Plays the scene's own opening ahead of the text, the way its game does —
+      the S&amp;K Death Egg landing, the S3 island, the AIZ fly-in, the Sonic 1 and 2 title screens
+      coming up. Off starts on the scene at rest.</span>
     </div>
-    <div class="ctl" style="grid-column:1/-1;border-bottom:0;border-right:0">
+    <div class="ctl full">
       <span class="lbl">Text position <b id="sceneYVal">176</b></span>
       <input type="range" id="sceneY" aria-label="Text vertical position" min="0" max="223" step="1" value="176">
-      <span class="note">Output locks to the Genesis frame, 320&times;224, and the background
-      colour swatches no longer apply. 176 is where the ROM puts <b>&amp; KNUCKLES</b> — banner rest
-      $D4 plus the $5C subtitle offset, less the $80 sprite-space origin. The background also
-      scrolls up 16px over the first 16 frames, which is <b>V_scroll_value</b> in the original
-      making room for the subtitle.</span>
+      <span class="note">Output locks to the Genesis frame, 320&times;224. Each scene starts the
+      text where its game puts its own — on S3 and S&amp;K that is 176, where <b>&amp; KNUCKLES</b>
+      sits.</span>
     </div>
   </div>
 
@@ -227,7 +242,7 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
       <span class="lbl">Headroom <b id="headVal">auto</b></span>
       <input type="range" id="head" aria-label="Headroom" min="-1" max="128" step="1" value="-1">
     </div>
-    <div class="ctl" style="grid-column:1/-1;border-right:0">
+    <div class="ctl full">
       <span class="lbl">Timebase</span>
       <div class="seg" id="timebase" role="group" aria-label="Timebase">
         <button data-tb="pal" aria-pressed="true">PAL · 50 Hz</button>
@@ -238,7 +253,7 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
       (1.66s). APNG delays are a fraction, so it expresses 59.92 Hz exactly as 100/5992 —
       pick APNG if the timing matters. Video is a real-time capture and is approximate either way.</span>
     </div>
-    <div class="ctl spring-only" style="grid-column:1/-1;border-bottom:0;border-right:0">
+    <div class="ctl spring-only full">
       <button class="btn ghost sm" id="romReset" style="min-width:0">Reset to ROM values</button>
       <span class="note">Defaults are read from Obj_TitleBanner_Main in the Sonic&nbsp;3 &amp; Knuckles
       disassembly: 96px entry, 4px/frame initial velocity, 0.25px/frame² spring, velocity halved
@@ -263,7 +278,9 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
 
   <footer>
     Sprite sheet ripped by <b>DarkNic the Half Demon1234</b> — credit kept as asked.<br>
-    Sonic the Hedgehog 3 &amp; Sonic &amp; Knuckles are © <b>Sega</b>. This is an unofficial fan tool; the artwork belongs to them.<br>
+    Sonic the Hedgehog, Sonic the Hedgehog 2, Sonic the Hedgehog 3 and Sonic &amp; Knuckles are © <b>Sega</b>. This is an
+    unofficial fan tool; the artwork belongs to them. The scenes and the game lettering are decoded from the
+    <b>Sonic Retro</b> disassemblies.<br>
     Character set: <b>A–Z, 0–9, space</b> and <b>! &quot; # $ % &amp; &#39; ( ) * + , - . / : ; &lt; = &gt; ? @ [ \ ] _ ` { | } ~</b>
     — everything on a standard keyboard. <b>^</b> is the sheet's triangle rather than a caret.<br>
     The ROM has no font at all — it stores &amp; KNUCKLES as a flat 168&times;24 bitmap — so only

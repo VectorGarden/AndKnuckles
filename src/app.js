@@ -317,6 +317,7 @@ function render(){
                       scrollAt(anim ? player.frame : 1e9), player.frame);
 
   canvas.classList.toggle('ghost', L.ghost);
+  fitPreview(scale);
   el('dims').textContent = W + ' × ' + H + ' px';
   el('scaleOut').textContent = scale + '×' + (scale !== state.scale ? ' (capped)' : '');
   el('skipped').textContent = L.skipped.length ? '· skipped ' + L.skipped.join(' ') : '';
@@ -344,6 +345,21 @@ function render(){
     queueEstimate();
   }
 }
+
+/* On a narrow screen the canvas is wider than the stage. Squeezing it to fit
+   gives uneven pixels, so it is shown at the largest whole multiple of the art's
+   own pixels that fits, and only squeezed when even 1x is too wide. */
+let fitScale = 1;
+function fitPreview(scale){
+  fitScale = scale;
+  const st = el('stage'), cs = getComputedStyle(st);
+  const room = st.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const base = canvas.width / scale, n = Math.floor(room / base);
+  const fit = canvas.width > room && n >= 1;
+  canvas.classList.toggle('fit', fit);
+  canvas.style.width = fit ? n * base + 'px' : '';
+}
+addEventListener('resize', () => { if(ready) fitPreview(fitScale); });
 
 /* ---------- playback ---------- */
 const FRAME_MS = 20;                 // GIF delay is whole centiseconds: 2cs
@@ -2206,7 +2222,7 @@ document.querySelectorAll('.chip').forEach(b=>b.addEventListener('click',()=>{
 el('style').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.style = b.dataset.style;
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   document.body.classList.toggle('card', isCard());
   document.body.classList.toggle('card3k', state.style === 'card');
   document.body.classList.toggle('card1', state.style === 'card1');
@@ -2347,7 +2363,7 @@ el('savedList').addEventListener('click', e=>{
 el('palette').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.palette = b.dataset.pal;
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   applyPalette(PALETTES[state.palette]);
   render();
 });
@@ -2363,7 +2379,7 @@ el('tint').addEventListener('input', e=>{
 el('align').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.align = b.dataset.align;
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   render();
 });
 
@@ -2397,7 +2413,7 @@ const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
 el('mode').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.mode = b.dataset.mode;
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   document.body.classList.toggle('anim', state.mode === 'anim');
   pause();
   showRest();
@@ -2407,7 +2423,7 @@ el('mode').addEventListener('click', e=>{
 el('timebase').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.timebase = b.dataset.tb;
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   render();
 });
 
@@ -2418,7 +2434,7 @@ el('scene').addEventListener('click', e=>{
     state.sceneY = SCENES[state.scene].y;
     el('sceneY').value = state.sceneY; el('sceneYVal').textContent = state.sceneY;
   }
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   document.body.classList.toggle('scene', sceneOn());
   document.body.classList.toggle('has-intro', !!sceneIntro());
   curveCache.key = '';
@@ -2428,27 +2444,27 @@ el('scene').addEventListener('click', e=>{
 el('cardZone').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.cardZone = b.dataset.zone === 'on';
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   if(!player.playing) showRest();
   render();
 });
 el('cardBanner').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.cardBanner = b.dataset.banner;
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   render();
 });
 el('cardAct').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.cardAct = +b.dataset.act;
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   if(!player.playing) showRest();
   render();
 });
 el('intro').addEventListener('click', e=>{
   const b = e.target.closest('button'); if(!b) return;
   state.intro = b.dataset.intro === 'on';
-  [...e.currentTarget.children].forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   player.frame = 0;
   render();
 });
