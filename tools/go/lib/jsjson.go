@@ -167,6 +167,50 @@ func quote(s string, b *strings.Builder) {
 	b.WriteByte('"')
 }
 
+// StringifyIndent is JSON.stringify(v, null, space): one space unit a level,
+// "key": value, and empty arrays and objects kept as [] and {}.
+func StringifyIndent(v any, space string) string {
+	s := Stringify(v)
+	var b strings.Builder
+	depth := 0
+	nl := func() { b.WriteByte('\n'); b.WriteString(strings.Repeat(space, depth)) }
+	for i := 0; i < len(s); i++ {
+		switch c := s[i]; c {
+		case '"':
+			j := i + 1
+			for ; s[j] != '"'; j++ {
+				if s[j] == '\\' {
+					j++
+				}
+			}
+			b.WriteString(s[i : j+1])
+			i = j
+		case '{', '[':
+			if end := c + 2; s[i+1] == end { // '{'+2 is '}', '['+2 is ']'
+				b.WriteByte(c)
+				b.WriteByte(end)
+				i++
+				continue
+			}
+			b.WriteByte(c)
+			depth++
+			nl()
+		case '}', ']':
+			depth--
+			nl()
+			b.WriteByte(c)
+		case ',':
+			b.WriteByte(c)
+			nl()
+		case ':':
+			b.WriteString(": ")
+		default:
+			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}
+
 // Stringify is JSON.stringify(v) with no indent.
 func Stringify(v any) string {
 	var b strings.Builder

@@ -166,24 +166,24 @@ type deflater struct {
 	biBuf uint32
 	biVal int
 
-	dynL, dynD, blT       *ctTree
-	lDesc, dDesc, blDesc  *treeDesc
-	heap                  [2*lCodes + 1]int
-	depth                 [2*lCodes + 1]uint8
-	blCount               [maxBits + 1]uint16
-	heapLen, heapMax      int
-	optLen, staticLen     int
-	symBuf                []uint8
-	symNext               int
+	dynL, dynD, blT      *ctTree
+	lDesc, dDesc, blDesc *treeDesc
+	heap                 [2*lCodes + 1]int
+	depth                [2*lCodes + 1]uint8
+	blCount              [maxBits + 1]uint16
+	heapLen, heapMax     int
+	optLen, staticLen    int
+	symBuf               []uint8
+	symNext              int
 
-	win                                         []uint8
-	prev, head                                  []uint16
-	strstart, blockStart, lookahead, insert     int
-	insH, highWater                             int
-	matchLength, prevLength, matchAvailable     int
-	matchStart, prevMatch                       int
-	next                                        int
-	adler1, adler2                              uint32
+	win                                     []uint8
+	prev, head                              []uint16
+	strstart, blockStart, lookahead, insert int
+	insH, highWater                         int
+	matchLength, prevLength, matchAvailable int
+	matchStart, prevMatch                   int
+	next                                    int
+	adler1, adler2                          uint32
 }
 
 func (d *deflater) putByte(b int) { d.out = append(d.out, byte(b)) }

@@ -57,7 +57,9 @@ func Words(b []byte) []int {
 }
 
 // RGB is a Genesis colour word as 8-bit channels, 36 a step.
-func RGB(w int) [3]byte { return [3]byte{byte(((w >> 1) & 7) * 36), byte(((w >> 5) & 7) * 36), byte(((w >> 9) & 7) * 36)} }
+func RGB(w int) [3]byte {
+	return [3]byte{byte(((w >> 1) & 7) * 36), byte(((w >> 5) & 7) * 36), byte(((w >> 9) & 7) * 36)}
+}
 
 // Key is the grey ramp palette-index layers are written in: index g as g*4.
 var Key = func() [][3]byte {

@@ -252,8 +252,12 @@ func NemDecode(buf []byte) []byte {
 		return bytes
 	}
 	out := make([]byte, len(bytes))
-	le := func(b []byte, o int) uint32 { return uint32(b[o]) | uint32(b[o+1])<<8 | uint32(b[o+2])<<16 | uint32(b[o+3])<<24 }
-	put := func(o int, v uint32) { out[o], out[o+1], out[o+2], out[o+3] = byte(v), byte(v>>8), byte(v>>16), byte(v>>24) }
+	le := func(b []byte, o int) uint32 {
+		return uint32(b[o]) | uint32(b[o+1])<<8 | uint32(b[o+2])<<16 | uint32(b[o+3])<<24
+	}
+	put := func(o int, v uint32) {
+		out[o], out[o+1], out[o+2], out[o+3] = byte(v), byte(v>>8), byte(v>>16), byte(v>>24)
+	}
 	acc := le(bytes, 0)
 	put(0, acc)
 	for o := 4; o < len(bytes); o += 4 {

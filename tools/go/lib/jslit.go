@@ -12,7 +12,7 @@ import (
 // strings and numbers. Rather than keep a second copy, the Go steps read them
 // from the .mjs source. JSLiteral finds `const NAME =` and parses the first
 // object or array literal after it into Obj, []any, string and float64 --
-// enough of JavaScript for those files, and no more.
+// enough of JavaScript for those files (Array(n).fill(v) included), and no more.
 func JSLiteral(file, name string) any {
 	src := string(Must(os.ReadFile(filepath.Join(Tools(), file))))
 	i := strings.Index(src, "const "+name+" =")
@@ -125,6 +125,18 @@ func (p *litParser) value() any {
 			p.i++
 		}
 		switch p.s[st:p.i] {
+		case "Array": // Array(n).fill(v)
+			p.expect("(")
+			n := int(p.value().(float64))
+			p.expect(")")
+			p.expect(".fill(")
+			v := p.value()
+			p.expect(")")
+			a := make([]any, n)
+			for i := range a {
+				a[i] = v
+			}
+			return a
 		case "true":
 			return true
 		case "false":
@@ -135,6 +147,14 @@ func (p *litParser) value() any {
 		p.fail("unsupported value")
 	}
 	return nil
+}
+
+func (p *litParser) expect(t string) {
+	p.skip()
+	if !strings.HasPrefix(p.s[p.i:], t) {
+		p.fail("expected " + t)
+	}
+	p.i += len(t)
 }
 
 func isIdent(c byte) bool {
