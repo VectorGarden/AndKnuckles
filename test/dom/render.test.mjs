@@ -175,7 +175,7 @@ test('every glyph in the table renders, in every style', async () => {
   // the title card: 22 letters decoded from the zone names, J Q W X derived, and
   // & with eight punctuation marks and the ten digits drawn; the Sonic 1 credits:
   // 23 letters and the 2 decoded, the rest derived
-  for(const [style, count] of [['outline', 68], ['plain', 68], ['card', 45], ['credits', 44], ['card1', 44]]){
+  for(const [style, count] of [['outline', 68], ['plain', 68], ['card', 45], ['credits', 44], ['card1', 44], ['logo', 43]]){
     await setup(page, {style, text: 'X'});
     const r = await page.evaluate(async style => {
       const ta = document.getElementById('text');
@@ -236,10 +236,42 @@ test('the Sonic 1 title card lands where the game puts Green Hill\'s, and leaves
   assert.deepEqual(r.last, {}, 'the timeline ends with the card gone');
 });
 
+// The S1 logo replaces the emblem's lettering: on the S1 title the scene swaps in the
+// cleared emblem and draws the logo as part of it -- in still mode too -- and the
+// chrome line casts each letter's shadow toward the centre.
+test('the S1 logo takes the emblem\'s place, and its shadows lean to the centre', async () => {
+  await setup(page, {mode: 'still', style: 'logo', scene: 's1', text: 'SONIC\nTHE HEDGEHOG'});
+  const r = await page.evaluate(() => {
+    const d = introDraws(introLen()), {g, w: W} = logoLayer();
+    return {keys: d.map(q => q.key), clean: d.find(q => q.key === 'emblem').lay === introLayers.s1.emblemClean,
+            small: [...g.slice(S1LOGO.smallTop*W, (S1LOGO.smallTop + 6)*W)].filter(v => v === 6).length};
+  });
+  assert.ok(r.keys.includes('logo') && r.clean, 'the logo draws over the cleared emblem');
+  assert.ok(r.small > 100, 'THE HEDGEHOG should be drawn in the small face');
+
+  // Two I's far enough apart that their shadows don't meet: at mid height, each stem's
+  // black is thicker on the side toward the centre, by the same amount on both.
+  await setup(page, {mode: 'still', style: 'logo', scene: 's1', text: 'I    I'});
+  const s = await page.evaluate(() => {
+    const lay = logoLayer(), g = lay.g, W = lay.w;
+    const row = S1LOGO.top + 13, iw = S1LOGO.chrome.I[0].length, fill = v => v && v !== 15;
+    const stems = [];
+    for(let x = 1; x + iw < W; x++)
+      if(!fill(g[row*W + x - 1]) && [...Array(iw)].every((_, k) => fill(g[row*W + x + k])) && !fill(g[row*W + x + iw])) stems.push(x);
+    const run = (x, dir) => { let n = 0; while(g[row*W + x] === 15){ n++; x += dir; } return n; };
+    return stems.map(x => [run(x - 1, -1), run(x + iw, 1)]);
+  });
+  assert.equal(s.length, 2, 'both stems found');
+  const [[l0, r0], [l1, r1]] = s;
+  assert.ok(r0 > l0 && l1 > r1, `the shadows should lean inward (${JSON.stringify(s)})`);
+  assert.deepEqual([l0, r0], [r1, l1], 'and mirror each other');
+});
+
 // The card style draws from its own atlas in the preview and its own indices in
 // the export, so it needs the same two invariants the scenes have.
 for(const opts of [{scene: 'aiz', intro: 'on'}, {scene: 'off', intro: 'off'}, {scene: 's1', intro: 'on', style: 'card1'},
-                   {scene: 'ghz', intro: 'on', style: 'card1'}]){
+                   {scene: 'ghz', intro: 'on', style: 'card1'}, {scene: 's1', intro: 'on', style: 'logo'},
+                   {scene: 'off', intro: 'off', style: 'logo'}]){
   test(`title-card text, ${opts.scene}: preview matches export, sub-rects composite cleanly`, async () => {
     await setup(page, {mode: 'anim', style: 'card', text: 'ANGEL ISLAND\nZONE', ...opts});
     const p = await previewMatchesExport(page);

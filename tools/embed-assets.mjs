@@ -96,6 +96,7 @@ if(has('card-atlas.png') && has('card-table.json')){
 if(has('s1-meta.json')){
   const m = JSON.parse(fs.readFileSync(OUT + 's1-meta.json', 'utf8'));
   const spec = {...m, back: {src: b64('s1-bg.png')}, emblemImg: {src: b64('s1-emblem.png')},
+                emblemClean: {src: b64('s1-emblem-clean.png')},
                 tmImg: {src: b64('s1-tm.png')},
                 sonic: m.sonic.map((q, i) => ({...q, src: b64(`s1-sonic${i}.png`)}))};
   const cur = html.match(/^  s1: \{ label:"S1 title".*$/m);
@@ -130,6 +131,15 @@ if(has('s1card-atlas.png') && has('s1card-table.json')){
   else {
     const a = html.match(/^const CARD_SRC = "[^"]*";$/m);
     html = html.slice(0, a.index + a[0].length) + '\n' + lines + html.slice(a.index + a[0].length);
+  }
+}
+if(has('s1-logo.json')){
+  const line = `const S1LOGO = ${fs.readFileSync(OUT + 's1-logo.json', 'utf8').trim()};`;
+  const cur = html.match(/^const S1LOGO = .*;$/m);
+  if(cur) html = html.slice(0, cur.index) + line + html.slice(cur.index + cur[0].length);
+  else {
+    const a = html.match(/^const CARD_SRC = "[^"]*";$/m);
+    html = html.slice(0, a.index + a[0].length) + '\n' + line + html.slice(a.index + a[0].length);
   }
 }
 if(has('cred-atlas.png') && has('cred-table.json')){
