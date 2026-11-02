@@ -192,6 +192,21 @@ glyphs[':'] = shape(4, box(1, 9, 3, 11), box(1, 22, 3, 24));
 glyphs['-'] = shape(10, box(1, 13, 9, 15));
 glyphs['?'] = shape(14, arc(6.2, 5.2, 4.6, 4.6, 180, 100), box(5.2, 10, 7.2, 18), box(5.2, 22, 7.2, 24));
 
+// ---- digits ------------------------------------------------------------------------------
+// The act number is its own big graphic, so 0-9 are drawn too, borrowing the letters'
+// parts where a digit has one: 3 is B without its stem, 2 and 7 take Z's bars and
+// diagonal, 8 stacks &'s small loop over a tall one, and 9 is 6 turned round.
+glyphs['0'] = shape(14, arc(6.5, 12, 5.3, 11.6, 0, 360));
+glyphs['1'] = shape(10, box(5, 0, 7, 24), seg(2.2, 3.4, 5.6, 0.8));
+glyphs['2'] = shape(14, arc(6.4, 4.6, 4.6, 4.2, 180, 55), seg(9.2, 8.0, 1.9, 22.4), box(1, 22, 12, 24));
+glyphs['3'] = {...fromMask(toMask(glyphs.B).map(r => '.' + r.slice(3))), from: 'B, stem cut'};
+glyphs['4'] = shape(14, box(9, 0, 11, 24), seg(9.6, 1.0, 1.9, 13.6), box(1, 13, 13, 15));
+glyphs['5'] = shape(14, box(1, 0, 11, 2), box(1, 0, 3, 8.4), arc(6.2, 15.6, 5.4, 7.4, 205, 140));
+glyphs['6'] = shape(14, arc(6.6, 16.2, 5.3, 7.2, 0, 360), arc(11.4, 16.2, 10.1, 15.6, 180, 268));
+glyphs['7'] = shape(14, box(1, 0, 12, 2), seg(11.0, 1.6, 4.2, 23.4));
+glyphs['8'] = shape(14, arc(6.5, 4.2, 3.6, 3.9, 0, 360), arc(6.5, 15.8, 5.3, 7.4, 0, 360));
+glyphs['9'] = {...fromMask(toMask(glyphs['6']).slice().reverse().map(r => [...r].reverse().join(''))), from: '6, turned'};
+
 // ---- write ------------------------------------------------------------------------
 const order = Object.keys(glyphs).sort();
 const AW = order.reduce((a, L) => a + glyphs[L].w + 2, 0), atlas = new Uint8Array(AW * H);
@@ -241,4 +256,4 @@ table.card = {
 };
 fs.writeFileSync(OUT + 'card-table.json', JSON.stringify(table));
 for(const L of ['J','Q','W','X']) console.log(`  ${L}: ${glyphs[L].from}`);
-console.log(`  drawn: & . , ' " ! ? : -`);
+console.log(`  drawn: & . , ' " ! ? : - and 0-9`);
