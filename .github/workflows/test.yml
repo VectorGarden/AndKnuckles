@@ -54,7 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      # each Go step's test runs its JS step too and compares every file
+      # lib's maths test and fonts' test check against Node
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -67,6 +67,7 @@ jobs:
         run: go -C tools/go vet ./...
 
       - name: Run Go tests
-        # On x86-64, lib's maths test also holds atan2, sin, cos and hypot to
-        # V8's bit for bit.
+        # Each step's PNGs against the committed page, the deflate against the
+        # system zlib, and on x86-64 atan2, sin, cos and hypot against V8's, bit
+        # for bit.
         run: go -C tools/go test ./...

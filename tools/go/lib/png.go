@@ -8,7 +8,7 @@ import (
 	"io"
 )
 
-// PNG is what DecodePNG returns: tools/lib/png.mjs's decodePng, field for field.
+// PNG is what DecodePNG returns: the header fields and the un-filtered rows.
 type PNG struct {
 	W, H, Depth, Ctype int
 	Plte, Trns         []byte
@@ -104,8 +104,7 @@ func abs(x int) int {
 	return x
 }
 
-// EncodeIndexedPNG writes an 8-bit indexed PNG exactly as tools/lib/png.mjs's
-// encodeIndexedPng: filter 0 on every row, the palette, a tRNS chunk only when
+// EncodeIndexedPNG writes an 8-bit indexed PNG: filter 0 on every row, the palette, a tRNS chunk only when
 // transparent >= 0 (that index clear, those before it opaque), and our deflate.
 func EncodeIndexedPNG(idx []byte, w, h int, palette [][3]byte, transparent int) []byte {
 	raw := make([]byte, (w+1)*h)

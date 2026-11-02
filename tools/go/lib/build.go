@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 )
 
-// The helpers every build step shares, as each tools/build-*.mjs defines them.
+// The helpers every build step shares.
 
 // Root is the repository root: the nearest directory up from here holding tools/rom.
 func Root() string {

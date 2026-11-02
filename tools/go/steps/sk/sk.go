@@ -1,6 +1,6 @@
 /*
 Package sk builds every S&K title asset the page embeds, from the disassembly's
-own data: the Go port of tools/build-sk-assets.mjs. Nothing here ships in
+own data. Nothing here ships in
 index.html except the finished PNGs, which are pasted in as base64 -- see
 tools/README.md.
 
@@ -37,8 +37,7 @@ func fill(b []byte, v byte) {
 	}
 }
 
-// at reads a byte as a typed array does: past the end is undefined, which every
-// bit operation here turns into 0.
+// at reads a byte, 0 past the end.
 func at(b []byte, i int) int {
 	if i < 0 || i >= len(b) {
 		return 0

@@ -1,7 +1,6 @@
 /*
 Package cardfont builds the title-card lettering -- the tall face S3&K writes
-zone names in, ANGEL ISLAND ZONE -- as a second text style:
-tools/build-card-font.mjs.
+zone names in, ANGEL ISLAND ZONE -- as a second text style.
 
 Unlike the S3 title font, this one is a decode. There is no font in the ROM
 as such: each zone name is a mapping frame in Map - Title Card.asm, built from
@@ -499,7 +498,7 @@ func Build(out string) {
 	for L := range glyphs {
 		order = append(order, L)
 	}
-	sort.Strings(order) // single ASCII characters, so the same as JS's default sort
+	sort.Strings(order) // single ASCII characters, so a plain byte sort
 	AW := 0
 	for _, L := range order {
 		AW += glyphs[L].w + 2

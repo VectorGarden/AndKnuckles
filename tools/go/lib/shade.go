@@ -1,6 +1,6 @@
 package lib
 
-// Shade and Outline are tools/lib/shade.mjs: the S3&K sheet's shading rule, and
+// Shade and Outline are the S3&K sheet's shading rule, read off its own glyphs, and
 // its 2px navy outline.
 func Shade(mask []byte, w, h int) []byte {
 	out := make([]byte, w*h)

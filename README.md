@@ -26,7 +26,7 @@ file meant half of it was base64:
 
 Those four generated constants are 446 KB of the 550 KB, and they used to sit above
 every line of real code. Now `app.js` is 1,860 lines of nothing else. Rebuild with
-`node tools/build-all.mjs`; CI checks the committed page still matches. See
+`go -C tools/go run .`; CI checks the committed page still matches. See
 [`tools/README.md`](tools/README.md).
 
 The sprite sheet is baked in as a base64 PNG and sliced per glyph at runtime;
@@ -144,7 +144,7 @@ animated mode.
 
 ### Compression formats implemented
 
-Four, all decoded offline in Node so nothing ships in the page but the finished PNGs:
+Four, all decoded offline by the pipeline so nothing ships in the page but the finished PNGs:
 **Kosinski**, **moduled Kosinski**, **Enigma** and **Nemesis** (the last for reading the
 logo's `3`). Two traps worth recording: Kosinski's `NeedEarlyDescriptor` means the next
 descriptor word is fetched the instant the last bit is used, so it precedes the operand
@@ -454,7 +454,7 @@ the text springs in over the beach.
 
 It is not a title screen. It runs in the level engine, with the real Player object
 hidden and a stand-in (`Obj_AIZPlaneIntro`) drawing Sonic in screen coordinates while
-it pushes the hidden one along. So `tools/build-aiz-assets.mjs` does what the engine
+it pushes the hidden one along. So the pipeline's `aiz` step does what the engine
 does, offline: it decodes AIZ1 the way `LevelLoadBlock` entry 0 loads it for the intro
 (Primary plus the intro's Secondary tiles and blocks), steps every object the way its
 routine does — the plane's swing, the jump arc, the wave spawner, Knuckles' scripts,
@@ -606,9 +606,6 @@ and the extractor throws instead of silently testing nothing.
   on the ROM's own `y_vel == -$5B` test rather than a guard. Also that tuned parameters
   still close on rest, and that damping which never dissipates is *reported* rather than
   hanging.
-- [`test/deflate.test.mjs`](test/deflate.test.mjs) — the pipeline's own deflate against the
-  system's stock zlib, through Python: every PNG the pipeline writes, plus empty, tiny, flat,
-  noisy and multi-window inputs, byte for byte.
 - [`test/png-scanlines.test.mjs`](test/png-scanlines.test.mjs) — the PNG row packer, tested
   directly because for a long time the APNG round-trip could not reach half of it: every
   export carried the whole shared palette, so `buildApng` always picked 8-bit depth and a
@@ -616,9 +613,12 @@ and the extractor throws instead of silently testing nothing.
   palette to the colours they use — the shared one runs past 256 once AIZ is loaded — so
   text alone packs at 4 bits and the round-trip covers that branch as well.
 
-The Go pipeline's tests run with `go -C tools/go test ./...`: each build step against its
-JS, file for file, the compressor against every PNG, and the maths against V8. See
-[`tools/README.md`](tools/README.md#the-go-pipeline).
+The asset pipeline's tests run with `go -C tools/go test ./...`:
+- every PNG each build step writes against the one the committed page carries;
+- the deflate against the system's stock zlib on all of them;
+- the maths against V8's.
+
+See [`tools/README.md`](tools/README.md#what-keeps-the-output-exact).
 
 They were checked by breaking the code on purpose: widening the LZW width one step early
 fails 41 assertions, damping 0.5→0.6 fails 5, acceleration 0.25→0.26 fails 4, and shifting
@@ -826,7 +826,7 @@ scenes' sprites overlap themselves, so fixing it changed nothing else.
 
 It is decoded rather than ripped. There is no font in the ROM as such — each zone name is a
 mapping frame in `Map - Title Card.asm`, assembled from letter pieces over that zone's own
-small letter set and the shared title-card art — so `tools/build-card-font.mjs` renders all
+small letter set and the shared title-card art — so the pipeline's `cardfont` step renders all
 fourteen names plus *ZONE*, splits them back into letters, and keeps one of each.
 
 The split is the only subtle part. Pieces never cut a letter, but one piece can hold

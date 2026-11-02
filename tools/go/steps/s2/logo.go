@@ -247,7 +247,7 @@ func buildLogo(out string, t *title) {
 	gap := sorted[2]
 	// The small face: T H E D G O lifted from rows 140-145 (white); the rest are S1's.
 	small := SMALL.Clone()
-	words := []string{"T", "H", "E", "", "H", "E", "D", "G", "E", "H", "O", "G"} // "" is the JS's null, the gap
+	words := []string{"T", "H", "E", "", "H", "E", "D", "G", "E", "H", "O", "G"} // "" is the gap between the words
 	col, k := 110, 0
 	lit := func(c int) bool {
 		for i := 0; i < 6; i++ {

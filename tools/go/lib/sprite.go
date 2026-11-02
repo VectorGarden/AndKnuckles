@@ -7,14 +7,13 @@ import (
 	"strings"
 )
 
-// Sprite mappings and DPLCs as the disassemblies write them, and a renderer:
-// tools/lib/sprite.mjs, function for function. A piece is the S3K layout
+// Sprite mappings and DPLCs as the disassemblies write them, and a renderer. A piece is the S3K layout
 // [y, size, tileHi, tileLo, xHi, xLo]; a frame is its pieces.
 type Piece []int
 type Frame []Piece
 
-// Num reads a number the way sprite.mjs's num does: optional '-', '$' for hex,
-// and like parseInt, the leading digits only.
+// Num reads a number as the disassemblies write them: optional '-', '$' for hex,
+// and only the leading digits.
 func Num(t string) int {
 	t = strings.TrimSpace(t)
 	neg := strings.HasPrefix(t, "-")

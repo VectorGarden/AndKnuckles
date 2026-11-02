@@ -540,13 +540,12 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
 <script>
 /* GENERATED -- do not edit.
 
-   FONT and ATLAS_SRC come from tools/build-font.mjs, CARD_FONT and CARD_SRC
-   from build-card-font.mjs; the SCENES artwork from build-sk-assets.mjs,
-   build-s3-assets.mjs and build-aiz-assets.mjs.
-   tools/embed-assets.mjs writes this file, and tools/build-page.mjs inlines
+   Every constant here comes from the asset pipeline in tools/go: the fonts
+   from its font, cardfont, s1 and s2 steps, the SCENES artwork from sk, s3,
+   aiz, s1 and s2. Its embed step writes this file, and its page step inlines
    it into index.html.
 
-   Change the source in tools/ and run:  node tools/build-all.mjs
+   Change the source in tools/ and run:  go -C tools/go run .
 */
 
 /* Sonic 3 title screen, planes A+B composited at 320x224. Decoded offline from
@@ -591,16 +590,16 @@ const DEFAULTS = { outline:{track:0, lead:0}, plain:{track:2, lead:4}, card:{tra
                    credits:{track:0, lead:4}, card1:{track:0, lead:4}, logo:{track:0, lead:0},
                    credits2:{track:0, lead:8}, card2:{track:0, lead:4}, logo2:{track:0, lead:0} };
 
-/* The title-card lettering (tools/build-card-font.mjs) is a third style with its
+/* The title-card lettering (tools/go/steps/cardfont) is a third style with its
    own atlas. Its letters already carry their spacing -- each glyph's dark bar
    runs to its right edge so a word reads as one bar -- hence track 0. */
 FONT.card = CARD_FONT;
-/* The Sonic 1 credits face (tools/build-s1-assets.mjs), likewise its own atlas
+/* The Sonic 1 credits face (tools/go/steps/s1), likewise its own atlas
    in the game's colours. Its letters sit 16px apart in the roll, edge to edge. */
 FONT.credits = CRED_FONT;
 const credAtlas = new Image();
 let CRED_IDX = null, CRED_W = 0;
-/* The Sonic 2 credit font (tools/build-s2-assets.mjs): one tile tall, two wide,
+/* The Sonic 2 credit font (tools/go/steps/s2): one tile tall, two wide,
    edge to edge as the intro writes it, a blank row between lines as the roll does. */
 FONT.credits2 = CRED2_FONT;
 const cred2Atlas = new Image();
@@ -629,7 +628,7 @@ const isCard = () => state.style === 'card' || state.style === 'card1' || state.
    black to the sides and below. All in palette line 0, the emblem's. */
 const logoFont = L => ({rowh: 26, glyphs: Object.fromEntries(Object.entries(L.chrome).map(([c, r]) => [c, [0, 0, r[0].length, 26, 0]]))});
 FONT.logo = logoFont(S1LOGO);
-/* The Sonic 2 logo is the same lettering on S2's emblem (tools/build-s2-assets.mjs):
+/* The Sonic 2 logo is the same lettering on S2's emblem (tools/go/steps/s2):
    placed by its own measure, in the emblem's palette line, 3. */
 FONT.logo2 = logoFont(S2LOGO);
 const isLogo = () => state.style === 'logo' || state.style === 'logo2';
@@ -1226,7 +1225,7 @@ function card1Items(pose, L){
 }
 
 /* ---------- the Sonic 2 title card ----------------------------------------
-   Obj34, run offline by tools/build-s2-assets.mjs: each frame's state of its six
+   Obj34, run offline by tools/go/steps/s2: each frame's state of its six
    objects, which do not depend on the text. The blue background fills plane A
    two rows a frame from the top; the yellow part grows left along the bottom and
    SONIC THE HEDGEHOG slides in on it; the red part grows from the left with its
@@ -1825,7 +1824,7 @@ const INTROS = {
     },
   },
 
-  /* TitleScreen and Obj0E, played back from the table tools/build-s2-assets.mjs
+  /* TitleScreen and Obj0E, played back from the table tools/go/steps/s2
      writes by running them: a star twinkling on black, the emblem fading in from
      frame 56, Sonic rising out of it at 128, Tails at 192, and at 288 the
      background in a white flash; the text springs in once that has faded. Each
@@ -2006,7 +2005,7 @@ const INTROS = {
     },
   },
 
-  /* AIZ1's intro, played back from the timeline tools/build-aiz-assets.mjs
+  /* AIZ1's intro, played back from the timeline tools/go/steps/aiz
      computed by stepping the level's objects. Its layers hold palette indices,
      not colours -- the palette moves the whole time -- so each frame is
      coloured through the palette it had. Once the cutscene is over the last

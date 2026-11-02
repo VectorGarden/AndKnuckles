@@ -3,7 +3,7 @@ package lib
 import "fmt"
 
 // KosDecode is Kosinski, reporting bytes consumed so the moduled variant can find
-// the next module (tools/lib/kosinski.mjs). The descriptor word is fetched the
+// the next module. The descriptor word is fetched the
 // instant its last bit is used, so it precedes the operand bytes.
 func KosDecode(buf []byte, start int) ([]byte, int) {
 	p := start + 2
@@ -88,7 +88,7 @@ func KosMDecode(buf []byte) []byte {
 	return out[:full]
 }
 
-// EniDecode is Enigma (tools/lib/enigma.mjs): the words, each plus base.
+// EniDecode is Enigma, per flamewing/mdcomp: the words, each plus base.
 func EniDecode(buf []byte, base int) []int {
 	packetLength, mask := int(buf[0]), int(buf[1])
 	incrementing := int(buf[2])<<8 | int(buf[3])
@@ -170,7 +170,7 @@ func EniDecode(buf []byte, base int) []int {
 	return out
 }
 
-// NemDecode is Nemesis (tools/lib/nemesis.mjs): tiles of 32 bytes.
+// NemDecode is Nemesis, per flamewing/mdcomp: tiles of 32 bytes.
 func NemDecode(buf []byte) []byte {
 	p := 0
 	rd := func() int {

@@ -11,9 +11,9 @@ import (
 	"strings"
 )
 
-// JSON as JavaScript writes it. The pipeline's JSON files and the tables pasted
-// into the page are byte-checked against what JSON.stringify produced, so this
-// follows it: an object's keys in insertion order, except that integer-like keys
+// JSON as JavaScript writes it. The tables pasted into the page are read by its
+// JavaScript and checked byte for byte against the committed page, which
+// JSON.stringify first wrote, so this follows it: an object's keys in insertion order, except that integer-like keys
 // come first in numeric order (as a JavaScript object stores them); numbers in
 // JavaScript's shortest form; no HTML escaping.
 

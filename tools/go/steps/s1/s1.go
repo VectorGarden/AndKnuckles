@@ -1,6 +1,6 @@
 /*
-Package s1 builds the Sonic 1 title screen and the Sonic 1 credits lettering:
-tools/build-s1-assets.mjs.
+Package s1 builds the Sonic 1 assets: the title screen, the credits lettering,
+the title card, Green Hill Zone, and the logo faces.
 
 From sonicretro/s1disasm (REV01, bugs kept -- it is the game people played):
 
@@ -47,7 +47,7 @@ const (
 	EX, EY     = 3 * 8, 4 * 8
 )
 
-// Build writes every file the JS step writes into out.
+// Build writes every Sonic 1 file into out.
 func Build(out string) {
 	out = lib.OutDir(out)
 	t := buildTitle(out)
@@ -57,8 +57,7 @@ func Build(out string) {
 	buildLogo(out, t.emblem)
 }
 
-// at reads a byte as JavaScript reads a typed array: past either end is
-// undefined, which the bit maths here turn into 0.
+// at reads a byte, 0 past either end.
 func at(b []byte, i int) int {
 	if i < 0 || i >= len(b) {
 		return 0
@@ -278,7 +277,7 @@ func buildTitle(out string) title {
 		T := wag
 		still := filled(W*H, 32) // backdrop: line 2 colour 0
 		camX := max(0, 2*(T-camStart))
-		bg2 := camX / 2 // camX is even, so JS's float camX/2 is whole
+		bg2 := camX / 2 // camX is even, so this is exact
 		bg3 := int(math.Floor(0.75 * float64(max(0, T-camStart))))
 		n := T + 2
 		cU, cM, cL := n, int(math.Floor(0.75*float64(n))), n>>1

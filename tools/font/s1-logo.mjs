@@ -1,4 +1,4 @@
-/* The Sonic 1 logo faces, drawn to the real letters' measure (tools/build-s1-assets.mjs).
+/* The Sonic 1 logo faces, drawn to the real letters' measure (tools/go/steps/s1).
 
    The chrome face: shapes 26 rows tall at the weights of the logo's own S O N I C --
    stems 9 wide, horizontals 7 tall, bowls as thick as O's. The build lifts those five
@@ -110,7 +110,7 @@ export const SMALL = Object.fromEntries(Object.entries({
   '-': '..../..../####/####/..../....',
 }).map(([k, v]) => [k, v.split('/')]));
 
-/* S O N I C as tools/build-s1-assets.mjs lifts them off the S1 emblem -- which checks it still
+/* S O N I C as tools/go/steps/s1 lifts them off the S1 emblem -- which checks it still
    gets exactly these -- kept here because Sonic 2's emblem has the same letters, and its build
    checks them against its own. */
 export const SONIC = {

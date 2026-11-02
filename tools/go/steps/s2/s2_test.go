@@ -6,4 +6,4 @@ import (
 	"github.com/VectorGarden/AndKnuckles/tools/go/lib"
 )
 
-func TestMatchesJS(t *testing.T) { lib.CheckStep(t, "build-s2-assets.mjs", Build) }
+func TestMatchesThePage(t *testing.T) { lib.CheckStep(t, Build) }
