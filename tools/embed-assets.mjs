@@ -138,6 +138,31 @@ if(has('s2-meta.json')){
     html = html.slice(0, g.index + g[0].length) + '\n' + next + html.slice(g.index + g[0].length);
   }
 }
+if(has('s2card-atlas.png') && has('s2card-table.json')){
+  const t = JSON.parse(fs.readFileSync(OUT + 's2card-table.json', 'utf8'));
+  for(const [name, part] of Object.entries(t.parts)) part.src = b64(`s2card-${name}.png`);
+  const lines = `const S2CARD_FONT = ${JSON.stringify(t)};\nconst S2CARD_SRC = "${b64('s2card-atlas.png')}";`;
+  const cur = html.match(/^const S2CARD_FONT = .*;\nconst S2CARD_SRC = "[^"]*";$/m);
+  if(cur) html = html.slice(0, cur.index) + lines + html.slice(cur.index + cur[0].length);
+  else {
+    const a = html.match(/^const CARD_SRC = "[^"]*";$/m);
+    html = html.slice(0, a.index + a[0].length) + '\n' + lines + html.slice(a.index + a[0].length);
+  }
+}
+if(has('ehz-meta.json')){
+  const m = JSON.parse(fs.readFileSync(OUT + 'ehz-meta.json', 'utf8'));
+  const spec = {...m, back: {src: b64('ehz-bg.png')}, fg: {src: b64('ehz-fg.png')}, fgHi: {src: b64('ehz-fg-hi.png')},
+                sprites: Object.fromEntries(Object.entries(m.sprites).map(([k, q]) => [k, {...q, src: b64(`ehz-${k}.png`)}])),
+                anim: m.anim.map(a => ({...a, layers: Object.fromEntries(Object.entries(a.layers).map(([k, f]) => [k, {src: b64(f)}]))}))};
+  const cur = html.match(/^  ehz: \{ label:"EHZ".*$/m);
+  const y = cur ? cur[0].match(/y:\d+, /)[0] : 'y:112, ';
+  const next = `  ehz: { label:"EHZ", ${y}vscroll:0, intro:${JSON.stringify(spec)}, src:"${b64('ehz-still.png')}" },`;
+  if(cur) html = html.slice(0, cur.index) + next + html.slice(cur.index + cur[0].length);
+  else {
+    const s2 = html.match(/^  s2: \{ label:"S2 title".*$/m);
+    html = html.slice(0, s2.index + s2[0].length) + '\n' + next + html.slice(s2.index + s2[0].length);
+  }
+}
 if(has('s1card-atlas.png') && has('s1card-table.json')){
   const t = JSON.parse(fs.readFileSync(OUT + 's1card-table.json', 'utf8'));
   for(const [name, part] of Object.entries(t.parts)) part.src = b64(`s1card-${name}.png`);

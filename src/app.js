@@ -9,7 +9,7 @@ const SPACE_W = 8;
 // each glyph and line stays its own; -3 or so reproduces the ROM spacing.
 const DEFAULTS = { outline:{track:0, lead:0}, plain:{track:2, lead:4}, card:{track:0, lead:4},
                    credits:{track:0, lead:4}, card1:{track:0, lead:4}, logo:{track:0, lead:0},
-                   credits2:{track:0, lead:8} };
+                   credits2:{track:0, lead:8}, card2:{track:0, lead:4} };
 
 /* The title-card lettering (tools/build-card-font.mjs) is a third style with its
    own atlas. Its letters already carry their spacing -- each glyph's dark bar
@@ -30,7 +30,13 @@ FONT.card1 = S1CARD_FONT;
 const s1cardAtlas = new Image();
 let S1CARD_IDX = null, S1CARD_W = 0;
 const s1cardParts = {};
-const isCard = () => state.style === 'card' || state.style === 'card1';
+/* The Sonic 2 title card: its letters, and its parts -- ZONE, the act numbers,
+   SONIC THE HEDGEHOG, the red stripes, and the three fills it paints plane A with. */
+FONT.card2 = S2CARD_FONT;
+const s2cardAtlas = new Image();
+let S2CARD_IDX = null, S2CARD_W = 0;
+const s2cardParts = {};
+const isCard = () => state.style === 'card' || state.style === 'card1' || state.style === 'card2';
 
 /* ---------- the Sonic 1 logo ------------------------------------------------
    Your first line in the chrome face of SONIC, your second in the small face of
@@ -112,6 +118,7 @@ const sceneDrawn = () => introOn() || logoOnScene();
 /* Faces that keep the game's colours: their own atlas and palette slots, no ramp. */
 const fixedFont = () => state.style === 'card' ? {img: cardAtlas, idx: CARD_IDX, w: CARD_W}
                       : state.style === 'card1' ? {img: s1cardAtlas, idx: S1CARD_IDX, w: S1CARD_W}
+                      : state.style === 'card2' ? {img: s2cardAtlas, idx: S2CARD_IDX, w: S2CARD_W}
                       : state.style === 'credits' ? {img: credAtlas, idx: CRED_IDX, w: CRED_W}
                       : state.style === 'credits2' ? {img: cred2Atlas, idx: CRED2_IDX, w: CRED2_W} : null;
 const cardAtlas = new Image();
@@ -238,7 +245,9 @@ function paint(target, scale, L, dy, G, scroll, frame){
     // the title card: every part, wherever this frame has it
     const atlasImg = fixedFont().img;
     for(const it of cardItems(cardPose(dy), L)){
-      if(it.part) c.drawImage(it.part.img, it.x*scale, it.y*scale, it.part.w*scale, it.part.h*scale);
+      if(it.src){ const [sx, sy, sw, sh] = it.src;
+        c.drawImage(it.part.img, sx, sy, sw, sh, it.x*scale, it.y*scale, sw*scale, sh*scale); }
+      else if(it.part) c.drawImage(it.part.img, it.x*scale, it.y*scale, it.part.w*scale, it.part.h*scale);
       else { const g = it.glyph;
         c.drawImage(atlasImg, g[0], g[1], g[2], g[3], it.x*scale, it.y*scale, g[2]*scale, g[3]*scale); }
     }
@@ -473,6 +482,7 @@ const LOGO_FRAMES = new Array(48).fill(0);
 const cardCache = {key: '', t: null};
 function cardTimeline(){
   if(state.style === 'card1') return card1Timeline();
+  if(state.style === 'card2') return card2Timeline();
   const L = layout();
   const key = [state.cardZone, state.cardAct, L.w, L.h, L.lines.length, state.lead].join('|');
   if(cardCache.key === key) return cardCache.t;
@@ -527,6 +537,7 @@ function cardBox(k, pos, L){
    priority, so slot order decides: name over ZONE over act over banner. */
 function cardItems(pose, L){
   if(state.style === 'card1') return card1Items(pose, L);
+  if(state.style === 'card2') return card2Items(pose, L);
   const C = CARD_FONT.card, P = CARD_FONT.parts, out = [];
   const part = (name, x, y) => out.push({part: cardParts[name], x: x + P[name].ox, y: y + P[name].oy});
   if(pose.banner !== undefined) part('banner-' + state.cardBanner, C.banner.x, pose.banner);
@@ -604,6 +615,48 @@ function card1Items(pose, L){
     const top = C.name.y - 8 - (L.lines.length - 1) * (L.rowh + state.lead);
     L.lines.forEach((line, i) => {
       const x0 = pose.name - Math.round(line.w / 2), y = top + i * (L.rowh + state.lead);
+      for(const {g, x} of line.items) out.push({glyph: g, x: x0 + x, y: y + g[4]});
+    });
+  }
+  return out;
+}
+
+/* ---------- the Sonic 2 title card ----------------------------------------
+   Obj34, run offline by tools/build-s2-assets.mjs: each frame's state of its six
+   objects, which do not depend on the text. The blue background fills plane A
+   two rows a frame from the top; the yellow part grows left along the bottom and
+   SONIC THE HEDGEHOG slides in on it; the red part grows from the left with its
+   stripes; then the name, ZONE and the act number slide in at $10 a frame. The
+   card holds until the zone's art has loaded (52 frames in), the level loads, and
+   it goes: red and yellow give way to blue, then the blue is drawn over with the
+   level from the bottom up, 32 rows a frame, while the words hold 45 frames and
+   leave at $20 a frame. The name is right-aligned where every zone name ends,
+   x 288; extra lines stack above it. */
+const card2Cache = {t: null};
+function card2Timeline(){
+  if(card2Cache.t) return card2Cache.t;
+  const C = S2CARD_FONT.card;
+  return card2Cache.t = {frames: C.tl.map((_, i) => i), poses: C.tl, rest: C.rest};
+}
+function card2Items(pose, L){
+  const C = S2CARD_FONT.card, P = S2CARD_FONT.parts, out = [];
+  if(pose.none) return out;
+  const part = (name, x, y) => out.push({part: s2cardParts[name], x: x + P[name].ox, y: y + P[name].oy});
+  const area = (name, x, y, w, h) => { if(w > 0 && h > 0) out.push({part: s2cardParts[name], src: [x, y, w, h], x, y: y + (name === 'yellow' ? 160 : 0)}); };
+  // plane A: the blue down to where the level has been drawn over it, then yellow, then red
+  const blue = Math.min(pose.bg * 8, pose.reveal === null ? BG_H : Math.max(0, pose.reveal));
+  area('blue', 0, 0, BG_W, blue);
+  if(pose.yel !== null && pose.yel < 40) area('yellow', pose.yel * 8, 0, BG_W - pose.yel * 8, 64);
+  area('red', 0, 0, pose.red * 8, BG_H);
+  // the sprites, back to front: the stripes, SONIC THE HEDGEHOG, the act, ZONE, the name
+  if(pose.left !== undefined) part('stripes', pose.left, C.stripes.y);
+  if(pose.bottom !== undefined) part('sth', pose.bottom, C.sth.y);
+  if(pose.act !== undefined && state.cardAct > 0) part('act' + state.cardAct, pose.act, C.act.y);
+  if(pose.zone !== undefined && state.cardZone) part('zone', pose.zone, C.zone.y);
+  if(pose.name !== undefined){
+    const top = C.name.y - (L.lines.length - 1) * (L.rowh + state.lead);
+    L.lines.forEach((line, i) => {
+      const x0 = pose.name + C.name.right - line.w, y = top + i * (L.rowh + state.lead);
       for(const {g, x} of line.items) out.push({glyph: g, x: x0 + x, y: y + g[4]});
     });
   }
@@ -812,7 +865,7 @@ function frameRect(L, scale, dy, G, W, H){
   if(isCard()){
     let r = null;
     for(const it of cardItems(cardPose(dy), L)){
-      const w = it.part ? it.part.w : it.glyph[2], h = it.part ? it.part.h : it.glyph[3];
+      const w = it.src ? it.src[2] : it.part ? it.part.w : it.glyph[2], h = it.src ? it.src[3] : it.part ? it.part.h : it.glyph[3];
       const x0 = Math.max(0, it.x*scale), y0 = Math.max(0, it.y*scale);
       const x1 = Math.min(W, (it.x + w)*scale), y1 = Math.min(H, (it.y + h)*scale);
       if(x1 <= x0 || y1 <= y0) continue;
@@ -1217,6 +1270,80 @@ const INTROS = {
     },
   },
 
+  /* Emerald Hill Zone act 1 at its start: Sonic and Tails standing, two rings
+     turning, the flowers, the water rippling and its colours cycling. Sonic 2
+     never fades a level in, so with any other style it is simply there. With the
+     Sonic 2 title card it runs on the card's own timeline: nothing until the zone
+     loads behind the card, then the foreground from the bottom up as the card's
+     blue is drawn over, and the level's main loop once the card's background has
+     gone. */
+  ehz: {
+    indexed: true,
+    build(spec, index, gidx){
+      const seen = new Map();
+      PALETTE.forEach((c, i) => { if(i > FONT_SLOTS) seen.set((c[0]<<16)|(c[1]<<8)|c[2], i); });
+      const luts = spec.pals.map(hex => Uint16Array.from({length: 64}, (_, i) => {
+        const w = parseInt(hex.slice(i*3, i*3+3), 16);
+        const c = [((w >> 1) & 7)*36, ((w >> 5) & 7)*36, ((w >> 9) & 7)*36], k = (c[0]<<16)|(c[1]<<8)|c[2];
+        if(!seen.has(k)){ seen.set(k, PALETTE.length); PALETTE.push(c); }
+        return seen.get(k);
+      }));
+      const spr = {};
+      for(const [name, q] of Object.entries(spec.sprites)) spr[name] = Object.assign(gidx(q.img), {ox: q.ox, oy: q.oy});
+      return {back: gidx(spec.back.img), fg: gidx(spec.fg.img), fgHi: gidx(spec.fgHi.img), spr, luts,
+              anim: spec.anim.map(a => ({...a, layers: Object.fromEntries(Object.entries(a.layers).map(([k, q]) => [k, gidx(q.img)]))}))};
+    },
+    len(){ return 0; },
+    /* Where frame t is: with the card, its frame of the card's timeline; else the
+       main loop's frame t. */
+    phase(t){
+      const s = sceneIntro();
+      if(state.style !== 'card2') return {level: true, reveal: -BG_H, objs: t, main: t, calls: c => c <= t};
+      const e = S2CARD_FONT.card.tl[Math.min(t, s.cardFrames - 1)];
+      return {level: t >= s.objsFrom, reveal: e.reveal === undefined || e.reveal === null ? BG_H : e.reveal,
+              objs: t - s.objsFrom, main: e.main === undefined ? -1 : e.main + Math.max(0, t - (s.cardFrames - 1)),
+              calls: c => c === s.bgOutInit || (c >= s.mainFrom && c <= t)};
+    },
+    palAt(t){
+      const p = this.phase(t);
+      return p.level ? 1 + (p.main < 0 ? 0 : (p.main >> 3) & 3) : 0;       // PalCycle_EHZ, every 8 frames
+    },
+    draws(t){
+      const s = sceneIntro(), L = introLayers.ehz, p = this.phase(t), pal = this.palAt(t), lut = L.luts[pal];
+      const d = [{key:'backdrop', fill:lut[32], x:0, y:0, tag:pal, plane:true}];
+      if(!p.level) return d;
+      // SwScrl_EHZ with the camera at x 0: only the 21 water lines move, by the ripple table,
+      // whose start steps back on every 8th frame DeformBgLayer runs (the counter's phase is
+      // taken as one short of a step at frame 0)
+      let ld = 0; for(let c = 0; c <= t; c++) if(p.calls(c) && (c & 7) === 7) ld--;
+      const r0 = ld & 0x1F, rows = new Array(BG_H).fill(0);
+      for(let y = 0; y < s.rippleLines; y++) rows[s.rippleTop + y] = -s.ripple[r0 + y];
+      const clip = p.reveal > 0 ? [0, p.reveal] : null;
+      const anim = (hi) => L.anim.map((a, i) => {
+        // Dynamic_Normal: the first frame is loaded before the level starts, then each call counts down
+        let j = 0, c = a.frames[0][1];
+        for(let m = 0; m <= p.main; m++){ if(--c < 0){ j = (j + 1) % a.frames.length; c = a.frames[j][1]; } }
+        const lay = a.layers[a.frames[j][0] + '-' + hi];
+        return lay && {key:'anim' + i + ':' + hi, lay, x:a.x, y:a.y, clip, lut, tag:pal + ':' + j + ':' + p.reveal};
+      }).filter(Boolean);
+      const sp = (key, name, x, y) => { const q = L.spr[name];
+        return {key, lay:q, x:x + q.ox, y:y + q.oy, clip, lut, tag:pal + ':' + p.reveal}; };
+      d.push({key:'bg', lay:L.back, x:0, y:0, rows, wrapAll:true, lut, tag:pal + ':' + r0, plane:true},
+             {key:'fg', lay:L.fg, x:0, y:0, clip, lut, tag:pal + ':' + p.reveal, plane:true}, ...anim(0));
+      if(p.objs >= 0){
+        // the rings turn with ChangeRingFrame, every 8 frames of the main loop
+        const rf = p.main < 0 ? 0 : ((p.main >> 3) + 1) & 3;
+        s.rings.forEach((r, i) => d.push(sp('ring' + i, 'ring' + rf, r.x, r.y)));
+        // TailsAni_Wait and Obj05Ani_Swish, both a frame every 8
+        const k = p.objs >> 3, tw = s.tailsWait[Math.min(k, s.tailsWait.length - 1)];
+        d.push(sp('tail', 'tail' + (9 + k % 5), s.tails.x, s.tails.y), sp('tails', 'tails' + tw, s.tails.x, s.tails.y),
+               sp('sonic', 'sonic', s.sonic.x, s.sonic.y));
+      }
+      d.push({key:'fgHi', lay:L.fgHi, x:0, y:0, clip, lut, tag:pal + ':' + p.reveal, plane:true}, ...anim(1));
+      return d;
+    },
+  },
+
   /* Green Hill Zone act 1 at its start position: Sonic standing, the clouds
      creeping, the waterfalls cycling. With the Sonic 1 title card it opens the
      way the level does -- black while the card slides in, then once the act is
@@ -1474,7 +1601,8 @@ function paintIndexed(rect, scale, L, dy, G, bgIdx, scroll, banks, frame){
     const fx = fixedFont();
     for(const it of cardItems(cardPose(dy), L)){
       const dx0 = it.x*scale - rect.x, dy0 = it.y*scale - rect.y;
-      if(it.part) blit(it.part.idx, it.part.w, 0, 0, it.part.w, it.part.h, dx0, dy0, 0);
+      if(it.src) blit(it.part.idx, it.part.w, it.src[0], it.src[1], it.src[2], it.src[3], dx0, dy0, 0);
+      else if(it.part) blit(it.part.idx, it.part.w, 0, 0, it.part.w, it.part.h, dx0, dy0, 0);
       else { const [sx, sy, sw, sh] = it.glyph; blit(fx.idx, fx.w, sx, sy, sw, sh, dx0, dy0, 0); }
     }
     return buf;
@@ -2065,6 +2193,7 @@ el('style').addEventListener('click', e=>{
   document.body.classList.toggle('card', isCard());
   document.body.classList.toggle('card3k', state.style === 'card');
   document.body.classList.toggle('card1', state.style === 'card1');
+  document.body.classList.toggle('card2', state.style === 'card2');
   document.body.classList.toggle('fixed', !!fixedFont() || state.style === 'logo');
   document.body.classList.toggle('static', state.style === 'logo');
   // S3&K's card has no act 3
@@ -2390,6 +2519,17 @@ atlas.onload = ()=>{
   s1cardAtlas.onload = ()=>{ const r = indexCardImage(s1cardAtlas); S1CARD_IDX = r.idx; S1CARD_W = r.w; done(); };
   s1cardAtlas.onerror = ()=>{ el('style').querySelector('button[data-style="card1"]').disabled = true; done(); };
   s1cardAtlas.src = S1CARD_SRC;
+  pending++;
+  s2cardAtlas.onload = ()=>{ const r = indexCardImage(s2cardAtlas); S2CARD_IDX = r.idx; S2CARD_W = r.w; done(); };
+  s2cardAtlas.onerror = ()=>{ el('style').querySelector('button[data-style="card2"]').disabled = true; done(); };
+  s2cardAtlas.src = S2CARD_SRC;
+  for(const [name, part] of Object.entries(S2CARD_FONT.parts)){
+    pending++;
+    const im = new Image();
+    im.onload = ()=>{ s2cardParts[name] = indexCardImage(im); done(); };
+    im.onerror = done;
+    im.src = part.src;
+  }
   for(const [name, part] of Object.entries(S1CARD_FONT.parts)){
     pending++;
     const im = new Image();

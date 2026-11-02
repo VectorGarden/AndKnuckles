@@ -148,7 +148,7 @@
   body.card .spring-only, body.static .spring-only{display:none !important}   /* own motion, or none */
   body:not(.fixed) .fixed-only{display:none !important}
   body:not(.card3k) .s3card-only{display:none !important}
-  body:not(.card1) .s1card-only{display:none !important}
+  body:not(.card1):not(.card2) .s1card-only{display:none !important}
   body.fixed #palCtl .bgrow, body.fixed #palCtl .saved, body.fixed #lineCtl{display:none !important}
   .transport input[type=range]{flex:1;min-width:110px;max-width:260px}
   .btn.sm{padding:7px 14px;font-size:11px;box-shadow:none;border-width:2px;min-width:74px}
