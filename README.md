@@ -594,8 +594,10 @@ segment, a box and an elliptical arc at the same weight and cut-offs — the arc
 whole ellipse, matches the real O to within one shade on all but 36 of its 576 pixels, and
 the build checks it still does. The **&** follows the style's habit of keeping features small
 and high: a little loop above the bar, a tall bowl, and a leg out to the bottom right.
-There are no digits; the act number is a different design. Anything else is skipped and
-named under the preview.
+The **digits** are drawn as well — the act number is its own big graphic, not part of this
+face — borrowing the letters' parts wherever a digit has one: **3** is B without its stem,
+**2** and **7** take Z's bars and diagonal, **8** stacks the &'s small loop over a tall one,
+and **9** is **6** turned round. Anything else is skipped and named under the preview.
 
 The card keeps the game's colours — it is drawn in Sonic's palette line — including the
 dark bar behind each letter's lower two-thirds, which runs to the glyph's right edge so a
