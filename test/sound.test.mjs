@@ -219,3 +219,43 @@ test('Green Hill Zone plays the whole way across the scene', () => {
     for(let f = 0; f + 60 <= 1300; f += 60) assert.ok(loud(f, f + 60) > 0.2, `${tb}: quiet in the second from frame ${f}`);
   }
 });
+
+/* Sonic 2's zWriteToDAC: 295 cycles a byte plus 26 a djnz turn, each note's
+   rate from zDACMasterPlaylist, and no DAC enable of its own -- the song set
+   that up when it loaded. */
+test("Sonic 2's DAC loop plays at the playlist's rate and never touches the enable", () => {
+  const drv = MUSIC.drivers.s2, writes = [];
+  let t = 0;
+  const dac = S.makeDAC(drv, {write: (part, reg, val) => writes.push([t, reg, val])});
+  const loop = drv.dac['81'].loop;
+  dac.setPitch(loop); dac.queue(0x01, 0);            // the kick, at its own rate
+  for(t = 0; t < S.MASTER.ntsc / 10; t += S.YM_TICK) dac.run(t);
+  const data = writes.filter(w => w[1] === 0x2A);
+  const want = 2 * S.MASTER.ntsc / 15 / (295 + 26 * (loop - 1));
+  const got = (data.length - 1) / ((data[data.length - 1][0] - data[0][0]) / S.MASTER.ntsc);
+  assert.ok(Math.abs(got - want) / want < 0.02, `${got.toFixed(0)} Hz, want ${want.toFixed(0)}`);
+  assert.equal(writes.filter(w => w[1] === 0x2B).length, 0);
+  // a sample queued while one plays takes over at once, not at a check point
+  writes.length = 0; t = 0;
+  const dac2 = S.makeDAC(drv, {write: (part, reg, val) => writes.push([t, reg, val])});
+  dac2.setPitch(loop); dac2.queue(0x01, 0);
+  for(t = 0; t < 20000; t += S.YM_TICK) dac2.run(t);
+  const before = writes.length;
+  dac2.queue(0x02, 20000);
+  for(; t < 40000; t += S.YM_TICK) dac2.run(t);
+  assert.ok(writes.length > before, 'the second sample plays');
+});
+
+test("Sonic 2's title song plays and ends, and Emerald Hill sounds across its scene", () => {
+  const song = MUSIC.songs.s2;
+  // the driver's own PAL tick: 6 updates every 5 frames
+  assert.ok(Math.abs(song.frames.pal - song.frames.ntsc * 5 / 6) <= 1, `${song.frames.ntsc} / ${song.frames.pal}`);
+  for(const [tb, fps] of [['ntsc', 59.92], ['pal', 50]]){
+    const r = render('s2', 700, tb, fps), loud = loudness(r, fps);
+    const end = song.frames[tb];
+    for(let f = 0; f + 60 <= end - 120; f += 60) assert.ok(loud(f, f + 60) > 0.15, `${tb}: quiet in the second from frame ${f}`);
+    assert.ok(loud(end + 30, end + 60) < 0.005, `${tb}: still sounding after the song`);
+    const e = render('ehz', 1300, tb, fps), el = loudness(e, fps);
+    for(let f = 0; f + 60 <= 1300; f += 60) assert.ok(el(f, f + 60) > 0.15, `${tb}: EHZ quiet in the second from frame ${f}`);
+  }
+});
