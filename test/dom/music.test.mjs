@@ -21,6 +21,25 @@ test('the music control is offered for a scene with music, when animated', async
   assert.equal(await shown(), false, 'a still has no music');
   await setup(page, {mode: 'anim', scene: 'off'});
   assert.equal(await shown(), false, 'no scene, no music');
+  await setup(page, {mode: 'anim', scene: 's3', intro: 'on'});
+  assert.equal(await shown(), true, 'S3 title, animated');
+  await setup(page, {mode: 'anim', scene: 'aiz', intro: 'on'});
+  assert.equal(await shown(), false, 'a scene without music yet');
+});
+
+test('S3\'s song starts after the SEGA logo and its fade, silent until then', async () => {
+  await setup(page, {mode: 'anim', scene: 's3', intro: 'on'});
+  const r = await page.evaluate(() => {
+    const start = musicStart(), r = renderMusic(MUSIC, 's3', start + 60, state.timebase, tbFps(), start);
+    const per = r.rate / tbFps(), peak = (a, b) => { let m = 0; for(let i = Math.round(a*per); i < Math.round(b*per); i++) m = Math.max(m, Math.abs(r.left[i])); return m; };
+    return {start, hold: sceneIntro().hold, before: peak(0, start), after: peak(start, start + 60)};
+  });
+  // Play_Music comes once Pal_Title has faded the backdrop to black: 8 frames
+  assert.equal(r.start, r.hold + 8);
+  assert.equal(r.before, 0, 'nothing before the song loads');
+  assert.ok(r.after > 0.2, `the song plays from there (peak ${r.after})`);
+  await setup(page, {mode: 'anim', scene: 's3', intro: 'off'});
+  assert.equal(await page.evaluate(() => musicStart()), 0, 'with no opening the song starts with the scene');
 });
 
 test('with the music on, playback runs to the end of the song; GIF keeps to the animation', async () => {

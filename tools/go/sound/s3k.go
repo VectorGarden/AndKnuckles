@@ -237,8 +237,17 @@ func (t trk) sw16(o, v int) { t.s(o, byte(v)); t.s(o+1, byte(v>>8)) }
 
 func (d *Driver) track(i int) trk { return trk{d, i * trackLen} }
 
+// The driver's first four bytes of Z80 RAM: EntryPoint's di, di, im 1. A
+// track that changes volume before it has a voice has a null TL pointer, and
+// zSendTL reads these as its instrument's levels -- the S3 title's FM5 does,
+// on its way to jumping into FM1's data and setting one.
+var entryPoint = []byte{0xF3, 0xF3, 0xED, 0x56}
+
 // rd reads song data through the bank window.
 func (d *Driver) rd(addr int) byte {
+	if a := addr & 0xFFFF; a < len(entryPoint) {
+		return entryPoint[a]
+	}
 	i := addr&0xFFFF - d.song.Base
 	if i < 0 || i >= len(d.song.Data) {
 		panic(fmt.Sprintf("read at %04X, outside the song", addr&0xFFFF))

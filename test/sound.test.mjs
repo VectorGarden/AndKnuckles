@@ -117,30 +117,31 @@ test("the DAC loop delivers a sample at its DAC_Setup rate", () => {
 });
 const b64len = s => S.b64bytes(s).length;
 
-test('PAL runs the driver six times every five frames, as the S&K driver does', () => {
-  let n = 0; for(let k = 0; k < 500; k++) n += S.updatesOn(k, 'pal');
-  assert.equal(n, 599);    // 500 frames, plus one every fifth after the first
-  for(let k = 0; k < 50; k++) assert.equal(S.updatesOn(k, 'ntsc'), 1);
+test('PAL catches up once every five frames in S&K, every six in Sonic 3', () => {
+  const count = (period, n) => { let u = 0; for(let k = 0; k < n; k++) u += S.updatesOn(k, 'pal', period); return u; };
+  assert.equal(count(5, 500), 599);    // 60 updates a second: on tempo
+  assert.equal(count(6, 500), 583);    // frames 5, 11, ... 497: the counter reset to 6 runs PAL Sonic 3 slow
+  for(let k = 0; k < 50; k++) assert.equal(S.updatesOn(k, 'ntsc', 5), 1);
 });
 
-test('the S&K title song plays, in time, at both timebases', () => {
-  const song = MUSIC.songs.sk;
+for(const scene of ['sk', 's3']) test(`the ${scene} title song plays, in time, at both timebases`, () => {
+  const song = MUSIC.songs[scene], period = MUSIC.drivers[song.driver].palPeriod;
   for(const [tb, fps] of [['ntsc', 59.92], ['pal', 50]]){
     const frames = 1300;
-    const r = S.renderMusic(MUSIC, 'sk', frames, tb, fps);
+    const r = S.renderMusic(MUSIC, scene, frames, tb, fps, 0);
     assert.ok(Math.abs(r.left.length / r.rate - frames / fps) < 1 / r.rate + 1e-9, `${tb}: length`);
     let peak = 0, nan = false;
     for(const ch of [r.left, r.right]) for(const v of ch){ if(v !== v) nan = true; peak = Math.max(peak, Math.abs(v)); }
     assert.ok(!nan, `${tb}: NaN in the output`);
     assert.ok(peak < 1, `${tb}: clips (peak ${peak})`);
     assert.ok(peak > 0.25, `${tb}: suspiciously quiet (peak ${peak})`);
-    // Most tracks stop on update 861; the bass's last note and two PSG lines
-    // stepping their volume down note by note run the driver on to the end, but
-    // by then there is next to nothing left to hear.
+    // Both songs keep every track going to about update 860; after that a
+    // last bass note and PSG lines stepping their volume down run the driver on
+    // to its end, with next to nothing left to hear.
     const at = i => Math.round(i * r.rate / fps);
     const loud = (a, b) => { let m = 0; for(let i = at(a); i < at(b); i++) m = Math.max(m, Math.abs(r.left[i])); return m; };
-    const frame = u => tb === 'ntsc' ? u : Math.ceil(u * 5 / 6);   // updates to frames
-    for(let u = 0; u < 840; u += 60) assert.ok(loud(frame(u), frame(u + 60)) > 0.3, `${tb}: quiet around update ${u}`);
+    const frame = u => { let f = 0; for(let n = 0; n < u; f++) n += S.updatesOn(f, tb, period); return f; };
+    for(let u = 0; u < 840; u += 60) assert.ok(loud(frame(u), frame(u + 60)) > 0.2, `${tb}: quiet around update ${u}`);
     assert.ok(loud(frame(song.ticks) + 30, frame(song.ticks) + 60) < 0.005, `${tb}: still sounding after the song`);
   }
 });

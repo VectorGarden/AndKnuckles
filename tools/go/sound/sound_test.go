@@ -15,42 +15,49 @@ import (
 // getting the comment back checks the voice layout, the operator order and the
 // TL bits all at once.
 func TestVoicesMatchTheirComments(t *testing.T) {
-	src := string(lib.Rom("SK_Snd_Title.asm"))
-	song := AssembleSong(src)
-	voices := song.Labels["Snd_Title_Voices"] - song.Base
-	hex := regexp.MustCompile(`\$([0-9A-Fa-f]{2})`)
-	var want [][]byte
-	var cur []byte
-	in := false
-	for _, l := range strings.Split(src, "\n") {
-		l = strings.TrimSpace(l)
-		if strings.HasPrefix(l, ";\tVoice $") || strings.HasPrefix(l, "; Voice $") || strings.HasPrefix(l, ";	Voice") {
-			if cur != nil {
-				want = append(want, cur)
+	// S&K's song was converted with smps2asm 1, which takes the TL carrier bits
+	// as written; S3's says no version, so they come from the algorithm
+	for _, c := range []struct {
+		file, label string
+		n           int
+	}{{"SK_Snd_Title.asm", "Snd_Title_Voices", 6}, {"S3_Snd_Title.asm", "Snd_S3_Title_Voices", 4}} {
+		src := string(lib.Rom(c.file))
+		song := AssembleSong(src)
+		voices := song.Labels[c.label] - song.Base
+		hex := regexp.MustCompile(`\$([0-9A-Fa-f]{2})`)
+		var want [][]byte
+		var cur []byte
+		in := false
+		for _, l := range strings.Split(src, "\n") {
+			l = strings.TrimSpace(l)
+			if strings.HasPrefix(l, ";\tVoice $") || strings.HasPrefix(l, "; Voice $") {
+				if cur != nil {
+					want = append(want, cur)
+				}
+				cur, in = []byte{}, true
+				continue
 			}
-			cur, in = []byte{}, true
-			continue
+			if !in {
+				continue
+			}
+			if !strings.HasPrefix(l, ";") {
+				in = false
+				continue
+			}
+			for _, m := range hex.FindAllStringSubmatch(l, -1) {
+				v, _ := strconv.ParseUint(m[1], 16, 8)
+				cur = append(cur, byte(v))
+			}
 		}
-		if !in {
-			continue
+		want = append(want, cur)
+		if len(want) != c.n {
+			t.Fatalf("%s: found %d voice comments, want %d", c.file, len(want), c.n)
 		}
-		if !strings.HasPrefix(l, ";") {
-			in = false
-			continue
-		}
-		for _, m := range hex.FindAllStringSubmatch(l, -1) {
-			v, _ := strconv.ParseUint(m[1], 16, 8)
-			cur = append(cur, byte(v))
-		}
-	}
-	want = append(want, cur)
-	if len(want) != 6 {
-		t.Fatalf("found %d voice comments, want 6", len(want))
-	}
-	for i, w := range want {
-		got := song.Data[voices+25*i : voices+25*i+25]
-		if len(w) != 25 || string(got) != string(w) {
-			t.Errorf("voice %d assembles to % X\n                    comment says % X", i, got, w)
+		for i, w := range want {
+			got := song.Data[voices+25*i : voices+25*i+25]
+			if len(w) != 25 || string(got) != string(w) {
+				t.Errorf("%s voice %d assembles to % X\n                    comment says % X", c.file, i, got, w)
+			}
 		}
 	}
 }
