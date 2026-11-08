@@ -267,33 +267,45 @@ function makePSG(){
   return {write, step, level};
 }
 
-/* zPlayDigitalAudio, by cycle. Starting a sample costs the idle loop's ~100
-   cycles to the DAC enable and ~450 to the first pass; each pass then sends a
-   byte's two nibbles, the first 125 cycles in and the second 238, plus 13 per
-   djnz turn each wait, and looks for a newly queued sample 29 cycles after
-   the second. The V-int's own time on the Z80 is not taken out of it. */
+/* The Z80's DAC loops, by cycle. Each pass sends one byte's two nibbles: the
+   first `w1` cycles in and the second `w2`, then looks for a newly queued
+   sample at `check`; a pass is `pass` cycles. Every djnz turn past the first
+   adds 13 cycles to each wait, so to each of those offsets 13 times the second
+   number. Starting a sample costs the time to the DAC enable and to the first
+   pass. The V-int's own time on the Z80 is not taken out of it.
+
+     s3k  zPlayDigitalAudio, S3 and S&K: disables the DAC when a sample ends
+     s1   Sonic 1's zPlayPCMLoop: never does -- the DAC holds its last value
+          until the next sample, which it re-enables for anyway */
+const DAC_LOOPS = {
+  s3k: {enable: 100, first: 450, w1: [125, 1], w2: [238, 2], check: [267, 2], pass: 303, off: 60},
+  s1:  {enable: 285, first: 305, w1: [105, 0], w2: [217, 1], check: [253, 2], pass: 301, off: null},
+};
 function makeDAC(drv, ym){
-  const D = drv.dac, deltas = drv.deltas;
+  const D = drv.dac, deltas = drv.deltas, L = DAC_LOOPS[drv.loop || 's3k'];
   const cyc = c => c * Z80_TICK;
-  let cur = null, queued = null, events = [];
+  let cur = null, queued = null, events = [], pitch = null;
   const bytesOf = id => D[id].bytes || (D[id].bytes = b64bytes(D[id].data));
   function start(id, t){
-    const s = D[id];
-    events = [[t + cyc(100), 0x2B, 0x80]];
-    cur = {id, bytes: bytesOf(id), i: 0, acc: 0x80, b: s.loop, at: t + cyc(450)};
+    // Sonic 1's 68K writes the timpani's pitch into its table entry, where it
+    // stays for every timpani after
+    const loop = id === '83' && pitch !== null ? pitch : D[id].loop;
+    events = [[t + cyc(L.enable), 0x2B, 0x80]];
+    cur = {id, bytes: bytesOf(id), i: 0, acc: 0x80, b: loop, at: t + cyc(L.first)};
     plan();
   }
   // the next pass's two writes and its check
   function plan(){
-    const k = 13 * (cur.b - 1), pass = cyc(303 + 2*k), byte = cur.bytes[cur.i];
+    const k = 13 * (cur.b - 1), byte = cur.bytes[cur.i];
     cur.acc = (cur.acc + deltas[byte >> 4]) & 0xFF;
-    events.push([cur.at + cyc(125 + k), 0x2A, cur.acc]);
+    events.push([cur.at + cyc(L.w1[0] + L.w1[1]*k), 0x2A, cur.acc]);
     cur.acc = (cur.acc + deltas[byte & 15]) & 0xFF;
-    events.push([cur.at + cyc(238 + 2*k), 0x2A, cur.acc]);
-    cur.check = cur.at + cyc(238 + 2*k + 29);
-    cur.at += pass;
+    events.push([cur.at + cyc(L.w2[0] + L.w2[1]*k), 0x2A, cur.acc]);
+    cur.check = cur.at + cyc(L.check[0] + L.check[1]*k);
+    cur.at += cyc(L.pass + 2*k);
   }
   function queue(idx, t){ queued = {id: idx ? (0x80 + idx).toString(16).toUpperCase() : null, t}; }
+  function setPitch(v){ pitch = v; }
   function run(t){
     for(;;){
       while(events.length && events[0][0] <= t){ const e = events.shift(); ym.write(0, e[1], e[2]); }
@@ -309,11 +321,11 @@ function makeDAC(drv, ym){
         continue;
       }
       if(++cur.i < cur.bytes.length){ plan(); continue; }
-      events.push([cur.check + cyc(60), 0x2B, 0]);      // zPlayDigitalAudio disables the DAC
+      if(L.off !== null) events.push([cur.check + cyc(L.off), 0x2B, 0]);
       cur = null;
     }
   }
-  return {queue, run};
+  return {queue, run, setPitch};
 }
 
 function b64bytes(s){
@@ -356,6 +368,7 @@ function musicRenderer(music, scene, frames, tb, fps, start, log){
       if(c === 0x50) psg.write(log[p++]);
       else if(c === 0x52 || c === 0x53){ ym.write(c - 0x52, log[p], log[p+1]); p += 2; }
       else if(c === 0x95) dac.queue(log[p++], t);
+      else if(c === 0x96) dac.setPitch(log[p++]);
       else throw new Error('bad music log byte ' + c);
     }
   }

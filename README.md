@@ -8,8 +8,8 @@ sprite font, and download it as PNG, WebP or AVIF.
 Or switch to **Animated** for the title-screen bounce, optionally over either real
 title screen with its full opening — Sonic 3's out of the SEGA logo, or S&K's with
 the Death Egg — or over the whole Angel Island intro, Tornado to emeralds, exported
-as GIF, APNG, WebM or MP4. The S3 and S&K titles and the AIZ intro play their own music
-with it, on the page and in the WebM and MP4.
+as GIF, APNG, WebM or MP4. The S3, S&K and Sonic 1 titles, the AIZ intro and Green Hill
+Zone play their own music with it, on the page and in the WebM and MP4.
 
 ## How it works
 
@@ -592,8 +592,8 @@ NTSC**, and the smile is not a loop to close in the first place.
 ## The music
 
 The S&K title plays *Title (Sonic & Knuckles)*, the S3 title *Title (Sonic 3)*, and the
-AIZ intro *Angel Island Zone Act 1* and then *Knuckles' theme*, each from the frame its game
-starts it. Nothing is recorded: the song is assembled from its smps2asm source in skdisasm, run offline
+AIZ intro *Angel Island Zone Act 1* and then *Knuckles' theme*; the Sonic 1 title its *Title
+Screen*, and GHZ *Green Hill Zone*; each from the frame its game starts it. Nothing is recorded: the song is assembled from its smps2asm source in skdisasm, run offline
 through a port of the game's own sound driver, and what the driver wrote to the sound chips
 on every V-int is kept. The page plays that on a YM2612 and a PSG of its own.
 
@@ -604,6 +604,19 @@ on every V-int is kept. The page plays that on a YM2612 and a PSG of its own.
   `cfStopTrack` pops one return address too many and leaves the V-int, so no other track
   updates on that frame and every track still running ends a frame late. The few paths that
   only work by reading the driver's own code as data panic instead; no song here takes one.
+- **Sonic 1** has a different driver altogether: SMPS 68k, running on the 68K from the V-int
+  and writing the chips itself, also ported (`tools/go/sound/s1.go`) with its bugs kept. Its
+  songs assemble through smps2asm's `SonicDriverVer` 1 branches — big-endian pointers, relative
+  jumps, its own coordination flags — and their voices match their comments too. It has no
+  PAL catch-up at all, so a PAL Sonic 1 plays its music a sixth slow, and here too. Loading a
+  song takes the driver's whole update for that frame (`Sound_PlayBGM` returns through its
+  caller's caller), so the first notes are a frame later; the title's first snare lands on
+  frame 16, as counted by hand from the song. Its DAC is a separate little Z80 program,
+  `zPlayPCMLoop`: 301 cycles a byte rather than 303, the nibbles at 105 and 217, and the DAC
+  left enabled after a sample. The 68K sets the timpani's pitch by writing into that
+  program's sample table, and that is in the log too. GHZ is queued just before the title
+  card; with the page's other styles the scene opens on the fade-in after the card, which
+  comes however long decompressing the level takes, so there the song starts on frame 0.
 - **Sonic 3** builds the same driver source, and on the music path only one thing differs:
   its PAL catch-up counter resets to 6 rather than 5, so a PAL Sonic 3 plays its music a
   little slow. That is kept. Its title song also changes FM5's volume before giving it an
@@ -689,9 +702,10 @@ and the extractor throws instead of silently testing nothing.
 - [`test/sound.test.mjs`](test/sound.test.mjs) — the sound chips, driven by register writes
   and measured: a YM2612 sine's pitch from fnum and block, its full 9-bit swing, TL at
   0.75 dB a step, release; the PSG's pitch and 2 dB steps; the DAC loop's rate against
-  `DAC_Setup`. Then both title songs at both timebases, which have to be exactly as long as
-  their timeline, loud while they play and silent after; and the AIZ intro's AIZ1, the fade,
-  Knuckles' theme and the fade again, each where the intro puts it.
+  `DAC_Setup`, and Sonic 1's against its WAVs, with the DAC left on. Then the title songs at
+  both timebases, which have to be exactly as long as their timeline, loud while they play
+  and silent after; the AIZ intro's AIZ1, the fade, Knuckles' theme and the fade again, each
+  where the intro puts it; and GHZ across its scene.
 - [`test/spring.test.mjs`](test/spring.test.mjs) — the banner's damped spring against the
   ROM's numbers: 100 frames, −92 entry, +38 at frame 32, −13 at 59, +4 at 74, terminating
   on the ROM's own `y_vel == -$5B` test rather than a guard. Also that tuned parameters
@@ -707,7 +721,7 @@ and the extractor throws instead of silently testing nothing.
 The asset pipeline's tests run with `go -C tools/go test ./...`:
 - every PNG each build step writes against the one the committed page carries, and the
   music against the page's;
-- both songs' voices against the raw bytes in their own comments, the driver's tables
+- every song's voices against the raw bytes in their own comments, Sonic 1's too, the driver's tables
   against the familiar S3K values, and the song's length against its notes counted by hand;
 - the deflate against the system's stock zlib on all of them;
 - the maths against V8's.

@@ -162,3 +162,16 @@ func LoadDAC(id int, macros string, deltas []byte, rom func(string) []byte) DACS
 	r := int(float64(rate) * scale)
 	return DACSample{ID: id, Rate: r, Loop: dpcmLoopCounter(r), Data: EncodeDPCM(u8, deltas)}
 }
+
+// LoadDAC1 builds one of Sonic 1's three samples, zPCM_Table's order from 81h:
+// the kick, the snare and the timpani, each at its WAV's rate through
+// Sonic 1's dpcmLoopCounter.
+func LoadDAC1(id int, deltas []byte, rom func(string) []byte) DACSample {
+	names := map[int]string{0x81: "kick", 0x82: "snare", 0x83: "timpani"}
+	name, ok := names[id]
+	if !ok {
+		panic(fmt.Sprintf("Sonic 1 has no DAC sample %02X", id))
+	}
+	rate, u8 := ReadWAV(rom("S1_DAC_" + name + ".wav"))
+	return DACSample{ID: id, Rate: rate, Loop: dpcmLoopCounter1(rate), Data: EncodeDPCM(u8, deltas)}
+}

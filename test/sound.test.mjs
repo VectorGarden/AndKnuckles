@@ -11,7 +11,7 @@ import {inflateSync} from 'node:zlib';
 import {fromSource} from './from-source.mjs';
 
 const SOUND = ['MASTER', 'LINES', 'YM_TICK', 'Z80_TICK', 'PSG_TICK', 'PSG_AMP', 'MUSIC_GAIN',
-  'ymTables', 'makeYM2612', 'makePSG', 'makeDAC', 'b64bytes', 'musicRenderer', 'renderMusic'];
+  'ymTables', 'makeYM2612', 'makePSG', 'DAC_LOOPS', 'makeDAC', 'b64bytes', 'musicRenderer', 'renderMusic'];
 const S = fromSource(SOUND, 'sound.js');
 const {MUSIC} = fromSource(['MUSIC'], 'generated/assets.js');
 
@@ -166,5 +166,56 @@ test('the AIZ intro plays AIZ1, fades for Knuckles, then plays his theme', () =>
     assert.ok(loud(660, 678) < loud(520, 586) / 2, `${tb}: no fade before Knuckles' theme`);
     for(let f = 690; f + 60 <= 1083; f += 60) assert.ok(loud(f, f + 60) > 0.15, `${tb}: Knuckles' theme quiet in the second from frame ${f}`);
     assert.ok(loud(1180, 1200) < loud(1020, 1080) / 2, `${tb}: no fade as Knuckles runs off`);
+  }
+});
+
+/* Sonic 1's Z80 program plays its samples through zPlayPCMLoop: 301 cycles a
+   byte plus 26 a djnz turn, and it never disables the DAC afterwards. */
+test("Sonic 1's DAC loop plays the kick at its WAV's rate and leaves the DAC on", () => {
+  const drv = MUSIC.drivers.s1, writes = [];
+  let t = 0;
+  const ym = {write: (part, reg, val) => writes.push([t, reg, val])};
+  const dac = S.makeDAC(drv, ym);
+  dac.queue(0x01, 0);                                // 81h, the kick
+  for(t = 0; t < S.MASTER.ntsc / 10; t += S.YM_TICK) dac.run(t);
+  const data = writes.filter(w => w[1] === 0x2A);
+  const want = 2 * S.MASTER.ntsc / 15 / (301 + 26 * (drv.dac['81'].loop - 1));
+  const got = (data.length - 1) / ((data[data.length - 1][0] - data[0][0]) / S.MASTER.ntsc);
+  assert.ok(Math.abs(got - want) / want < 0.02, `${got.toFixed(0)} Hz, want ${want.toFixed(0)}`);
+  assert.ok(Math.abs(want - drv.dac['81'].rate) / drv.dac['81'].rate < 0.02, 'and that is about the WAV rate');
+  assert.equal(writes.filter(w => w[1] === 0x2B && w[2] === 0).length, 0, 'the DAC is never disabled');
+});
+
+test("the timpani plays at the pitch the 68K set for it", () => {
+  // the 68K's DAC_sample_rate write lands in the timpani's own table entry
+  const rate = pitch => {
+    const writes = []; let t = 0;
+    const dac = S.makeDAC({...MUSIC.drivers.s1, dac: {'83': MUSIC.drivers.s1.dac['82']}},
+                          {write: (p, reg) => reg === 0x2A && writes.push(t)});
+    dac.setPitch(pitch); dac.queue(0x03, 0);
+    for(t = 0; t < S.MASTER.ntsc / 20; t += S.YM_TICK) dac.run(t);
+    return writes.length;
+  };
+  assert.ok(rate(10) > rate(30), 'a smaller djnz count plays faster');
+});
+
+test("Sonic 1's title song plays and ends, at both timebases", () => {
+  const song = MUSIC.songs.s1;
+  // no PAL catch-up in Sonic 1: the same frames, so a sixth slower in seconds
+  assert.equal(song.frames.pal, song.frames.ntsc);
+  for(const [tb, fps] of [['ntsc', 59.92], ['pal', 50]]){
+    const r = render('s1', 700, tb, fps), loud = loudness(r, fps);
+    // the drums lead in from frame 16; every track plays to about frame 420
+    for(let f = 16; f + 60 <= 420; f += 60) assert.ok(loud(f, f + 60) > 0.2, `${tb}: quiet in the second from frame ${f}`);
+    assert.ok(loud(0, 15) < 0.005, `${tb}: something before the first snare`);
+    assert.ok(loud(song.frames[tb] + 30, song.frames[tb] + 60) < 0.005, `${tb}: still sounding after the song`);
+  }
+});
+
+test('Green Hill Zone plays the whole way across the scene', () => {
+  assert.equal(MUSIC.songs.ghz.loops, true);
+  for(const [tb, fps] of [['ntsc', 59.92], ['pal', 50]]){
+    const r = render('ghz', 1300, tb, fps), loud = loudness(r, fps);
+    for(let f = 0; f + 60 <= 1300; f += 60) assert.ok(loud(f, f + 60) > 0.2, `${tb}: quiet in the second from frame ${f}`);
   }
 });
