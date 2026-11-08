@@ -103,7 +103,7 @@ func TestTitleSongPlaysToItsEnd(t *testing.T) {
 	stop := make([]int, nTracks)
 	n := 0
 	for ; d.Playing() || n == 0; n++ {
-		d.Tick(n == 0)
+		d.Tick(d.first(n))
 		for i := range stop {
 			if stop[i] == 0 && !d.track(i).bit(tPlayback, 7) {
 				stop[i] = n
@@ -119,7 +119,7 @@ func TestTitleSongPlaysToItsEnd(t *testing.T) {
 	// on the DAC's last update nothing else wrote a thing
 	d2 := NewDriver(song, tab)
 	for i := 0; i <= stop[0]; i++ {
-		w := d2.Tick(i == 0)
+		w := d2.Tick(d2.first(i))
 		if i == stop[0] {
 			for _, x := range w {
 				if x.Port == 2 || x.Reg >= 0xA0 && x.Reg <= 0xA6 {
@@ -186,5 +186,47 @@ func TestZoneMusicLoops(t *testing.T) {
 		if !d.track(i).bit(tPlayback, 7) {
 			t.Errorf("track %d stopped within a minute", i)
 		}
+	}
+}
+
+// PAL: S&K runs the driver a second time every fifth frame, Sonic 3 every
+// sixth; the same frames hold the same music, so 500 PAL frames carry 599
+// updates in S&K (60 a second) and 583 in Sonic 3 (a little slow).
+func TestPALSchedule(t *testing.T) {
+	for _, c := range []struct{ period, want int }{{0, 500}, {5, 599}, {6, 583}} {
+		n := 0
+		for f := 0; f < 500; f++ {
+			n += updatesOn(f, c.period)
+		}
+		if n != c.want {
+			t.Errorf("period %d: %d updates in 500 frames, want %d", c.period, n, c.want)
+		}
+	}
+}
+
+// A fade halts the DAC and PSG at once, then takes the FM down a step every 6
+// V-ints; the next song loads over it from silence.
+func TestFadeOutThenNextSong(t *testing.T) {
+	tab := LoadTables(string(lib.Rom("S3K_Snd_Driver.asm")))
+	aiz := AssembleSong(string(lib.Rom("S3K_Snd_AIZ1.asm")))
+	knux := AssembleSong(string(lib.Rom("SK_Snd_Knuckles.asm")))
+	d := NewDriver(aiz, tab)
+	out := d.PlayFrames(0, 200, []Cue{{0, Command{Song: aiz}}, {60, Command{FadeOut: true}}, {151, Command{Song: knux}}})
+	if d.song != knux || !d.Playing() {
+		t.Fatal("Knuckles' theme should be playing")
+	}
+	tl := 0
+	for _, w := range out[60:151] {
+		for _, x := range w {
+			if x.Port == 2 && x.Val&0x90 == 0x90 && x.Val&0x0F != 0x0F {
+				t.Errorf("a PSG volume went up during the fade: % X", x.Val)
+			}
+			if x.Port < 2 && x.Reg&0xF0 == 0x40 {
+				tl++
+			}
+		}
+	}
+	if tl == 0 {
+		t.Error("the fade sent no TL")
 	}
 }

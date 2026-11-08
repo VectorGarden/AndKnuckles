@@ -592,7 +592,8 @@ NTSC**, and the smile is not a loop to close in the first place.
 ## The music
 
 The S&K title plays *Title (Sonic & Knuckles)*, the S3 title *Title (Sonic 3)*, and the
-AIZ intro *Angel Island Zone Act 1*, each from the frame its game starts it. Nothing is recorded: the song is assembled from its smps2asm source in skdisasm, run offline
+AIZ intro *Angel Island Zone Act 1* and then *Knuckles' theme*, each from the frame its game
+starts it. Nothing is recorded: the song is assembled from its smps2asm source in skdisasm, run offline
 through a port of the game's own sound driver, and what the driver wrote to the sound chips
 on every V-int is kept. The page plays that on a YM2612 and a PSG of its own.
 
@@ -609,17 +610,25 @@ on every V-int is kept. The page plays that on a YM2612 and a PSG of its own.
   instrument, so the driver sends that channel's levels from a null pointer — Z80 address 0,
   its own `di, di, im 1` — before FM5 jumps into FM1's data and sets a real voice. The bytes
   are known from the source, so that read is modelled too.
-- **Zone music** is the AIZ intro's. It never stops — every track ends on a jump back into
-  itself — so it is run for 1,800 V-ints, longer than the scene at either timebase, and plays
-  over the scene's own timeline, starting again with it. It takes its instruments from the
+- **The AIZ intro changes song.** It opens on AIZ1, from the level's start. The frame
+  Knuckles' cutscene object is created (F587) its init spawns `Obj_Song_Fade_Transition`,
+  which sends `cmd_FadeOut` and, 90 frames later, Knuckles' theme; when he runs off (F1083)
+  `Obj_Song_Fade_ToLevelMusic` fades that out and restores AIZ1 two seconds on, after the
+  scene ends. The fade is the driver's own: the DAC and PSG halt at once and the FM drops a
+  step every 6 V-ints. Those frames come out of the `aiz` step's simulation of Knuckles, and
+  a test holds the music to them.
+- **Zone music** never stops — every track ends on a jump back into itself — so the AIZ
+  intro's is run for 1,500 frames, longer than the scene at either timebase, and plays over
+  the scene's own timeline, starting again with it. AIZ1 It takes its instruments from the
   driver's universal voice bank (all 35 voices assemble to the bytes their comments give),
   and it keeps a bug the stock build keeps: a PSG volume change written as an FM one, which
   swallows the note after it, so that G3 never plays.
-- **The log** borrows VGM's command bytes, one V-int at a time: 14 KB for the 19-second
-  song once the driver's every-frame rewrites of unchanged registers are dropped. A frequency
-  is kept or dropped as a pair, because A4h only latches and the A0h write after it applies
-  it; a test replays both the full write stream and the log and requires the same chip state
-  at the end of every V-int.
+- **The log** borrows VGM's command bytes, a record a frame, one per timebase: a PAL frame
+  sometimes holds two driver updates, and a scene's fades and song changes go in by frame.
+  The driver's every-frame rewrites of unchanged registers are dropped — a frequency kept or
+  dropped as a pair, because A4h only latches and the A0h write after it applies it — and a
+  test replays the full write stream against the log and requires the same chip state at
+  the end of every update. Deflated, all the logs together come to 26 KB.
 - **The DAC samples** are the disassembly's WAVs, converted to 4-bit DPCM exactly as its
   build does, and played back the way `zPlayDigitalAudio` does: a nibble 125 and 238 cycles
   into each pass, 303 cycles a byte plus 26 per djnz turn of the rate `DAC_Setup` works out.
@@ -641,9 +650,9 @@ on every V-int is kept. The page plays that on a YM2612 and a PSG of its own.
 - **Timing.** A frame of audio is a frame of animation: the chips run at the console's
   clocks, NTSC or PAL, and the result is played back at the page's frame rate, so while the
   music plays its clock *is* the frame clock and the two cannot drift. On PAL the driver
-  updates twice on some frames (`zPalDblUpdCounter`) to keep tempo. That counter starts when
-  the driver boots, so its phase against the song is unknowable; it is taken from the song's
-  start. All songs share one output level, so they keep their loudness relative to each
+  updates twice on some frames (`zPalDblUpdCounter`) to keep tempo; the pipeline does that,
+  in the per-timebase logs. That counter starts when the driver boots, so its phase against
+  the song is unknowable; it is taken from the song's start. All songs share one output level, so they keep their loudness relative to each
   other.
 - **Length.** The S&K loop is 3 seconds and its song 19, so with the music on, playback
   and video run until the driver has stopped every track, the scene idling on as its title
@@ -657,6 +666,8 @@ Not modelled: the YM2612's timers and SSG-EG, which no song here uses; the time 
 takes on the Z80, which on the console holds up the DAC loop for a moment each frame; and
 sound effects. The AIZ intro has some — the Tornado, Sonic's transformation, Knuckles — and on
 the console each borrows a channel from the music while it plays. Here the music plays whole.
+And the frame an object sends its command on is taken as the frame it is created; where it
+falls in the object list can put it a frame later.
 
 The preview now runs at the chosen timebase's frame rate. It used to run at 50 Hz either
 way, which NTSC music would have played a sixth slow against.
@@ -678,10 +689,9 @@ and the extractor throws instead of silently testing nothing.
 - [`test/sound.test.mjs`](test/sound.test.mjs) — the sound chips, driven by register writes
   and measured: a YM2612 sine's pitch from fnum and block, its full 9-bit swing, TL at
   0.75 dB a step, release; the PSG's pitch and 2 dB steps; the DAC loop's rate against
-  `DAC_Setup`; PAL's catch-up every five frames for S&K and every six for Sonic 3. Then both
-  title songs at both timebases, which have to be exactly as long as their timeline, loud
-  while they play and silent after; and AIZ1, which has to sound all the way across the
-  intro.
+  `DAC_Setup`. Then both title songs at both timebases, which have to be exactly as long as
+  their timeline, loud while they play and silent after; and the AIZ intro's AIZ1, the fade,
+  Knuckles' theme and the fade again, each where the intro puts it.
 - [`test/spring.test.mjs`](test/spring.test.mjs) — the banner's damped spring against the
   ROM's numbers: 100 frames, −92 entry, +38 at frame 32, −13 at 59, +4 at 74, terminating
   on the ROM's own `y_vel == -$5B` test rather than a guard. Also that tuned parameters

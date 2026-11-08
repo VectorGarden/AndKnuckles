@@ -215,9 +215,11 @@ type Driver struct {
 	tempoAcc byte // zTempoAccumulator
 	dacIndex byte // zDACIndex
 	dacSet   bool
-	voices   int  // zVoiceTblPtr
-	spindash byte // zSpindashRev
-	out      []Write
+	voices   int // zVoiceTblPtr
+	// zFadeOutTimeout, zFadeDelay, zFadeDelayTimeout
+	fadeOut, fadeDelay, fadeDelayTimeout byte
+	spindash                             byte // zSpindashRev
+	out                                  []Write
 }
 
 // track RAM, by track number (0 = DAC, 1-5 = FM1-FM5, 6-8 = PSG1-PSG3)
@@ -280,12 +282,19 @@ func (d *Driver) Playing() bool {
 	return false
 }
 
+// Command is what the 68K puts in the driver's queue on a frame: a song to
+// play, or cmd_FadeOut.
+type Command struct {
+	Song    *Song
+	FadeOut bool
+}
+
 // Run plays the song to its end and returns the writes of every V-int.
 // The first V-int is the one that loads it.
 func (d *Driver) Run(maxTicks int) [][]Write {
 	var ticks [][]Write
 	for n := 0; n < maxTicks; n++ {
-		ticks = append(ticks, d.Tick(n == 0))
+		ticks = append(ticks, d.Tick(d.first(n)))
 		if !d.Playing() {
 			return ticks
 		}
@@ -298,25 +307,130 @@ func (d *Driver) Run(maxTicks int) [][]Write {
 func (d *Driver) RunFor(n int) [][]Write {
 	var ticks [][]Write
 	for i := 0; i < n; i++ {
-		ticks = append(ticks, d.Tick(i == 0))
+		ticks = append(ticks, d.Tick(d.first(i)))
 	}
 	return ticks
 }
 
-// Tick is one zVInt's zUpdateMusic. load is the V-int that finds the song in
-// the queue.
-func (d *Driver) Tick(load bool) []Write {
+func (d *Driver) first(n int) Command {
+	if n == 0 {
+		return Command{Song: d.song}
+	}
+	return Command{}
+}
+
+// Cue is a command the game sends on a frame.
+type Cue struct {
+	Frame int
+	Command
+}
+
+// PlayFrames runs the driver a frame at a time at a timebase and returns each
+// frame's writes. period is how often a PAL frame gets a second update (0 for
+// NTSC): zPalDblUpdCounter starts at 5 when the driver boots and is reset to
+// period, so the extra updates fall on frames 5, 5+period, ... -- where the
+// boot falls against the song is not knowable, so it is taken as frame 0. A
+// cue goes in with its frame's first update. With frames 0 it stops once no
+// track is playing and no cue is left; otherwise after that many frames.
+func (d *Driver) PlayFrames(period, frames int, cues []Cue) [][]Write {
+	var out [][]Write
+	next := 0
+	for f := 0; frames == 0 || f < frames; f++ {
+		if f > 60*60*10 {
+			panic("music still playing after ten minutes")
+		}
+		var w []Write
+		for u := 0; u < updatesOn(f, period); u++ {
+			cmd := Command{}
+			if u == 0 && next < len(cues) && cues[next].Frame == f {
+				cmd = cues[next].Command
+				next++
+			}
+			w = append(w, d.Tick(cmd)...)
+		}
+		out = append(out, w)
+		if frames == 0 && !d.Playing() && next == len(cues) {
+			return out
+		}
+	}
+	return out
+}
+
+func updatesOn(f, period int) int {
+	if period > 0 && f >= 5 && (f-5)%period == 0 {
+		return 2
+	}
+	return 1
+}
+
+// Tick is one zVInt's zUpdateMusic, with whatever the 68K queued for it.
+func (d *Driver) Tick(cmd Command) []Write {
 	d.out, d.dacSet = nil, false
 	d.tempoWait()
-	if load {
+	d.doMusicFadeOut()
+	switch {
+	case cmd.Song != nil: // zPlayMusic: zStopAllSound, then zBGMLoad
+		d.song = cmd.Song
 		d.stopAllSound()
 		d.bgmLoad()
+	case cmd.FadeOut:
+		d.fadeOutMusic()
 	}
 	d.updateMusic()
 	if d.dacSet {
 		d.out = append(d.out, Write{Port: 3, Val: d.dacIndex})
 	}
 	return d.out
+}
+
+// zFadeOutMusic: 28h steps of fading, one every 6 V-ints, starting with the
+// DAC and PSG halted outright.
+func (d *Driver) fadeOutMusic() {
+	d.fadeOut, d.fadeDelayTimeout, d.fadeDelay = 0x28, 6, 6
+	d.haltDACPSG()
+}
+
+// zHaltDACPSG
+func (d *Driver) haltDACPSG() {
+	for _, i := range []int{0, 8, 6, 7} {
+		d.track(i).s(tPlayback, 0)
+	}
+	for _, v := range []byte{0x9F, 0xBF, 0xDF, 0xFF} {
+		d.psgOut(v)
+	}
+}
+
+// zDoMusicFadeOut: every zFadeDelay V-ints, one step quieter on the DAC and FM
+// tracks, until the timeout runs out and zStopAllSound ends the song.
+func (d *Driver) doMusicFadeOut() {
+	if d.fadeOut == 0 {
+		return
+	}
+	if d.fadeOut&0x80 != 0 {
+		d.haltDACPSG()
+	}
+	d.fadeOut &^= 0x80
+	if d.fadeDelayTimeout--; d.fadeDelayTimeout != 0 {
+		return
+	}
+	d.fadeDelayTimeout = d.fadeDelay
+	if d.fadeOut--; d.fadeOut == 0 {
+		d.stopAllSound()
+		return
+	}
+	for i := 0; i < 6; i++ {
+		t := d.track(i)
+		v := t.g(tVolume) + 1
+		t.s(tVolume, v)
+		if v&0x80 != 0 {
+			t.s(tVolume, v-1)
+			continue
+		}
+		if !t.bit(tPlayback, 7) || t.bit(tPlayback, 2) {
+			continue
+		}
+		d.sendTL(t)
+	}
 }
 
 // TempoWait: every overflow of the tempo accumulator holds every track a frame.
@@ -340,6 +454,7 @@ func (d *Driver) stopAllSound() {
 		d.ram[i] = 0
 	}
 	d.tempo, d.tempoAcc, d.dacIndex, d.spindash = 0, 0, 0, 0
+	d.fadeOut, d.fadeDelay, d.fadeDelayTimeout = 0, 0, 0
 	d.dacSet = true // the DAC loop sees the cleared index and stops
 	// ix walks zFMDACInitBytes as if it were track RAM
 	for ch := 0; ch < 6; ch++ {

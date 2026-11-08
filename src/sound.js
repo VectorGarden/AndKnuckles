@@ -322,30 +322,32 @@ function b64bytes(s){
   return b;
 }
 
-/* How many driver updates frame k (from the song's load) gets. NTSC: one a
-   V-int. PAL: one more whenever zPalDblUpdCounter runs out. It starts at 5 when
-   the driver boots and is reset to `period` -- 5 in S&K, 6 in Sonic 3, which
-   plays PAL music slow -- so the extra updates fall on frames 5, 5+period, ...
-   Where the boot falls relative to the song is not knowable, so it is taken as
-   the song's start. */
-function updatesOn(k, tb, period){
-  return tb === 'pal' && k >= 5 && (k - 5) % period === 0 ? 2 : 1;
+/* A scene's music log for timebase tb, inflated. The pipeline deflates them
+   (zlib), and they are read once. */
+async function musicLog(music, scene, tb){
+  const song = music.songs[scene], logs = song.bytes || (song.bytes = {});
+  if(!logs[tb]){
+    const s = new Blob([b64bytes(song.logs[tb])]).stream().pipeThrough(new DecompressionStream('deflate'));
+    logs[tb] = new Uint8Array(await new Response(s).arrayBuffer());
+  }
+  return logs[tb];
 }
 
 /* A scene's music over a timeline of `frames` frames at timebase tb, rendered a
    stretch at a time: next(n) renders up to n more frames and says whether it is
    done. The samples are at the chip's own rate stretched to the page's frame
-   rate (fps), so a frame of audio is exactly a frame of animation. The song
-   loads on timeline frame `start`. */
-function musicRenderer(music, scene, frames, tb, fps, start){
-  const song = music.songs[scene], drv = music.drivers[song.driver];
+   rate (fps), so a frame of audio is exactly a frame of animation. log is the
+   scene's inflated log for tb, a record a frame -- the driver ran twice on some
+   PAL frames, and the scene's own fades and song changes are in it -- and the
+   song loads on timeline frame `start`. */
+function musicRenderer(music, scene, frames, tb, fps, start, log){
+  const drv = music.drivers[music.songs[scene].driver];
   const frameM = LINES[tb] * 3420, perFrame = frameM / YM_TICK;
   const n = Math.ceil(frames * perFrame);
   const left = new Float32Array(n), right = new Float32Array(n);
   const ym = makeYM2612(), psg = makePSG(), dac = makeDAC(drv, ym);
-  const log = song.bytes || (song.bytes = b64bytes(song.log));
   let p = 0, done = false, psgAcc = 0, s = 0, f = 0;
-  // one driver update: every write it made, all at the V-int
+  // one frame's driver updates: every write, all at the V-int
   function update(t){
     for(;;){
       const c = log[p++];
@@ -362,8 +364,7 @@ function musicRenderer(music, scene, frames, tb, fps, start){
   let xl = 24 * MUSIC_GAIN, yl = 0, xr = xl, yr = 0;
   function next(count){
     for(const stop = Math.min(frames, f + count); f < stop; f++){
-      const t0 = f * frameM, k = f - start;
-      if(k >= 0 && !done) for(let u = updatesOn(k, tb, drv.palPeriod); u > 0 && !done; u--) update(t0);
+      if(f >= start && !done) update(f * frameM);
       const end = Math.min(n, Math.ceil((f + 1) * perFrame));
       for(; s < end; s++){
         dac.run(s * YM_TICK);
@@ -382,8 +383,8 @@ function musicRenderer(music, scene, frames, tb, fps, start){
   }
   return {next, left, right, rate: perFrame * fps};
 }
-function renderMusic(music, scene, frames, tb, fps, start){
-  const r = musicRenderer(music, scene, frames, tb, fps, start);
+function renderMusic(music, scene, frames, tb, fps, start, log){
+  const r = musicRenderer(music, scene, frames, tb, fps, start, log);
   while(!r.next(1e9));
   return r;
 }
