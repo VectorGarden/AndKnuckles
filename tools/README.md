@@ -275,7 +275,10 @@ the YM2612 and PSG on every V-int, and the DAC samples it queued. The root READM
   through the $8000 bank window. Each voice in a song is preceded by a comment with the 25
   bytes it assembles to, and the test requires the macros to land on them. The two songs
   were converted by different smps2asm versions — S&K's takes the TL carrier bits as written,
-  S3's derives them from the algorithm — so between them both paths are checked.
+  S3's derives them from the algorithm — so between them both paths are checked. Songs that
+  test build options with `if`/`else`/`endif` get the stock build's answer
+  (`FixMusicAndSFXDataBugs` = 0), so their data bugs stay in. The universal voice bank at
+  the end of the driver source is assembled the same way, and its comments checked too.
 - **Running it.** `sound/s3k.go` is the music half of the driver, for both games: `zStopAllSound`,
   `zBGMLoad`, then one `zUpdateMusic` per V-int until every track has stopped. Its frequency
   and envelope tables are read out of the driver source, frequencies through AS's integer
@@ -340,8 +343,8 @@ and [s1disasm](https://github.com/sonicretro/s1disasm) and
 [s2disasm](https://github.com/sonicretro/s2disasm) for the `S1_` and `S2_` files.
 It is Sega's, like the rest of the artwork this project renders — see the credits
 in the root README. The sound files are sources rather than compressed data: a song's
-smps2asm text (`SK_Snd_Title.asm`, `S3_Snd_Title.asm`), the Z80 sound driver (`S3K_Snd_Driver.asm`, read for
-its tables), `sonic3k.macros.asm` (`S3K_macros.asm`, for `DAC_Setup`), and the DAC WAVs
+smps2asm text (`SK_Snd_Title.asm`, `S3_Snd_Title.asm`, `S3K_Snd_AIZ1.asm`), the Z80 sound driver (`S3K_Snd_Driver.asm`, read for
+its tables and its universal voice bank), `sonic3k.macros.asm` (`S3K_macros.asm`, for `DAC_Setup`), and the DAC WAVs
 with the driver's `deltas.bin`. The page already embeds the decoded results; these are the
 inputs they came from, kept here so the build runs without a network fetch.
 

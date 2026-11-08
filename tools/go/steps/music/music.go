@@ -26,6 +26,9 @@ type Song struct {
 	// when that is set: the name of a frame count in the scene's intro spec.
 	Start int
 	After string
+	// For loops, songs that never stop (zone music jumps back on itself): how
+	// many V-ints to keep. Enough to outlast the scene at either timebase.
+	For int
 }
 
 // Driver is a build of a sound driver: the same Z80 source serves both S3 and
@@ -53,6 +56,13 @@ var Songs = []Song{
 	// black (s3.asm, loc_3704), just before Wait_Title's first Wait_VSync: the
 	// first frame after the SEGA logo's hold and its 8 fade frames.
 	{Scene: "s3", File: "S3_Snd_Title.asm", Title: "Title (Sonic 3)", Driver: "s3", Start: 8, After: "hold"},
+	// The AIZ intro is Angel Island Zone Act 1 itself: the level's start plays
+	// mus_AIZ1 from LevelMusic_Playlist (sonic3k.asm, loc_6248), then sets the
+	// level up -- decompressing blocks and chunks, drawing the planes -- and only
+	// then enters LevelLoop. The Z80 takes its V-ints all the while, so the song
+	// is a few frames in by the intro's first; how many depends on the 68K's
+	// time for that setup, which nothing here models, so it starts on frame 0.
+	{Scene: "aiz", File: "S3K_Snd_AIZ1.asm", Title: "Angel Island Zone Act 1", Driver: "s3k", For: 1800},
 }
 
 // Build writes music.json.
@@ -65,7 +75,12 @@ func Build(outArg string) {
 	used := map[string]map[int]bool{}
 	for _, s := range Songs {
 		song := sound.AssembleSong(string(lib.Rom(s.File)))
-		ticks := sound.NewDriver(song, tab).Run(60 * 60 * 10)
+		var ticks [][]sound.Write
+		if s.For > 0 {
+			ticks = sound.NewDriver(song, tab).RunFor(s.For)
+		} else {
+			ticks = sound.NewDriver(song, tab).Run(60 * 60 * 10)
+		}
 		if used[s.Driver] == nil {
 			used[s.Driver] = map[int]bool{}
 		}
@@ -80,6 +95,9 @@ func Build(outArg string) {
 		o := lib.O("title", s.Title, "driver", s.Driver, "start", s.Start)
 		if s.After != "" {
 			o.Set("after", s.After)
+		}
+		if s.For > 0 {
+			o.Set("loops", true)
 		}
 		songs.Set(s.Scene, o.Set("ticks", len(ticks)).Set("log", base64.StdEncoding.EncodeToString(log)))
 		fmt.Printf("%s: %s, %d V-ints, %d-byte log\n", s.Scene, s.Title, len(ticks), len(log))

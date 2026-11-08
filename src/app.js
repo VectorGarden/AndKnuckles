@@ -433,9 +433,11 @@ function musicStart(){
   return song.start + (song.after ? sceneIntro()[song.after] : 0);
 }
 /* Frames until the driver has stopped every track, from the timeline's start,
-   plus half a second for the last notes to release. */
+   plus half a second for the last notes to release. Zone music never stops: it
+   plays over the scene's own timeline and starts again with it. */
 function musicFrames(){
   const song = MUSIC.songs[state.scene], period = MUSIC.drivers[song.driver].palPeriod;
+  if(song.loops) return 0;
   let f = 0;
   for(let u = 0; u < song.ticks; f++) u += updatesOn(f, state.timebase, period);
   return musicStart() + f + (tbFps() >> 1);
@@ -443,7 +445,7 @@ function musicFrames(){
 /* A title loop is a few seconds and its song is more like twenty, so with the
    music on, playback and video run until the song is over, the scene idling on
    the way its title screen does. GIF and APNG have no sound and keep to the
-   timeline. */
+   timeline. A song that loops changes nothing. */
 function playLen(){
   const n = timelineLen();
   return musicOn() ? Math.max(n, musicFrames()) : n;
