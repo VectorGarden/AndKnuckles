@@ -21,7 +21,7 @@ export function fromSource(names, file = 'app.js'){
   const picked = [];
   for(const name of names){
     // a top-level `function name(` ... up to the closing brace in column 0,
-    // or a one-line `const name = ...`
+    // or a `const name = ...`: one line, or a block to its brace in column 0
     let start = lines.findIndex(l => new RegExp(`^(?:async )?function ${name}\\(`).test(l));
     if(start >= 0){
       let end = start + 1;
@@ -33,6 +33,13 @@ export function fromSource(names, file = 'app.js'){
     // a top-level const, possibly one of several declarators on the line
     start = lines.findIndex(l => new RegExp(`^const .*\\b${name}\\b\\s*=`).test(l));
     if(start < 0) throw new Error(`${name}: not found in src/${file}`);
+    // a const that opens a block runs to its closing brace in column 0
+    if(/[{[]\s*$/.test(lines[start])){
+      let end = start + 1;
+      while(end < lines.length && !/^[}\]]/.test(lines[end])) end++;
+      picked.push([start, lines.slice(start, end + 1).join('\n')]);
+      continue;
+    }
     picked.push([start, lines[start]]);
   }
   picked.sort((a, b) => a[0] - b[0]);          // keep file order: consts before use

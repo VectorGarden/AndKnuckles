@@ -26,6 +26,8 @@ test('the music control is offered for a scene with music, when animated', async
   await setup(page, {mode: 'anim', scene: 'aiz', intro: 'on'});
   assert.equal(await shown(), true, 'the AIZ intro');
   await setup(page, {mode: 'anim', scene: 's1', intro: 'on'});
+  assert.equal(await shown(), true, 'the Sonic 1 title');
+  await setup(page, {mode: 'anim', scene: 's2', intro: 'on'});
   assert.equal(await shown(), false, 'a scene without music yet');
 });
 
@@ -73,10 +75,13 @@ test('playing starts the music, and the frame shown is the one it has reached', 
   await page.click('#play');
   await page.waitForFunction(() => !!sound.src, null, {timeout: 15000});
   await page.waitForTimeout(800);
-  const r = await page.evaluate(() => new Promise(res => requestAnimationFrame(() => requestAnimationFrame(() => {
+  // a tick shows the frame the music has reached -- checked straight after
+  // one, so a busy machine's late animation frames cannot get in between
+  const r = await page.evaluate(() => {
+    tick(performance.now());
     const due = (sound.f0 + Math.floor((sound.ctx.currentTime - sound.t0) * tbFps())) % playLen();
-    res({frame: player.frame, due, len: sound.src.buffer.duration, want: playLen() / tbFps(), loop: sound.src.loop});
-  }))));
+    return {frame: player.frame, due, len: sound.src.buffer.duration, want: playLen() / tbFps(), loop: sound.src.loop};
+  });
   assert.ok(Math.abs(r.frame - r.due) <= 1, `showing frame ${r.frame}, the music is at ${r.due}`);
   assert.ok(r.frame > 10, 'playback has moved on');
   assert.ok(Math.abs(r.len - r.want) < 0.001, `${r.len}s of music for a ${r.want}s timeline`);

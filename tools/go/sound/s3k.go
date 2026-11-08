@@ -64,7 +64,7 @@ const (
 
 // Write is one thing the driver did on a V-int.
 type Write struct {
-	Port byte // 0, 1: YM2612 part I, II; 2: PSG; 3: DAC sample queued (Val, 1-based; 0 stops)
+	Port byte // 0, 1: YM2612 part I, II; 2: PSG; 3: DAC sample queued (Val, 1-based; 0 stops); 4: timpani pitch
 	Reg  byte
 	Val  byte
 }

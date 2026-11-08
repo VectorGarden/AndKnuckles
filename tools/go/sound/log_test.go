@@ -95,6 +95,8 @@ func TestEncodeKeepsWhatTheChipsSee(t *testing.T) {
 				raw.psgWrite(w.Val)
 			case 3:
 				raw.events = append(raw.events, 0x9500|int(w.Val))
+			case 4:
+				raw.events = append(raw.events, 0x9600|int(w.Val))
 			}
 		}
 		for {
@@ -110,8 +112,8 @@ func TestEncodeKeepsWhatTheChipsSee(t *testing.T) {
 			case 0x52, 0x53:
 				enc.ymWrite(int(c-0x52), log[p], log[p+1])
 				p += 2
-			case 0x95:
-				enc.events = append(enc.events, 0x9500|int(log[p]))
+			case 0x95, 0x96:
+				enc.events = append(enc.events, int(c)<<8|int(log[p]))
 				p++
 			default:
 				t.Fatalf("V-int %d: unexpected log byte %02X", i, c)

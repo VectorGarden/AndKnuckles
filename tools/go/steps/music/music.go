@@ -44,19 +44,29 @@ type Cue struct {
 	File    string
 }
 
-// Driver is a build of a sound driver: the same Z80 source serves both S3 and
-// S&K, and on the music path they differ only in how PAL catches up.
+// Driver is a build of a sound driver. The same Z80 source serves both S3 and
+// S&K, and on the music path they differ only in how PAL catches up; Sonic 1's
+// is a different driver altogether, on the 68K.
 type Driver struct {
 	// PALPeriod is how often the driver runs twice in a frame on PAL: it resets
 	// zPalDblUpdCounter to 5 in S&K, and to 6 in Sonic 3, which the disassembly
-	// notes plays PAL music too slow.
+	// notes plays PAL music too slow. Sonic 1 never does.
 	PALPeriod int
+	// Loop names the Z80 DAC loop that plays its samples, for the page:
+	// zPlayDigitalAudio ("s3k") or Sonic 1's zPlayPCMLoop ("s1").
+	Loop string
 }
 
-// Drivers by name. Both read the S&K driver source's tables and its DAC table.
+// Drivers by name.
 var Drivers = map[string]Driver{
-	"s3":  {PALPeriod: 6},
-	"s3k": {PALPeriod: 5},
+	"s1":  {Loop: "s1"},
+	"s3":  {PALPeriod: 6, Loop: "s3k"},
+	"s3k": {PALPeriod: 5, Loop: "s3k"},
+}
+
+// player is either driver.
+type player interface {
+	PlayFrames(period, frames int, cues []sound.Cue) [][]sound.Write
 }
 
 // Songs is every scene with music.
@@ -83,6 +93,16 @@ var Songs = []Song{
 	// on, restores AIZ1. Each object sends its command on the frame it runs,
 	// which the driver takes on the next V-int: the frame numbered by the aiz
 	// step's 1-based count. The test holds these to aiz.Cues.
+	// Sonic 1's title queues its song before the fade-in (sonic.asm, GM_Title),
+	// so the first V-int of the fade loads it; Sound_PlayBGM leaves the driver
+	// for that frame, and the first notes go out on the next.
+	{Scene: "s1", File: "S1_Snd_Title.asm", Title: "Title Screen", Driver: "s1"},
+	// GHZ is zone music, queued at Level_PlayBgm just before the title card
+	// object: frame 0 of the title card. The page's other styles open on the
+	// level's fade-in after the card, which on the console comes however long
+	// decompressing the level's art takes; that is not modelled, so the song
+	// starts on frame 0 there too.
+	{Scene: "ghz", File: "S1_Snd_GHZ.asm", Title: "Green Hill Zone", Driver: "s1", For: 1500},
 	{Scene: "aiz", File: "S3K_Snd_AIZ1.asm", Title: "Angel Island Zone Act 1, then Knuckles' theme", Driver: "s3k",
 		For: 1500, Cues: []Cue{
 			{Frame: 587, FadeOut: true},
@@ -96,18 +116,26 @@ var Songs = []Song{
 func Build(outArg string) {
 	out := lib.OutDir(outArg)
 	tab := sound.LoadTables(string(lib.Rom("S3K_Snd_Driver.asm")))
+	timpani, _ := sound.ReadWAV(lib.Rom("S1_DAC_timpani.wav"))
+	tab1 := sound.LoadTables1(string(lib.Rom("S1_Snd_Driver.asm")), timpani)
 	macros := string(lib.Rom("S3K_macros.asm"))
 	deltas := lib.Rom("S3K_DAC_deltas.bin")
+	deltas1 := lib.Rom("S1_DAC_deltas.bin")
 	songs := &lib.Obj{}
 	used := map[string]map[int]bool{}
 	assembled := map[string]*sound.Song{}
+	var ver int
 	song := func(file string) *sound.Song {
 		if assembled[file] == nil {
-			assembled[file] = sound.AssembleSong(string(lib.Rom(file)))
+			assembled[file] = sound.AssembleSongFor(string(lib.Rom(file)), ver)
 		}
 		return assembled[file]
 	}
 	for _, s := range Songs {
+		ver = 4
+		if s.Driver == "s1" {
+			ver = 1
+		}
 		if used[s.Driver] == nil {
 			used[s.Driver] = map[int]bool{}
 		}
@@ -125,7 +153,11 @@ func Build(outArg string) {
 			if tb == "pal" {
 				period = Drivers[s.Driver].PALPeriod
 			}
-			out := sound.NewDriver(song(s.File), tab).PlayFrames(period, s.For, cues)
+			var drv player = sound.NewDriver(song(s.File), tab)
+			if s.Driver == "s1" {
+				drv = sound.NewDriver1(song(s.File), tab1)
+			}
+			out := drv.PlayFrames(period, s.For, cues)
 			for _, f := range out {
 				for _, w := range f {
 					if w.Port == 3 && w.Val != 0 {
@@ -147,10 +179,6 @@ func Build(outArg string) {
 		}
 		songs.Set(s.Scene, o.Set("frames", frames).Set("logs", logs))
 	}
-	deltaList := make([]int, len(deltas))
-	for i, v := range deltas {
-		deltaList[i] = int(int8(v))
-	}
 	drivers := &lib.Obj{}
 	var names []string
 	for name := range used {
@@ -164,13 +192,26 @@ func Build(outArg string) {
 		}
 		sort.Ints(ids)
 		dac := &lib.Obj{}
+		dl := deltas
+		if name == "s1" {
+			dl = deltas1
+		}
 		for _, id := range ids {
-			d := sound.LoadDAC(id, macros, deltas, lib.Rom)
+			var d sound.DACSample
+			if name == "s1" {
+				d = sound.LoadDAC1(id, deltas1, lib.Rom)
+			} else {
+				d = sound.LoadDAC(id, macros, deltas, lib.Rom)
+			}
 			dac.Set(fmt.Sprintf("%02X", id), lib.O("rate", d.Rate, "loop", d.Loop,
 				"data", base64.StdEncoding.EncodeToString(d.Data)))
 			fmt.Printf("%s DAC %02X: %d Hz, djnz %d, %d bytes\n", name, id, d.Rate, d.Loop, len(d.Data))
 		}
-		drivers.Set(name, lib.O("deltas", deltaList, "dac", dac))
+		dlist := make([]int, len(dl))
+		for i, v := range dl {
+			dlist[i] = int(int8(v))
+		}
+		drivers.Set(name, lib.O("loop", Drivers[name].Loop, "deltas", dlist, "dac", dac))
 	}
 	m := lib.O("drivers", drivers, "songs", songs)
 	lib.WriteFile(out, "music.json", []byte(lib.Stringify(m)))

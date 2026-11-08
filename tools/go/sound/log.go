@@ -6,6 +6,7 @@ package sound
 //	52 aa dd   YM2612 part I write
 //	53 aa dd   YM2612 part II write
 //	95 ss      the DAC sample the driver queued (1-based; 0 stops it)
+//	96 pp      Sonic 1's timpani pitch: the djnz count the next timpani plays at
 //	62         end of a V-int
 //	66         end of the song: every track has stopped
 //
@@ -129,6 +130,9 @@ func Encode(ticks [][]Write) []byte {
 			case 3:
 				flushYM()
 				out = append(out, 0x95, w.Val)
+			case 4:
+				flushYM()
+				out = append(out, 0x96, w.Val)
 			}
 		}
 		flushYM()

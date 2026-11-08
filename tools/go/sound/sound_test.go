@@ -19,10 +19,11 @@ func TestVoicesMatchTheirComments(t *testing.T) {
 	// as written; S3's says no version, so they come from the algorithm
 	for _, c := range []struct {
 		file, label string
-		n           int
-	}{{"SK_Snd_Title.asm", "Snd_Title_Voices", 6}, {"S3_Snd_Title.asm", "Snd_S3_Title_Voices", 4}} {
+		n, ver      int
+	}{{"SK_Snd_Title.asm", "Snd_Title_Voices", 6, 4}, {"S3_Snd_Title.asm", "Snd_S3_Title_Voices", 4, 4},
+		{"S1_Snd_Title.asm", "Mus8A_Title_Screen_Voices", 0, 1}, {"S1_Snd_GHZ.asm", "Mus81_GHZ_Voices", 0, 1}} {
 		src := string(lib.Rom(c.file))
-		song := AssembleSong(src)
+		song := AssembleSongFor(src, c.ver)
 		voices := song.Labels[c.label] - song.Base
 		hex := regexp.MustCompile(`\$([0-9A-Fa-f]{2})`)
 		var want [][]byte
@@ -50,8 +51,11 @@ func TestVoicesMatchTheirComments(t *testing.T) {
 			}
 		}
 		want = append(want, cur)
-		if len(want) != c.n {
+		if c.n != 0 && len(want) != c.n {
 			t.Fatalf("%s: found %d voice comments, want %d", c.file, len(want), c.n)
+		}
+		if len(want) == 0 || len(want[0]) == 0 {
+			t.Fatalf("%s: no voice comments found", c.file)
 		}
 		for i, w := range want {
 			got := song.Data[voices+25*i : voices+25*i+25]
@@ -228,5 +232,65 @@ func TestFadeOutThenNextSong(t *testing.T) {
 	}
 	if tl == 0 {
 		t.Error("the fade sent no TL")
+	}
+}
+
+// Sonic 1's note tables are its well-known FM_Notes and PSG_Notes; the driver
+// source computes them, and through AS's integer clocks it has to land on them.
+func TestSonic1Tables(t *testing.T) {
+	timpani, _ := ReadWAV(lib.Rom("S1_DAC_timpani.wav"))
+	tab := LoadTables1(string(lib.Rom("S1_Snd_Driver.asm")), timpani)
+	fm := []int{0x25E, 0x284, 0x2AB, 0x2D3, 0x2FE, 0x32D, 0x35C, 0x38F, 0x3C5, 0x3FF, 0x43C, 0x47C}
+	psg := []int{0x356, 0x326, 0x2F9, 0x2CE, 0x2A5, 0x280, 0x25C, 0x23A, 0x21A, 0x1FB, 0x1DF, 0x1C4}
+	for i := range fm {
+		if tab.FMFreq[i] != fm[i] || tab.FMFreq[i+12] != fm[i]+0x800 {
+			t.Errorf("FM %d: %03X/%03X, want %03X/%03X", i, tab.FMFreq[i], tab.FMFreq[i+12], fm[i], fm[i]+0x800)
+		}
+		if tab.PSGFreq[i] != psg[i] {
+			t.Errorf("PSG %d: %03X, want %03X", i, tab.PSGFreq[i], psg[i])
+		}
+	}
+	// the last PSG entry is the highest frequency there is
+	if tab.PSGFreq[69] != 0 {
+		t.Errorf("PSG table ends on %03X", tab.PSGFreq[69])
+	}
+	// the timpani's four pitches run from fastest to slowest
+	for i := 1; i < len(tab.Timpani); i++ {
+		if tab.Timpani[i] < tab.Timpani[i-1] {
+			t.Errorf("timpani pitches out of order: %v", tab.Timpani)
+		}
+	}
+	if len(tab.Env) == 0 || tab.Env[tab.EnvAt[1]+5] != 0x10 {
+		t.Errorf("PSG2 should be 0,2,4,6,8,$10,$80")
+	}
+}
+
+// Sonic 1's title song plays to its end. The frame it loads updates no track
+// (Sound_PlayBGM leaves through its caller's caller); the DAC opens with a
+// 12-frame rest from frame 1, which tempo 5 stretches -- TempoWait adds a frame
+// to every track on frames 5, 10 and 15 -- so the first snare is on frame 16,
+// counted by hand, and the next on 31.
+func TestSonic1TitlePlaysToItsEnd(t *testing.T) {
+	timpani, _ := ReadWAV(lib.Rom("S1_DAC_timpani.wav"))
+	tab := LoadTables1(string(lib.Rom("S1_Snd_Driver.asm")), timpani)
+	song := AssembleSongFor(string(lib.Rom("S1_Snd_Title.asm")), 1)
+	d := NewDriver1(song, tab)
+	out := d.PlayFrames(0, 0, []Cue{{0, Command{Song: song}}})
+	var dac []int
+	for f, w := range out {
+		for _, x := range w {
+			if x.Port == 3 {
+				dac = append(dac, f)
+			}
+			if f == 0 && x.Reg == 0x28 && x.Val&0xF0 != 0 {
+				t.Errorf("a key on in the frame the song loads: %+v", x)
+			}
+		}
+	}
+	if len(dac) < 2 || dac[0] != 16 || dac[1] != 31 {
+		t.Errorf("the first snares fall on frames %v, want 16 and 31", dac[:min(2, len(dac))])
+	}
+	if d.Playing() || len(out) < 400 || len(out) > 700 {
+		t.Errorf("the title song runs %d frames", len(out))
 	}
 }

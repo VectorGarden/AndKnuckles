@@ -97,7 +97,7 @@ func AssembleVoiceBank(driver string) []byte {
 	// written -- which is what its comments say it assembles to
 	src := "\tsmpsHeaderStartSong 3, 1\n" + driver[at+len("z80_UniVoiceBank:"):]
 	s := &Song{Base: UVBBase, Labels: map[string]int{}}
-	a := &asm{song: s, pass: 1}
+	a := &asm{song: s, pass: 1, ver: driverVer}
 	for n, line := range strings.Split(src, "\n") {
 		code := line
 		if i := strings.IndexByte(code, ';'); i >= 0 {
@@ -113,12 +113,29 @@ func AssembleVoiceBank(driver string) []byte {
 }
 
 // AssembleSong assembles an S3K song from its smps2asm source.
-func AssembleSong(src string) *Song {
+func AssembleSong(src string) *Song { return AssembleSongFor(src, driverVer) }
+
+// equatesV1 are the names that differ for Sonic 1's driver (SonicDriverVer 1):
+// its three DAC samples, its timpani pitches, and its PSG tones.
+var equatesV1 = func() map[string]int {
+	e := map[string]int{"dKick": 0x81, "dSnare": 0x82, "dTimpani": 0x83,
+		"dHiTimpani": 0x88, "dMidTimpani": 0x89, "dLowTimpani": 0x8A, "dVLowTimpani": 0x8B,
+		"nMaxPSG": equates["nA5"], "nMaxPSG1": equates["nA5"] + 12, "nMaxPSG2": equates["nA5"] + 12}
+	for i := 1; i <= 9; i++ {
+		e[fmt.Sprintf("fTone_%02X", i)] = i
+	}
+	return e
+}()
+
+// AssembleSongFor assembles a song for the driver SonicDriverVer ver: 4 for
+// S&K (and Sonic 3, whose macros these songs expand the same way), 1 for
+// Sonic 1, whose pointers are big-endian and relative.
+func AssembleSongFor(src string, ver int) *Song {
 	lines := strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n")
 	s := &Song{Base: songBase, Labels: map[string]int{}}
 	// two passes, as an assembler makes them: the first only places the labels
 	for pass := 0; pass < 2; pass++ {
-		a := &asm{song: s, pass: pass}
+		a := &asm{song: s, pass: pass, ver: ver}
 		for n, line := range lines {
 			a.line(n+1, line)
 		}
@@ -136,6 +153,7 @@ var flags = map[string]int{"FixMusicAndSFXDataBugs": 0}
 type asm struct {
 	song      *Song
 	pass      int
+	ver       int // SonicDriverVer
 	out       []byte
 	skip      []bool // per open if: whether its current branch is skipped
 	srcDriver int
@@ -213,18 +231,41 @@ func (a *asm) b(v ...int) {
 	}
 }
 
-// ptr is z80_ptr(loc): little-endian, through the bank window.
+// ptr is a header pointer: z80_ptr(loc) for the Z80 drivers, little-endian
+// through the bank window; for Sonic 1's, loc-songStart, big-endian.
 func (a *asm) ptr(label string) {
 	v := 0
 	if a.pass == 1 {
 		v = a.eval(label)
 	}
+	if a.ver == 1 {
+		v -= a.song.Base
+		a.b(v>>8&0xFF, v&0xFF)
+		return
+	}
 	v = v&0x7FFF | 0x8000
 	a.b(v&0xFF, v>>8)
 }
 
+// jump is a coordination flag's target: z80_ptr(loc), or on Sonic 1
+// loc-*-1, an offset from the pointer's own address.
+func (a *asm) jump(label string) {
+	if a.ver != 1 {
+		a.ptr(label)
+		return
+	}
+	v := 0
+	if a.pass == 1 {
+		v = a.eval(label) - a.here() - 1
+	}
+	a.b(v>>8&0xFF, v&0xFF)
+}
+
 func (a *asm) eval(e string) int {
 	v, err := evalExpr(e, func(id string) (int, bool) {
+		if v, ok := equatesV1[id]; ok && a.ver == 1 {
+			return v, true
+		}
 		if v, ok := equates[id]; ok {
 			return v, true
 		}
@@ -254,9 +295,13 @@ func (a *asm) args(args []string, n int) []int {
 }
 
 // op is one macro, with the branches of _smps2asm_inc.asm that SonicDriverVer 4
-// and a song converted from source driver 3 take.
+// and a song converted from source driver 3 take -- or, for Sonic 1's songs,
+// SonicDriverVer 1 with source driver 1.
 func (a *asm) op(op string, args []string) {
 	one := func() int { return a.args(args, 1)[0] }
+	if a.ver == 1 && a.opV1(op, args, one) {
+		return
+	}
 	switch op {
 	case "dc.b":
 		for _, s := range args {
@@ -267,8 +312,8 @@ func (a *asm) op(op string, args []string) {
 		if len(args) > 1 {
 			a.srcSMPS = a.eval(args[1])
 		}
-		if a.srcDriver < 3 {
-			panic("songs converted from the S1/S2 drivers are not handled")
+		if (a.srcDriver < 3) != (a.ver < 3) {
+			panic("songs converted between the S1/S2 and S3K drivers are not handled")
 		}
 	case "smpsHeaderVoice":
 		a.ptr(args[0])
@@ -352,13 +397,13 @@ func (a *asm) op(op string, args []string) {
 		a.b(0xF5, one())
 	case "smpsJump":
 		a.b(0xF6)
-		a.ptr(args[0])
+		a.jump(args[0])
 	case "smpsLoop":
 		a.b(0xF7, a.eval(args[0]), a.eval(args[1]))
-		a.ptr(args[2])
+		a.jump(args[2])
 	case "smpsCall":
 		a.b(0xF8)
-		a.ptr(args[0])
+		a.jump(args[0])
 	case "smpsStopFM":
 		a.b(0xE3)
 	case "smpsSpindashRev":
@@ -402,6 +447,54 @@ func (a *asm) op(op string, args []string) {
 		}
 		panic("unknown op " + op)
 	}
+}
+
+// opV1 is the coordination flags Sonic 1's driver numbers its own way; the
+// rest assemble as they do for S&K. The S3K-only flags do not exist for it.
+func (a *asm) opV1(op string, args []string, one func() int) bool {
+	switch op {
+	case "smpsReturn":
+		a.b(0xE3)
+	case "smpsFade":
+		a.b(0xE4)
+	case "smpsChanTempoDiv":
+		a.b(0xE5, one())
+	case "smpsFMAlterVol":
+		a.b(0xE6, a.eval(args[len(args)-1]))
+	case "smpsChangeTransposition", "smpsAlterPitch":
+		a.b(0xE9, one())
+	case "smpsSetTempoMod":
+		a.b(0xEA, one())
+	case "smpsSetTempoDiv":
+		a.b(0xEB, one())
+	case "smpsClearPush":
+		a.b(0xED)
+	case "smpsStopSpecial":
+		a.b(0xEE)
+	case "smpsModOn":
+		a.b(0xF1)
+	case "smpsModOff":
+		a.b(0xF4)
+	case "smpsMaxRelRate", "smpsWeirdD1LRR":
+		a.b(0xF9)
+	case "smpsJump":
+		a.b(0xF6)
+		a.jump(args[0])
+	case "smpsLoop":
+		a.b(0xF7, a.eval(args[0]), a.eval(args[1]))
+		a.jump(args[2])
+	case "smpsCall":
+		a.b(0xF8)
+		a.jump(args[0])
+	case "smpsHeaderVoiceUVB", "smpsStopFM", "smpsSpindashRev", "smpsPlayDACSample", "smpsConditionalJump",
+		"smpsSetNote", "smpsFMICommand", "smpsModChange2", "smpsModChange", "smpsContinuousLoop",
+		"smpsAlternateSMPS", "smpsFM3SpecialMode", "smpsPlaySound", "smpsHaltMusic", "smpsSSGEG",
+		"smpsFMVolEnv", "smpsFMFlutter", "smpsResetSpindashRev", "smpsSetVol":
+		panic(op + " does not exist for Sonic 1's driver")
+	default:
+		return false
+	}
+	return true
 }
 
 // voice collects the smpsVc* fields, and smpsVcTotalLevel writes the 25 bytes in

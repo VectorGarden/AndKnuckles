@@ -48,8 +48,8 @@ The code is in [`go/`](go/):
   - a reader for the data literals in `tools/font`;
   - `Math.hypot`, `atan2`, `sin`, `cos` and `round` as V8 computes them.
 - **`fonts/`** — reads `tools/font/s1-logo.mjs`, evaluating its shape calls.
-- **`sound/`** — the music: an assembler for smps2asm songs, a port of the S&K sound
-  driver, the DAC samples' DPCM, and the log the page plays.
+- **`sound/`** — the music: an assembler for smps2asm songs, ports of the S&K and Sonic 1
+  sound drivers, the DAC samples' DPCM, and the log the page plays.
 - **`steps/<name>/`** — one build step each, described below. Each step's test builds it
   into a fresh directory and requires every PNG it writes to be the one the committed page
   carries, byte for byte, so a step that drifts from the page fails its own test by name.
@@ -282,6 +282,10 @@ the step's test checks them against. The root README's
   test build options with `if`/`else`/`endif` get the stock build's answer
   (`FixMusicAndSFXDataBugs` = 0), so their data bugs stay in. The universal voice bank at
   the end of the driver source is assembled the same way, and its comments checked too.
+- **Sonic 1.** `sound/s1.go` is Sonic 1's 68k driver, and `AssembleSongFor` takes its songs
+  through `SonicDriverVer` 1. Its tables come out of `s1.sounddriver.asm` the same way, and
+  its three samples — kick, snare, timpani — from its WAVs, through its own
+  `dpcmLoopCounter` (301 cycles a pass).
 - **Running it.** `sound/s3k.go` is the music half of the driver, for both games: `zStopAllSound`,
   `zBGMLoad`, then one `zUpdateMusic` per V-int until every track has stopped. Its frequency
   and envelope tables are read out of the driver source, frequencies through AS's integer
@@ -348,7 +352,9 @@ It is Sega's, like the rest of the artwork this project renders — see the cred
 in the root README. The sound files are sources rather than compressed data: a song's
 smps2asm text (`SK_Snd_Title.asm`, `S3_Snd_Title.asm`, `S3K_Snd_AIZ1.asm`, `SK_Snd_Knuckles.asm`), the Z80 sound driver (`S3K_Snd_Driver.asm`, read for
 its tables and its universal voice bank), `sonic3k.macros.asm` (`S3K_macros.asm`, for `DAC_Setup`), and the DAC WAVs
-with the driver's `deltas.bin`. The page already embeds the decoded results; these are the
+with the driver's `deltas.bin`; for Sonic 1, `S1_Snd_Title.asm`, `S1_Snd_GHZ.asm`,
+`S1_Snd_Driver.asm` (`s1.sounddriver.asm`), its three DAC WAVs and its `deltas.bin`.
+The page already embeds the decoded results; these are the
 inputs they came from, kept here so the build runs without a network fetch.
 
 [`go/lib/`](go/lib/) holds the decoders: Kosinski and moduled Kosinski, Enigma, Nemesis,
