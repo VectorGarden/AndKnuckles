@@ -74,8 +74,9 @@ type Tables struct {
 	PSGFreq []int // zPSGFrequencies
 	FMFreq  []int // zFMFrequencies
 	Data    []byte
-	ModEnv  []int // addresses into Data of z80_ModEnvPointers' targets
-	VolEnv  []int // and of z80_VolEnvPointers'
+	ModEnv  []int  // addresses into Data of z80_ModEnvPointers' targets
+	VolEnv  []int  // and of z80_VolEnvPointers'
+	UVB     []byte // z80_UniVoiceBank, at UVBBase
 }
 
 // clocks from sonic3k.constants.asm, integer as AS evaluates them
@@ -198,6 +199,7 @@ func LoadTables(driver string) *Tables {
 		panic("envelope pointer tables not found")
 	}
 	t.ModEnv, t.VolEnv = resolve(ptrs[0]), resolve(ptrs[1])
+	t.UVB = AssembleVoiceBank(driver)
 	if len(t.PSGFreq) != 84 || len(t.FMFreq) != 12 {
 		panic(fmt.Sprintf("frequency tables: %d PSG, %d FM", len(t.PSGFreq), len(t.FMFreq)))
 	}
@@ -247,6 +249,8 @@ var entryPoint = []byte{0xF3, 0xF3, 0xED, 0x56}
 func (d *Driver) rd(addr int) byte {
 	if a := addr & 0xFFFF; a < len(entryPoint) {
 		return entryPoint[a]
+	} else if a >= UVBBase && a < UVBBase+len(d.tab.UVB) {
+		return d.tab.UVB[a-UVBBase]
 	}
 	i := addr&0xFFFF - d.song.Base
 	if i < 0 || i >= len(d.song.Data) {
@@ -287,6 +291,16 @@ func (d *Driver) Run(maxTicks int) [][]Write {
 		}
 	}
 	panic(fmt.Sprintf("song still playing after %d V-ints", maxTicks))
+}
+
+// RunFor plays n V-ints of a song that never ends: zone music loops on
+// smpsJump, so it is cut off where the scene needs it to stop.
+func (d *Driver) RunFor(n int) [][]Write {
+	var ticks [][]Write
+	for i := 0; i < n; i++ {
+		ticks = append(ticks, d.Tick(i == 0))
+	}
+	return ticks
 }
 
 // Tick is one zVInt's zUpdateMusic. load is the V-int that finds the song in

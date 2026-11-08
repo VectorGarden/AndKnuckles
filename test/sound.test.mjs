@@ -145,3 +145,25 @@ for(const scene of ['sk', 's3']) test(`the ${scene} title song plays, in time, a
     assert.ok(loud(frame(song.ticks) + 30, frame(song.ticks) + 60) < 0.005, `${tb}: still sounding after the song`);
   }
 });
+
+test('AIZ1 plays the whole way across the intro, at both timebases', () => {
+  // zone music: no end, so it has to sound all the way along -- and the log has
+  // to last longer than the scene at either rate
+  assert.equal(MUSIC.songs.aiz.loops, true);
+  for(const [tb, fps, frames] of [['ntsc', 59.92, 1400], ['pal', 50, 1400]]){
+    const r = S.renderMusic(MUSIC, 'aiz', frames, tb, fps, 0);
+    const per = r.rate / fps;
+    let peak = 0;
+    for(let f = 0; f + 60 <= frames; f += 60){
+      let m = 0;
+      for(let i = Math.round(f * per); i < Math.round((f + 60) * per); i++){
+        const v = Math.abs(r.left[i]);
+        assert.ok(v === v, `${tb}: NaN at sample ${i}`);
+        m = Math.max(m, v);
+      }
+      assert.ok(m > 0.15, `${tb}: quiet in the second from frame ${f}`);
+      peak = Math.max(peak, m);
+    }
+    assert.ok(peak < 1, `${tb}: clips`);
+  }
+});

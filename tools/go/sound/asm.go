@@ -23,6 +23,11 @@ type Song struct {
 const (
 	driverVer = 4
 	songBase  = 0x8000
+	// UVBBase is where the universal voice bank sits in Z80 RAM. Songs that use
+	// it carry this address in their header and the driver reads voices through
+	// it; the real one falls wherever the driver's data happens to end, and no
+	// code depends on its value, so it is placed here, clear of everything else.
+	UVBBase = 0x1800
 )
 
 // equates every song can use: notes, PSG volume envelopes, the S3K DAC samples,
@@ -80,6 +85,33 @@ var equates = func() map[string]int {
 	return e
 }()
 
+// AssembleVoiceBank assembles z80_UniVoiceBank, the voices at the end of the
+// driver source, the voices songs with smpsHeaderVoiceUVB use.
+func AssembleVoiceBank(driver string) []byte {
+	at := strings.Index(driver, "z80_UniVoiceBank:")
+	if at < 0 {
+		panic("no z80_UniVoiceBank in the driver")
+	}
+	// the bank follows the last song in the build, so it is assembled the way
+	// that song's smpsHeaderStartSong left things: smps2asm 1, carrier bits as
+	// written -- which is what its comments say it assembles to
+	src := "\tsmpsHeaderStartSong 3, 1\n" + driver[at+len("z80_UniVoiceBank:"):]
+	s := &Song{Base: UVBBase, Labels: map[string]int{}}
+	a := &asm{song: s, pass: 1}
+	for n, line := range strings.Split(src, "\n") {
+		code := line
+		if i := strings.IndexByte(code, ';'); i >= 0 {
+			code = code[:i]
+		}
+		// the bank ends at the first thing that is not a voice
+		if f := strings.Fields(code); len(f) > 0 && n > 0 && !strings.HasPrefix(f[0], "smpsVc") {
+			break
+		}
+		a.line(n+1, line)
+	}
+	return a.out
+}
+
 // AssembleSong assembles an S3K song from its smps2asm source.
 func AssembleSong(src string) *Song {
 	lines := strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n")
@@ -97,10 +129,15 @@ func AssembleSong(src string) *Song {
 	return s
 }
 
+// flags are the build options songs test with if/else/endif, as the stock
+// builds set them: both s3.asm and sonic3k.asm keep the songs' data bugs.
+var flags = map[string]int{"FixMusicAndSFXDataBugs": 0}
+
 type asm struct {
 	song      *Song
 	pass      int
 	out       []byte
+	skip      []bool // per open if: whether its current branch is skipped
 	srcDriver int
 	srcSMPS   int
 	vc        map[string]int // the voice macros' eval'd fields
@@ -127,6 +164,27 @@ func (a *asm) line(n int, line string) {
 	op, rest, _ := strings.Cut(line, " ")
 	if i := strings.IndexByte(op, '\t'); i >= 0 {
 		op, rest = op[:i], op[i+1:]+" "+rest
+	}
+	// conditional assembly, on the build flags
+	skipping := len(a.skip) > 0 && a.skip[len(a.skip)-1]
+	switch op {
+	case "if":
+		v, err := evalExpr(rest, func(id string) (int, bool) { v, ok := flags[id]; return v, ok })
+		if err != nil {
+			panic(fmt.Sprintf("line %d: if %s: %v", n, rest, err))
+		}
+		a.skip = append(a.skip, skipping || v == 0)
+		return
+	case "else":
+		outer := len(a.skip) > 1 && a.skip[len(a.skip)-2]
+		a.skip[len(a.skip)-1] = outer || !a.skip[len(a.skip)-1]
+		return
+	case "endif":
+		a.skip = a.skip[:len(a.skip)-1]
+		return
+	}
+	if skipping {
+		return
 	}
 	args := splitArgs(rest)
 	defer func() {
@@ -215,7 +273,7 @@ func (a *asm) op(op string, args []string) {
 	case "smpsHeaderVoice":
 		a.ptr(args[0])
 	case "smpsHeaderVoiceUVB":
-		panic("the universal voice bank is not vendored")
+		a.b(UVBBase&0xFF, UVBBase>>8) // little_endian(z80_UniVoiceBank)
 	case "smpsHeaderChan":
 		a.b(a.args(args, 2)...)
 	case "smpsHeaderTempo":
@@ -532,7 +590,12 @@ func (p *parser) unary() int {
 		for j < len(p.s) && strings.ContainsRune("0123456789abcdefABCDEF", rune(p.s[j])) {
 			j++
 		}
-		v, err := strconv.ParseInt(p.s[p.i:j], base, 64)
+		digits := p.s[p.i:j]
+		// the driver's own source writes hex Z80-style, as 0Ah
+		if base == 10 && j < len(p.s) && (p.s[j] == 'h' || p.s[j] == 'H') {
+			base, j = 16, j+1
+		}
+		v, err := strconv.ParseInt(digits, base, 64)
 		if err != nil {
 			p.err = err
 		}

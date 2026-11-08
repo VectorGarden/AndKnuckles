@@ -24,6 +24,8 @@ test('the music control is offered for a scene with music, when animated', async
   await setup(page, {mode: 'anim', scene: 's3', intro: 'on'});
   assert.equal(await shown(), true, 'S3 title, animated');
   await setup(page, {mode: 'anim', scene: 'aiz', intro: 'on'});
+  assert.equal(await shown(), true, 'the AIZ intro');
+  await setup(page, {mode: 'anim', scene: 's1', intro: 'on'});
   assert.equal(await shown(), false, 'a scene without music yet');
 });
 
@@ -54,6 +56,14 @@ test('with the music on, playback runs to the end of the song; GIF keeps to the 
   await music(false);
   const off = await page.evaluate(() => ({play: playLen(), timeline: timelineLen()}));
   assert.equal(off.play, off.timeline);
+});
+
+test('zone music plays over the AIZ timeline as it is, and restarts with it', async () => {
+  await setup(page, {mode: 'anim', scene: 'aiz', intro: 'on'});
+  await music(true);
+  const r = await page.evaluate(() => ({play: playLen(), timeline: timelineLen(), start: musicStart()}));
+  assert.equal(r.play, r.timeline, 'a song that never ends does not lengthen the loop');
+  assert.equal(r.start, 0);
 });
 
 test('playing starts the music, and the frame shown is the one it has reached', async () => {

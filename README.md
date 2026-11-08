@@ -8,8 +8,8 @@ sprite font, and download it as PNG, WebP or AVIF.
 Or switch to **Animated** for the title-screen bounce, optionally over either real
 title screen with its full opening — Sonic 3's out of the SEGA logo, or S&K's with
 the Death Egg — or over the whole Angel Island intro, Tornado to emeralds, exported
-as GIF, APNG, WebM or MP4. The S3 and S&K titles play their own music with it, on the
-page and in the WebM and MP4.
+as GIF, APNG, WebM or MP4. The S3 and S&K titles and the AIZ intro play their own music
+with it, on the page and in the WebM and MP4.
 
 ## How it works
 
@@ -591,8 +591,8 @@ NTSC**, and the smile is not a loop to close in the first place.
 
 ## The music
 
-The S&K title plays *Title (Sonic & Knuckles)* and the S3 title *Title (Sonic 3)*, each
-from the frame its game starts it. Nothing is recorded: the song is assembled from its smps2asm source in skdisasm, run offline
+The S&K title plays *Title (Sonic & Knuckles)*, the S3 title *Title (Sonic 3)*, and the
+AIZ intro *Angel Island Zone Act 1*, each from the frame its game starts it. Nothing is recorded: the song is assembled from its smps2asm source in skdisasm, run offline
 through a port of the game's own sound driver, and what the driver wrote to the sound chips
 on every V-int is kept. The page plays that on a YM2612 and a PSG of its own.
 
@@ -609,6 +609,12 @@ on every V-int is kept. The page plays that on a YM2612 and a PSG of its own.
   instrument, so the driver sends that channel's levels from a null pointer — Z80 address 0,
   its own `di, di, im 1` — before FM5 jumps into FM1's data and sets a real voice. The bytes
   are known from the source, so that read is modelled too.
+- **Zone music** is the AIZ intro's. It never stops — every track ends on a jump back into
+  itself — so it is run for 1,800 V-ints, longer than the scene at either timebase, and plays
+  over the scene's own timeline, starting again with it. It takes its instruments from the
+  driver's universal voice bank (all 35 voices assemble to the bytes their comments give),
+  and it keeps a bug the stock build keeps: a PSG volume change written as an FM one, which
+  swallows the note after it, so that G3 never plays.
 - **The log** borrows VGM's command bytes, one V-int at a time: 14 KB for the 19-second
   song once the driver's every-frame rewrites of unchanged registers are dropped. A frequency
   is kept or dropped as a pair, because A4h only latches and the A0h write after it applies
@@ -627,7 +633,11 @@ on every V-int is kept. The page plays that on a YM2612 and a PSG of its own.
 - **Where it starts.** S&K's title queues its song before its first frame. Sonic 3's waits
   for `Pal_Title` to fade the SEGA logo to black, so its song starts 8 frames after the
   logo's `hold` — the page's own shortened hold, not the ROM's three seconds. With the
-  opening off, the scene starts at rest and the song with it.
+  opening off, the scene starts at rest and the song with it. The AIZ intro is the level
+  itself: its start plays `mus_AIZ1`, then decompresses blocks and chunks and draws the planes
+  before the first frame of `LevelLoop`. The Z80 keeps taking its V-ints through that, so on
+  the console the song is a few frames in by the intro's first frame. How many depends on the
+  68K's time for that setup, which nothing here models, so the song starts on frame 0.
 - **Timing.** A frame of audio is a frame of animation: the chips run at the console's
   clocks, NTSC or PAL, and the result is played back at the page's frame rate, so while the
   music plays its clock *is* the frame clock and the two cannot drift. On PAL the driver
@@ -643,8 +653,10 @@ on every V-int is kept. The page plays that on a YM2612 and a PSG of its own.
   are paced by the clock that track plays on, so a stalled main thread drops frames rather
   than leaving the picture behind the sound.
 
-Not modelled: the YM2612's timers and SSG-EG, which no song here uses; and the time the
-V-int takes on the Z80, which on the console holds up the DAC loop for a moment each frame.
+Not modelled: the YM2612's timers and SSG-EG, which no song here uses; the time the V-int
+takes on the Z80, which on the console holds up the DAC loop for a moment each frame; and
+sound effects. The AIZ intro has some — the Tornado, Sonic's transformation, Knuckles — and on
+the console each borrows a channel from the music while it plays. Here the music plays whole.
 
 The preview now runs at the chosen timebase's frame rate. It used to run at 50 Hz either
 way, which NTSC music would have played a sixth slow against.
@@ -668,7 +680,8 @@ and the extractor throws instead of silently testing nothing.
   0.75 dB a step, release; the PSG's pitch and 2 dB steps; the DAC loop's rate against
   `DAC_Setup`; PAL's catch-up every five frames for S&K and every six for Sonic 3. Then both
   title songs at both timebases, which have to be exactly as long as their timeline, loud
-  while they play and silent after.
+  while they play and silent after; and AIZ1, which has to sound all the way across the
+  intro.
 - [`test/spring.test.mjs`](test/spring.test.mjs) — the banner's damped spring against the
   ROM's numbers: 100 frames, −92 entry, +38 at frame 32, −13 at 59, +4 at 74, terminating
   on the ROM's own `y_vel == -$5B` test rather than a guard. Also that tuned parameters

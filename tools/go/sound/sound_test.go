@@ -129,3 +129,62 @@ func TestTitleSongPlaysToItsEnd(t *testing.T) {
 		}
 	}
 }
+
+// The universal voice bank, at the end of the driver source, comments each of
+// its voices with the bytes it should assemble to, Z80-style.
+func TestVoiceBankMatchesItsComments(t *testing.T) {
+	src := string(lib.Rom("S3K_Snd_Driver.asm"))
+	bank := AssembleVoiceBank(src)
+	hex := regexp.MustCompile(`\b0?([0-9A-F]{2})h\b`) // 0F0h: a leading 0 before a letter
+	var want []byte
+	in := false
+	for _, l := range strings.Split(src[strings.Index(src, "z80_UniVoiceBank:"):], "\n") {
+		l = strings.TrimSpace(l)
+		if strings.HasPrefix(l, ";\tVoice ") {
+			in = true
+			continue
+		}
+		if !in || !strings.HasPrefix(l, ";") {
+			in = false
+			continue
+		}
+		for _, m := range hex.FindAllStringSubmatch(l, -1) {
+			v, _ := strconv.ParseUint(m[1], 16, 8)
+			want = append(want, byte(v))
+		}
+	}
+	if len(want) != 35*25 || len(bank) != len(want) {
+		t.Fatalf("bank is %d bytes, its comments %d; want %d", len(bank), len(want), 35*25)
+	}
+	for i := 0; i < 35; i++ {
+		if got, w := bank[i*25:i*25+25], want[i*25:i*25+25]; string(got) != string(w) {
+			t.Errorf("voice %02X assembles to % X\n             comment says % X", i, got, w)
+		}
+	}
+}
+
+// AIZ1 tests FixMusicAndSFXDataBugs around a PSG volume change that was written
+// as an FM one; the stock build keeps the bug, so the two-byte FM form must be
+// what assembles -- and it swallows the note after it as its second parameter.
+func TestConditionalAssemblyKeepsTheBugs(t *testing.T) {
+	song := AssembleSong(string(lib.Rom("S3K_Snd_AIZ1.asm")))
+	g3 := byte(equates["nG3"])
+	bug := string([]byte{0xE5, 0x0A, g3})
+	fix := string([]byte{0xEC, 0x0A, g3})
+	if !strings.Contains(string(song.Data), bug) || strings.Contains(string(song.Data), fix) {
+		t.Error("AIZ1 should assemble its stock smpsFMAlterVol $0A, nG3, not the fix")
+	}
+}
+
+// Zone music never stops: every track ends on a jump back into itself.
+func TestZoneMusicLoops(t *testing.T) {
+	song := AssembleSong(string(lib.Rom("S3K_Snd_AIZ1.asm")))
+	tab := LoadTables(string(lib.Rom("S3K_Snd_Driver.asm")))
+	d := NewDriver(song, tab)
+	d.RunFor(60 * 60)
+	for i := 0; i < nTracks; i++ {
+		if !d.track(i).bit(tPlayback, 7) {
+			t.Errorf("track %d stopped within a minute", i)
+		}
+	}
+}
