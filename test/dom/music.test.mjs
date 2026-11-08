@@ -31,8 +31,9 @@ test('the music control is offered for a scene with music, when animated', async
 
 test('S3\'s song starts after the SEGA logo and its fade, silent until then', async () => {
   await setup(page, {mode: 'anim', scene: 's3', intro: 'on'});
-  const r = await page.evaluate(() => {
-    const start = musicStart(), r = renderMusic(MUSIC, 's3', start + 60, state.timebase, tbFps(), start);
+  const r = await page.evaluate(async () => {
+    const start = musicStart(), log = await musicLog(MUSIC, 's3', state.timebase);
+    const r = renderMusic(MUSIC, 's3', start + 60, state.timebase, tbFps(), start, log);
     const per = r.rate / tbFps(), peak = (a, b) => { let m = 0; for(let i = Math.round(a*per); i < Math.round(b*per); i++) m = Math.max(m, Math.abs(r.left[i])); return m; };
     return {start, hold: sceneIntro().hold, before: peak(0, start), after: peak(start, start + 60)};
   });

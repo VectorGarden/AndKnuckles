@@ -38,6 +38,12 @@ import (
 
 func s16(v int) int { return ((v & 0xFFFF) ^ 0x8000) - 0x8000 }
 
+// Cues are the frames the intro changes its music on, as the last Build
+// simulated them: Knuckles' cutscene object is created on "knuckles", and its
+// init spawns Obj_Song_Fade_Transition with Knuckles' theme (sub_65DD6); he
+// runs off on "runOff", spawning Obj_Song_Fade_ToLevelMusic (loc_61EEC).
+var Cues = map[string]int{}
+
 func u16(b []byte, i int) int { return int(b[i])<<8 | int(b[i+1]) }
 
 // table finds a parsed mapping table by name.
@@ -589,6 +595,7 @@ func Build(out string) {
 				rock = newObj(0x1400, 0x458)
 				rock.born = f
 				ev(f, "Knuckles is buried at ($1400,$440)")
+				Cues["knuckles"] = f
 			} else {
 				waveTick(f)
 			}
@@ -701,6 +708,8 @@ func Build(out string) {
 			animRaw(k)
 			if k.w2E--; k.w2E < 0 {
 				k.r, k.base, k.xv = 0xC, 0, 0x600
+				ev(f, "Knuckles runs off: the level music starts to come back")
+				Cues["runOff"] = f
 			}
 		case 0xC:
 			if k.onscreen {

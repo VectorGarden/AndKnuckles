@@ -1,5 +1,5 @@
 /* The sound chips in src/sound.js, against what the hardware is documented to
-   do, and the S&K title song played through them.
+   do, and the scenes' music played through them.
 
    Each chip is driven the way the Z80 drives it, by register writes, and what
    comes out is measured: a tone's pitch from its zero crossings, a level from
@@ -7,10 +7,11 @@
    own clocks, not from the code under test. */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {inflateSync} from 'node:zlib';
 import {fromSource} from './from-source.mjs';
 
 const SOUND = ['MASTER', 'LINES', 'YM_TICK', 'Z80_TICK', 'PSG_TICK', 'PSG_AMP', 'MUSIC_GAIN',
-  'ymTables', 'makeYM2612', 'makePSG', 'makeDAC', 'b64bytes', 'updatesOn', 'musicRenderer', 'renderMusic'];
+  'ymTables', 'makeYM2612', 'makePSG', 'makeDAC', 'b64bytes', 'musicRenderer', 'renderMusic'];
 const S = fromSource(SOUND, 'sound.js');
 const {MUSIC} = fromSource(['MUSIC'], 'generated/assets.js');
 
@@ -117,53 +118,53 @@ test("the DAC loop delivers a sample at its DAC_Setup rate", () => {
 });
 const b64len = s => S.b64bytes(s).length;
 
-test('PAL catches up once every five frames in S&K, every six in Sonic 3', () => {
-  const count = (period, n) => { let u = 0; for(let k = 0; k < n; k++) u += S.updatesOn(k, 'pal', period); return u; };
-  assert.equal(count(5, 500), 599);    // 60 updates a second: on tempo
-  assert.equal(count(6, 500), 583);    // frames 5, 11, ... 497: the counter reset to 6 runs PAL Sonic 3 slow
-  for(let k = 0; k < 50; k++) assert.equal(S.updatesOn(k, 'ntsc', 5), 1);
-});
+// a scene's log for a timebase, inflated as the page's musicLog does
+const log = (scene, tb) => new Uint8Array(inflateSync(Buffer.from(MUSIC.songs[scene].logs[tb], 'base64')));
+const render = (scene, frames, tb, fps) => S.renderMusic(MUSIC, scene, frames, tb, fps, 0, log(scene, tb));
+// the loudest sample of channel L between two frames
+const loudness = (r, fps) => (a, b) => {
+  let m = 0;
+  for(let i = Math.round(a * r.rate / fps); i < Math.round(b * r.rate / fps); i++){
+    const v = Math.abs(r.left[i]);
+    assert.ok(v === v, `NaN at sample ${i}`);
+    m = Math.max(m, v);
+  }
+  return m;
+};
 
 for(const scene of ['sk', 's3']) test(`the ${scene} title song plays, in time, at both timebases`, () => {
-  const song = MUSIC.songs[scene], period = MUSIC.drivers[song.driver].palPeriod;
+  const song = MUSIC.songs[scene];
   for(const [tb, fps] of [['ntsc', 59.92], ['pal', 50]]){
     const frames = 1300;
-    const r = S.renderMusic(MUSIC, scene, frames, tb, fps, 0);
+    const r = render(scene, frames, tb, fps);
     assert.ok(Math.abs(r.left.length / r.rate - frames / fps) < 1 / r.rate + 1e-9, `${tb}: length`);
-    let peak = 0, nan = false;
-    for(const ch of [r.left, r.right]) for(const v of ch){ if(v !== v) nan = true; peak = Math.max(peak, Math.abs(v)); }
-    assert.ok(!nan, `${tb}: NaN in the output`);
+    let peak = 0;
+    for(const ch of [r.left, r.right]) for(const v of ch) peak = Math.max(peak, Math.abs(v));
     assert.ok(peak < 1, `${tb}: clips (peak ${peak})`);
     assert.ok(peak > 0.25, `${tb}: suspiciously quiet (peak ${peak})`);
-    // Both songs keep every track going to about update 860; after that a
-    // last bass note and PSG lines stepping their volume down run the driver on
-    // to its end, with next to nothing left to hear.
-    const at = i => Math.round(i * r.rate / fps);
-    const loud = (a, b) => { let m = 0; for(let i = at(a); i < at(b); i++) m = Math.max(m, Math.abs(r.left[i])); return m; };
-    const frame = u => { let f = 0; for(let n = 0; n < u; f++) n += S.updatesOn(f, tb, period); return f; };
-    for(let u = 0; u < 840; u += 60) assert.ok(loud(frame(u), frame(u + 60)) > 0.2, `${tb}: quiet around update ${u}`);
-    assert.ok(loud(frame(song.ticks) + 30, frame(song.ticks) + 60) < 0.005, `${tb}: still sounding after the song`);
+    // Both songs keep every track going to about update 860 -- frame 860 on
+    // NTSC, a sixth or so fewer on PAL; after that a last bass note and PSG lines
+    // stepping their volume down run the driver on to its end, with next to
+    // nothing left to hear.
+    const loud = loudness(r, fps), end = Math.round(860 * song.frames[tb] / song.frames.ntsc) - 20;
+    for(let f = 0; f + 60 <= end; f += 60) assert.ok(loud(f, f + 60) > 0.2, `${tb}: quiet in the second from frame ${f}`);
+    assert.ok(loud(song.frames[tb] + 30, song.frames[tb] + 60) < 0.005, `${tb}: still sounding after the song`);
   }
 });
 
-test('AIZ1 plays the whole way across the intro, at both timebases', () => {
-  // zone music: no end, so it has to sound all the way along -- and the log has
-  // to last longer than the scene at either rate
-  assert.equal(MUSIC.songs.aiz.loops, true);
-  for(const [tb, fps, frames] of [['ntsc', 59.92, 1400], ['pal', 50, 1400]]){
-    const r = S.renderMusic(MUSIC, 'aiz', frames, tb, fps, 0);
-    const per = r.rate / fps;
-    let peak = 0;
-    for(let f = 0; f + 60 <= frames; f += 60){
-      let m = 0;
-      for(let i = Math.round(f * per); i < Math.round((f + 60) * per); i++){
-        const v = Math.abs(r.left[i]);
-        assert.ok(v === v, `${tb}: NaN at sample ${i}`);
-        m = Math.max(m, v);
-      }
-      assert.ok(m > 0.15, `${tb}: quiet in the second from frame ${f}`);
-      peak = Math.max(peak, m);
-    }
-    assert.ok(peak < 1, `${tb}: clips`);
+/* The AIZ intro's own soundtrack: AIZ1 until Knuckles' cutscene starts, a fade
+   while Obj_Song_Fade_Transition counts down, then Knuckles' theme, and a fade
+   again as he runs off. */
+test('the AIZ intro plays AIZ1, fades for Knuckles, then plays his theme', () => {
+  const song = MUSIC.songs.aiz;
+  assert.equal(song.loops, true);
+  for(const [tb, fps] of [['ntsc', 59.92], ['pal', 50]]){
+    const r = render('aiz', 1300, tb, fps), loud = loudness(r, fps);
+    for(let f = 0; f + 60 <= 587; f += 60) assert.ok(loud(f, f + 60) > 0.15, `${tb}: AIZ1 quiet in the second from frame ${f}`);
+    // the fade halts the drums and PSG at once and lowers the FM a step every
+    // 6 V-ints: by the time Knuckles' theme comes it is well down
+    assert.ok(loud(660, 678) < loud(520, 586) / 2, `${tb}: no fade before Knuckles' theme`);
+    for(let f = 690; f + 60 <= 1083; f += 60) assert.ok(loud(f, f + 60) > 0.15, `${tb}: Knuckles' theme quiet in the second from frame ${f}`);
+    assert.ok(loud(1180, 1200) < loud(1020, 1080) / 2, `${tb}: no fade as Knuckles runs off`);
   }
 });

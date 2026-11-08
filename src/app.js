@@ -436,11 +436,9 @@ function musicStart(){
    plus half a second for the last notes to release. Zone music never stops: it
    plays over the scene's own timeline and starts again with it. */
 function musicFrames(){
-  const song = MUSIC.songs[state.scene], period = MUSIC.drivers[song.driver].palPeriod;
+  const song = MUSIC.songs[state.scene];
   if(song.loops) return 0;
-  let f = 0;
-  for(let u = 0; u < song.ticks; f++) u += updatesOn(f, state.timebase, period);
-  return musicStart() + f + (tbFps() >> 1);
+  return musicStart() + song.frames[state.timebase] + (tbFps() >> 1);
 }
 /* A title loop is a few seconds and its song is more like twenty, so with the
    music on, playback and video run until the song is over, the scene idling on
@@ -457,8 +455,9 @@ async function musicBuffer(ctx, frames){
   const key = musicKey(frames);
   let job = sound.cache.get(key);
   if(!job){
-    const r = musicRenderer(MUSIC, state.scene, frames, state.timebase, tbFps(), musicStart());
+    const scene = state.scene, tb = state.timebase, fps = tbFps(), start = musicStart();
     job = (async () => {
+      const r = musicRenderer(MUSIC, scene, frames, tb, fps, start, await musicLog(MUSIC, scene, tb));
       while(!r.next(240)) await new Promise(res => setTimeout(res, 0));
       return r;
     })();

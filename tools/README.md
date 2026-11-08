@@ -264,8 +264,11 @@ elements' start and rest positions, speeds, hold and exit order from `ObjArray_T
 
 ## What music does
 
-Writes `music.json`: for each scene with music, the log of what its game's sound driver sent
-the YM2612 and PSG on every V-int, and the DAC samples it queued. The root README's
+Writes `music.json`: for each scene with music and each timebase, the log of what its game's
+sound driver sent the YM2612 and PSG on every frame, deflated, and the DAC samples it queued.
+A scene can send the driver commands on given frames — the AIZ intro fades AIZ1 out for
+Knuckles' theme — and those frames come from the `aiz` step's simulation (`aiz.Cues`), which
+the step's test checks them against. The root README's
 *The music* has the whole of it; the parts that live here:
 
 - **Assembling the song.** `sound/asm.go` takes the smps2asm macros the way
@@ -343,7 +346,7 @@ and [s1disasm](https://github.com/sonicretro/s1disasm) and
 [s2disasm](https://github.com/sonicretro/s2disasm) for the `S1_` and `S2_` files.
 It is Sega's, like the rest of the artwork this project renders — see the credits
 in the root README. The sound files are sources rather than compressed data: a song's
-smps2asm text (`SK_Snd_Title.asm`, `S3_Snd_Title.asm`, `S3K_Snd_AIZ1.asm`), the Z80 sound driver (`S3K_Snd_Driver.asm`, read for
+smps2asm text (`SK_Snd_Title.asm`, `S3_Snd_Title.asm`, `S3K_Snd_AIZ1.asm`, `SK_Snd_Knuckles.asm`), the Z80 sound driver (`S3K_Snd_Driver.asm`, read for
 its tables and its universal voice bank), `sonic3k.macros.asm` (`S3K_macros.asm`, for `DAC_Setup`), and the DAC WAVs
 with the driver's `deltas.bin`. The page already embeds the decoded results; these are the
 inputs they came from, kept here so the build runs without a network fetch.
