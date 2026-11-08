@@ -1,4 +1,5 @@
-/* Pulls named declarations straight out of src/app.js and evaluates them.
+/* Pulls named declarations straight out of src/app.js (or another file in src/)
+   and evaluates them.
 
    The point is that the tests exercise the shipped source rather than a copy.
    app.js is browser code -- it touches the DOM at the top level and has no
@@ -11,10 +12,11 @@ import fs from 'fs';
 import path from 'path';
 import {fileURLToPath} from 'url';
 
-const APP = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src', 'app.js');
+const SRC = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'src');
 
-export function fromSource(names){
-  const src = fs.readFileSync(APP, 'utf8');
+/* file is relative to src/: app.js unless named, e.g. 'sound.js' */
+export function fromSource(names, file = 'app.js'){
+  const src = fs.readFileSync(path.join(SRC, file), 'utf8');
   const lines = src.split('\n');
   const picked = [];
   for(const name of names){
@@ -30,7 +32,7 @@ export function fromSource(names){
     }
     // a top-level const, possibly one of several declarators on the line
     start = lines.findIndex(l => new RegExp(`^const .*\\b${name}\\b\\s*=`).test(l));
-    if(start < 0) throw new Error(`${name}: not found in src/app.js`);
+    if(start < 0) throw new Error(`${name}: not found in src/${file}`);
     picked.push([start, lines[start]]);
   }
   picked.sort((a, b) => a[0] - b[0]);          // keep file order: consts before use

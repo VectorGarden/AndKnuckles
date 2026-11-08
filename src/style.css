@@ -160,6 +160,7 @@
   body:not(.scene) .scene-only{display:none !important}
   body.scene .scene-off{display:none !important}   /* the scene is the background */
   body:not(.has-intro) .intro-only{display:none !important}
+  body:not(.has-music) .music-only{display:none !important}
   body:not(.card) .card-only{display:none !important}
   body.card .spring-only, body.static .spring-only{display:none !important}   /* own motion, or none */
   body:not(.fixed) .fixed-only{display:none !important}

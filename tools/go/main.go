@@ -4,7 +4,7 @@
 //	go -C tools/go run .                 every step, then the embed and the page
 //	go -C tools/go run . --check         the same, leaving the repo as it found it,
 //	                                     exiting non-zero if index.html would change
-//	go -C tools/go run . <step> [outDir] one step: sk s3 aiz font cardfont s1 s2 embed page
+//	go -C tools/go run . <step> [outDir] one step: sk s3 aiz font cardfont s1 s2 music embed page
 //
 // --check is what CI runs, so the committed page and tools/ cannot drift apart.
 package main
@@ -21,6 +21,7 @@ import (
 	"github.com/VectorGarden/AndKnuckles/tools/go/steps/cardfont"
 	"github.com/VectorGarden/AndKnuckles/tools/go/steps/embed"
 	"github.com/VectorGarden/AndKnuckles/tools/go/steps/font"
+	"github.com/VectorGarden/AndKnuckles/tools/go/steps/music"
 	"github.com/VectorGarden/AndKnuckles/tools/go/steps/page"
 	"github.com/VectorGarden/AndKnuckles/tools/go/steps/s1"
 	"github.com/VectorGarden/AndKnuckles/tools/go/steps/s2"
@@ -34,7 +35,7 @@ var steps = []struct {
 	build func(out string)
 }{
 	{"sk", sk.Build}, {"s3", s3.Build}, {"aiz", aiz.Build}, {"font", font.Build},
-	{"cardfont", cardfont.Build}, {"s1", s1.Build}, {"s2", s2.Build},
+	{"cardfont", cardfont.Build}, {"s1", s1.Build}, {"s2", s2.Build}, {"music", music.Build},
 }
 
 func main() {

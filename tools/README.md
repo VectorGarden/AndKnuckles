@@ -29,6 +29,7 @@ go -C tools/go run . font      # font/ -> out/ (sprite font atlas + glyph table)
 go -C tools/go run . cardfont  # rom/ -> out/  (the S3&K title card)
 go -C tools/go run . s1        # rom/ -> out/  (Sonic 1: title, GHZ, credits, card, logo)
 go -C tools/go run . s2        # rom/ -> out/  (Sonic 2: title, credit font, card, EHZ)
+go -C tools/go run . music     # rom/ -> out/  (each scene's music log and DAC samples)
 go -C tools/go run . embed     # out/  -> src/generated/assets.js
 go -C tools/go run . page      # src/  -> index.html
 ```
@@ -47,6 +48,8 @@ The code is in [`go/`](go/):
   - a reader for the data literals in `tools/font`;
   - `Math.hypot`, `atan2`, `sin`, `cos` and `round` as V8 computes them.
 - **`fonts/`** — reads `tools/font/s1-logo.mjs`, evaluating its shape calls.
+- **`sound/`** — the music: an assembler for smps2asm songs, a port of the S&K sound
+  driver, the DAC samples' DPCM, and the log the page plays.
 - **`steps/<name>/`** — one build step each, described below. Each step's test builds it
   into a fresh directory and requires every PNG it writes to be the one the committed page
   carries, byte for byte, so a step that drifts from the page fails its own test by name.
@@ -259,13 +262,35 @@ offsets of the rest of the card (the banner in its three versions — `card-bann
 `card-zone.png`, `card-act1.png`, `card-act2.png`), and `card`, the
 elements' start and rest positions, speeds, hold and exit order from `ObjArray_TtlCard`.
 
+## What music does
+
+Writes `music.json`: for each scene with music, the log of what its game's sound driver sent
+the YM2612 and PSG on every V-int, and the DAC samples it queued. The root README's
+*The music* has the whole of it; the parts that live here:
+
+- **Assembling the song.** `sound/asm.go` takes the smps2asm macros the way
+  `_smps2asm_inc.asm` expands them for S&K (`SonicDriverVer` 4, songs from source driver 3),
+  in two passes so labels can be used before they are defined. Pointers are `z80_ptr`s
+  through the $8000 bank window. Each voice in a song is preceded by a comment with the 25
+  bytes it assembles to, and the test requires the macros to land on them.
+- **Running it.** `sound/s3k.go` is the music half of the driver: `zStopAllSound`,
+  `zBGMLoad`, then one `zUpdateMusic` per V-int until every track has stopped. Its frequency
+  and envelope tables are read out of the driver source, frequencies through AS's integer
+  clock arithmetic (`FM_Sample_Rate` is 7670453 / 144, an integer).
+- **The samples.** `sound/dac.go` reads `DAC_Setup` out of `sonic3k.macros.asm` for each
+  sample a song queues, converts its WAV with the build's own `convert_dpcm_file` logic (the
+  closest delta, the first of a tie, two nibbles a byte, high first) and works out its djnz
+  count with `dpcmLoopCounter`.
+
+The step's test requires `music.json` to be the `MUSIC` the committed page carries.
+
 ## What page does
 
-Inlines `src/style.css`, `src/generated/assets.js` and `src/app.js` into
+Inlines `src/style.css`, `src/generated/assets.js`, `src/sound.js` and `src/app.js` into
 `src/index.html` and writes `index.html`. The deployed site stays a single
 self-contained file; the split is only so the sources can be read and edited.
 
-It refuses to run if `src/app.js` contains base64 — generated data belongs in
+It refuses to run if `src/app.js` or `src/sound.js` contains base64 — generated data belongs in
 `src/generated/` — and checks the assembled page has a closing `</html>`, which is
 one of the two guards the Pages deploy applies. Better to fail here than there.
 
@@ -311,7 +336,10 @@ Compressed source data from the Sonic Retro disassemblies, unmodified: [skdisasm
 and [s1disasm](https://github.com/sonicretro/s1disasm) and
 [s2disasm](https://github.com/sonicretro/s2disasm) for the `S1_` and `S2_` files.
 It is Sega's, like the rest of the artwork this project renders — see the credits
-in the root README. The page already embeds the decoded results; these are the
+in the root README. The sound files are sources rather than compressed data: a song's
+smps2asm text (`SK_Snd_Title.asm`), the Z80 sound driver (`S3K_Snd_Driver.asm`, read for
+its tables), `sonic3k.macros.asm` (`S3K_macros.asm`, for `DAC_Setup`), and the DAC WAVs
+with the driver's `deltas.bin`. The page already embeds the decoded results; these are the
 inputs they came from, kept here so the build runs without a network fetch.
 
 [`go/lib/`](go/lib/) holds the decoders: Kosinski and moduled Kosinski, Enigma, Nemesis,

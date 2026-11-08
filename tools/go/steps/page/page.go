@@ -7,7 +7,8 @@
 //	src/index.html          markup, with a slot for each of the two below
 //	src/style.css           -> <style>
 //	src/generated/assets.js -> <script>, first  (generated, never hand-edited)
-//	src/app.js              -> <script>, after  (all hand-written, no base64)
+//	src/sound.js            -> <script>, next   (the sound chips the music plays on)
+//	src/app.js              -> <script>, last   (all hand-written, no base64)
 package page
 
 import (
@@ -31,13 +32,15 @@ func Build() {
 		}
 	}
 	assets := read(filepath.Join("generated", "assets.js"))
-	app := read("app.js")
-	if strings.Contains(app, "base64,") {
-		panic("src/app.js contains base64 -- generated data belongs in src/generated/")
+	app, snd := read("app.js"), read("sound.js")
+	for name, js := range map[string]string{"app.js": app, "sound.js": snd} {
+		if strings.Contains(js, "base64,") {
+			panic("src/" + name + " contains base64 -- generated data belongs in src/generated/")
+		}
 	}
 	trim := func(s string) string { return strings.TrimRight(s, "\n") }
 	out := strings.Replace(tpl, "/*{{STYLE}}*/", trim(read("style.css")), 1)
-	out = strings.Replace(out, "//{{SCRIPT}}", trim(assets)+"\n\n"+trim(app), 1)
+	out = strings.Replace(out, "//{{SCRIPT}}", trim(assets)+"\n\n"+trim(snd)+"\n\n"+trim(app), 1)
 	// the deploy checks both of these; failing here is a better place to find out
 	if !strings.Contains(out, "</html>") {
 		panic("assembled page has no closing </html>")

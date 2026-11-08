@@ -142,7 +142,7 @@ const SUP = { webp:true, avif:true };
 const state = {
   text:'', style:'outline', scale:4, track:0, lead:0, pad:0, palette:'classic', tint:'#FCB400', linePalettes:[],
   align:'center', bg:'none', touchedTrack:false, touchedLead:false,
-  mode:'still', timebase:'pal', scene:'off', sceneY:176, intro:true, cardZone:true, cardAct:1, cardBanner:'s3k',
+  mode:'still', timebase:'pal', scene:'off', sceneY:176, intro:true, music:true, cardZone:true, cardAct:1, cardBanner:'s3k',
   dist:96, vel0:4, accel:0.25, damp:0.5, amp:100, head:-1
 };
 
@@ -309,8 +309,9 @@ function render(){
   const scale = scaleFor(L);
   const anim = state.mode === 'anim';
   const frames = anim ? textFrames() : null;
-  const span = anim ? frames.length + (introOn() ? introLen() : 0) + introTail() : 0;
+  const span = anim ? playLen() : 0;
   if(anim && player.frame >= span) player.frame = 0;
+  syncMusic(span);
   const iLen = anim && introOn() ? introLen() : 0;
   const dyNow = anim ? frames[Math.max(0, Math.min(frames.length-1, player.frame - iLen))] : 0;
   const {W,H} = paint(canvas, scale, L, dyNow, g,
@@ -363,17 +364,32 @@ addEventListener('resize', () => { if(ready) fitPreview(fitScale); });
 
 /* ---------- playback ---------- */
 const FRAME_MS = 20;                 // GIF delay is whole centiseconds: 2cs
+/* Frames in the whole timeline: intro, spring, and the idle tail -- without the
+   tail, playback wrapped before the S&K smile fired and before Tails ever
+   reached the screen, though both are in the export. */
+function timelineLen(){
+  return textFrames().length + (introOn() ? introLen() : 0) + introTail();
+}
+// the console's frame rate, which the preview and the music both run at
+const tbFps = () => state.timebase === 'ntsc' ? 59.92 : 50;
 function tick(ts){
   if(!player.playing) return;
-  const frames = textFrames();
-  // the idle tail too -- without it playback wrapped before the S&K smile fired
-  // and before Tails ever reached the screen, though both are in the export
-  const total = frames.length + (introOn() ? introLen() : 0) + introTail();
+  const total = playLen();
+  // while the music plays, its clock is the frame clock: the frame shown is the
+  // one the music has reached, so the two cannot drift apart
+  if(sound.src){
+    const k = Math.floor((sound.ctx.currentTime - sound.t0) * tbFps());
+    const f = (sound.f0 + Math.max(0, k)) % total;
+    if(f !== player.frame){ player.frame = f; render(); }
+    player.raf = requestAnimationFrame(tick);
+    return;
+  }
+  const step = 1000 / tbFps();
   if(player.last) player.acc += ts - player.last;
   player.last = ts;
   let stepped = false;
-  while(player.acc >= FRAME_MS){
-    player.acc -= FRAME_MS;
+  while(player.acc >= step){
+    player.acc -= step;
     player.frame = (player.frame + 1) % total;
     stepped = true;
   }
@@ -387,13 +403,102 @@ function play(){
   player.playing = true; player.last = 0; player.acc = 0;
   el('play').textContent = 'Pause';
   player.raf = requestAnimationFrame(tick);
+  startMusic();
 }
 function pause(){
   player.playing = false;
   cancelAnimationFrame(player.raf);
   el('play').textContent = 'Play';
+  stopMusic();
 }
 
+/* ---------- music ---------------------------------------------------------
+   A scene's own title music, played on the YM2612 and PSG in sound.js from the
+   log the pipeline made by running the game's sound driver. It is rendered for
+   exactly the length of the timeline at the timebase's frame rate, so a frame
+   of audio is a frame of animation and the music loops when the timeline does.
+   Rendering happens in stretches, the first time a timeline is played, and the
+   last few are kept. */
+const sound = {ctx: null, src: null, key: '', t0: 0, f0: 0, cache: new Map()};
+const hasMusic = () => typeof MUSIC !== 'undefined' && !!MUSIC.songs[state.scene];
+const musicOn = () => state.mode === 'anim' && state.music && sceneOn() && hasMusic();
+const musicKey = frames => state.scene + '|' + state.timebase + '|' + frames;
+/* Frames until the driver has stopped every track, from the timeline's start,
+   plus half a second for the last notes to release. */
+function musicFrames(){
+  const song = MUSIC.songs[state.scene];
+  let f = 0;
+  for(let u = 0; u < song.ticks; f++) u += updatesOn(f, state.timebase);
+  return song.start + f + (tbFps() >> 1);
+}
+/* A title loop is a few seconds and its song is more like twenty, so with the
+   music on, playback and video run until the song is over, the scene idling on
+   the way its title screen does. GIF and APNG have no sound and keep to the
+   timeline. */
+function playLen(){
+  const n = timelineLen();
+  return musicOn() ? Math.max(n, musicFrames()) : n;
+}
+
+/* The music over `frames` frames of the current scene and timebase, as an
+   AudioBuffer for ctx. */
+async function musicBuffer(ctx, frames){
+  const key = musicKey(frames);
+  let job = sound.cache.get(key);
+  if(!job){
+    const r = musicRenderer(MUSIC, state.scene, frames, state.timebase, tbFps());
+    job = (async () => {
+      while(!r.next(240)) await new Promise(res => setTimeout(res, 0));
+      return r;
+    })();
+    sound.cache.set(key, job);
+    if(sound.cache.size > 4) sound.cache.delete(sound.cache.keys().next().value);
+  }
+  const r = await job;
+  const buf = ctx.createBuffer(2, r.left.length, r.rate);
+  buf.copyToChannel(r.left, 0);
+  buf.copyToChannel(r.right, 1);
+  return buf;
+}
+function stopMusic(){
+  if(sound.src){
+    try{ sound.src.stop(); }catch(e){}
+    sound.src.disconnect();
+    sound.src = null;
+  }
+  sound.key = '';
+}
+/* Starts the music at the frame the player is on. Until it has rendered, the
+   animation runs on its own clock; once it starts, the music's clock takes over. */
+async function startMusic(){
+  stopMusic();
+  if(!musicOn()) return;
+  const frames = playLen(), key = musicKey(frames);
+  sound.key = key;              // a later start, or a stop, supersedes this one
+  try{
+    const ctx = sound.ctx || (sound.ctx = new AudioContext());
+    if(ctx.state === 'suspended') ctx.resume();
+    const buf = await musicBuffer(ctx, frames);
+    if(!player.playing || sound.key !== key || sound.src) return;
+    const src = ctx.createBufferSource();
+    src.buffer = buf; src.loop = true;
+    src.connect(ctx.destination);
+    const at = ctx.currentTime + 0.03, f0 = player.frame;
+    src.start(at, f0 / tbFps());
+    Object.assign(sound, {src, t0: at, f0});
+  }catch(err){
+    sound.key = '';
+    say('Music could not start here');
+  }
+}
+/* Whatever changed, the music follows: a different scene, timebase or timeline
+   length restarts it at the current frame, and turning it off stops it. */
+function syncMusic(span){
+  if(!player.playing) return;
+  const want = musicOn() ? musicKey(span) : '';
+  if(want === sound.key) return;
+  if(want) startMusic(); else stopMusic();
+}
 
 /* ---------- ROM motion ----------------------------------------------------
    Ported from Obj_TitleBanner_Main, sonic3k.asm:6039 (sonicretro/skdisasm).
@@ -2102,33 +2207,61 @@ async function downloadApng(){
    real-time capture: a 2s animation takes 2s to record and the frame timing is
    only as good as the main thread was on the day. captureStream(0) at least
    makes the frame *contents* deterministic -- each one is pushed explicitly
-   rather than sampled off the compositor. Lossy, and H.264 has no alpha.   */
+   rather than sampled off the compositor. Lossy, and H.264 has no alpha.
+
+   With the scene's music on, it goes in as an audio track, and the frames are
+   paced by the clock that track plays on rather than by timers, so whatever the
+   main thread does the picture keeps to the music. */
 async function recordVideo(mime, ext, btnId){
   const btn = el(btnId); btn.disabled = true;
   const wasPlaying = player.playing; pause();
-  let stop = () => {};
+  let stop = () => {}, actx = null;
   try{
     const L = layout(), g = geom(L), scale = scaleFor(L);
     const W = g.w0*scale, H = g.h0*scale;
     const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-    const frames = textFrames();
+    const frames = textFrames(), total = playLen();
     const stream = cv.captureStream(0);
     const track = stream.getVideoTracks()[0];
+    let music = null;
+    if(musicOn()){
+      say('Preparing music…');
+      actx = new AudioContext();
+      const dest = actx.createMediaStreamDestination();
+      music = actx.createBufferSource();
+      music.buffer = await musicBuffer(actx, total);
+      music.connect(dest);
+      stream.addTrack(dest.stream.getAudioTracks()[0]);
+      mime = videoMime(ext, true) || mime;
+    }
     const rec = new MediaRecorder(stream, {mimeType: mime, videoBitsPerSecond: 12e6});
     const chunks = [];
     rec.ondataavailable = e => e.data.size && chunks.push(e.data);
     const done = new Promise(r => rec.onstop = r);
     stop = () => { try{ rec.stop(); }catch(e){} };
-    rec.start();
-    const step = state.timebase === 'ntsc' ? 1000/59.92 : 20;
-    const iLen = introOn() ? introLen() : 0, iTail = introTail();
-    let t0 = performance.now();
-    for(let i = 0; i < frames.length + iLen + iTail; i++){
+    let clock;
+    if(music){
+      await actx.resume();
+      rec.start();
+      const at = actx.currentTime;
+      music.start(at);
+      clock = () => (actx.currentTime - at) * 1000;
+    } else {
+      rec.start();
+      const t0 = performance.now();
+      clock = () => performance.now() - t0;
+    }
+    const step = 1000 / tbFps();
+    const iLen = introOn() ? introLen() : 0;
+    for(let i = 0, shown = -1; i < total; ){
       paint(cv, scale, L, frames[Math.max(0, Math.min(frames.length-1, i - iLen))], g, scrollAt(i), i);
       if(track.requestFrame) track.requestFrame();
-      if(i % 10 === 0) say('Recording ' + Math.round(i/(frames.length+iLen+iTail)*100) + '%');
-      const target = t0 + (i+1)*step;
-      await new Promise(r => setTimeout(r, Math.max(0, target - performance.now())));
+      if((i / 10 | 0) !== shown){ shown = i / 10 | 0; say('Recording ' + Math.round(i/total*100) + '%'); }
+      const target = (i+1)*step;
+      while(clock() < target) await new Promise(r => setTimeout(r, Math.max(1, target - clock())));
+      // with the music, its clock says which frame is due: a stall drops frames
+      // instead of leaving the picture behind the sound
+      i = music ? Math.max(i + 1, Math.floor(clock() / step)) : i + 1;
     }
     rec.stop(); await done;
     const blob = new Blob(chunks, {type: mime.split(';')[0]});
@@ -2137,11 +2270,13 @@ async function recordVideo(mime, ext, btnId){
     const a = document.createElement('a');
     a.href = url; a.download = fileName(ext); a.click();
     setTimeout(()=>URL.revokeObjectURL(url), 4000);
-    say('Saved ' + ext.toUpperCase() + ' · real-time capture · ' + Math.round(blob.size/1024) + ' KB');
+    say('Saved ' + ext.toUpperCase() + ' · real-time capture' + (music ? ' · with music' : '')
+        + ' · ' + Math.round(blob.size/1024) + ' KB');
   }catch(err){
     stop();
     say(ext.toUpperCase() + ' failed — ' + (err.message || 'not supported here'));
   }finally{
+    if(actx) actx.close();
     btn.disabled = false;
     if(wasPlaying) play();
   }
@@ -2151,9 +2286,14 @@ const VIDEO = {
   webm: ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm'],
   mp4:  ['video/mp4;codecs=avc1.42E01E', 'video/mp4'],
 };
-function videoMime(kind){
+// the same, with an audio codec named for the music track
+const VIDEO_AUDIO = {
+  webm: ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus'],
+  mp4:  ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4;codecs=avc1.42E01E,opus'],
+};
+function videoMime(kind, audio){
   if(typeof MediaRecorder === 'undefined') return null;
-  return VIDEO[kind].find(t => MediaRecorder.isTypeSupported(t)) || null;
+  return (audio ? VIDEO_AUDIO : VIDEO)[kind].find(t => MediaRecorder.isTypeSupported(t)) || null;
 }
 const SUP_APNG = typeof CompressionStream !== 'undefined';
 
@@ -2437,6 +2577,7 @@ el('scene').addEventListener('click', e=>{
   e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   document.body.classList.toggle('scene', sceneOn());
   document.body.classList.toggle('has-intro', !!sceneIntro());
+  document.body.classList.toggle('has-music', hasMusic());
   curveCache.key = '';
   if(!player.playing) showRest();
   render();
@@ -2471,6 +2612,13 @@ el('intro').addEventListener('click', e=>{
 el('sceneY').addEventListener('input', e=>{
   state.sceneY = +e.target.value;
   el('sceneYVal').textContent = e.target.value;
+  render();
+});
+
+el('music').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  state.music = b.dataset.music === 'on';
+  e.currentTarget.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed', String(x===b)));
   render();
 });
 
