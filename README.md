@@ -8,7 +8,8 @@ sprite font, and download it as PNG, WebP or AVIF.
 Or switch to **Animated** for the title-screen bounce, optionally over either real
 title screen with its full opening — Sonic 3's out of the SEGA logo, or S&K's with
 the Death Egg — or over the whole Angel Island intro, Tornado to emeralds, exported
-as GIF, APNG, WebM or MP4.
+as GIF, APNG, WebM or MP4. The S&K title plays its own music with it, on the page and
+in the WebM and MP4.
 
 ## How it works
 
@@ -21,8 +22,9 @@ file meant half of it was base64:
 
     src/index.html            markup, with a slot for the style and the script
     src/style.css             ->  <style>
-    src/generated/assets.js   ->  <script>, first — the four asset constants
-    src/app.js                ->  <script>, after — all hand-written, no base64
+    src/generated/assets.js   ->  <script>, first — the asset constants
+    src/sound.js              ->  <script>, next — the sound chips the music plays on
+    src/app.js                ->  <script>, last — all hand-written, no base64
 
 Those four generated constants are 446 KB of the 550 KB, and they used to sit above
 every line of real code. Now `app.js` is 1,860 lines of nothing else. Rebuild with
@@ -587,6 +589,55 @@ realign after 14,490 frames, about four minutes, using that to argue the animati
 not be looped at all. Both numbers were wrong: the real periods give **945 frames, 15.75s
 NTSC**, and the smile is not a loop to close in the first place.
 
+## The music
+
+The S&K title plays *Title (Sonic & Knuckles)* from the frame its game starts it. Nothing
+is recorded: the song is assembled from its smps2asm source in skdisasm, run offline
+through a port of the game's own sound driver, and what the driver wrote to the sound chips
+on every V-int is kept. The page plays that on a YM2612 and a PSG of its own.
+
+- **The driver** is S&K's Z80 driver ("Modified SMPS Z80 Type 2 DAC", built with its bugs
+  kept), ported in [`tools/go/sound/`](tools/go/sound/) from `zPlayMusic` to the last
+  track's `smpsStop`. Track RAM is laid out as the Z80 has it, so loop counters and the call
+  stack overrun the way they would. Its quirks come along: when the DAC track stops,
+  `cfStopTrack` pops one return address too many and leaves the V-int, so no other track
+  updates on that frame and every track still running ends a frame late. The few paths that
+  only work by reading the driver's own code as data panic instead; no song here takes one.
+- **The log** borrows VGM's command bytes, one V-int at a time: 14 KB for the 19-second
+  song once the driver's every-frame rewrites of unchanged registers are dropped. A frequency
+  is kept or dropped as a pair, because A4h only latches and the A0h write after it applies
+  it; a test replays both the full write stream and the log and requires the same chip state
+  at the end of every V-int.
+- **The DAC samples** are the disassembly's WAVs, converted to 4-bit DPCM exactly as its
+  build does, and played back the way `zPlayDigitalAudio` does: a nibble 125 and 238 cycles
+  into each pass, 303 cycles a byte plus 26 per djnz turn of the rate `DAC_Setup` works out.
+  The two nibbles of a byte are unevenly spaced, as on the console.
+- **The YM2612** in [`src/sound.js`](src/sound.js) follows ymfm's model (Aaron Giles's
+  BSD-licensed OPN core), a sample at a time: the log-sine and power tables read off the die,
+  the envelope stepping every third sample through the chip's increment patterns, the detune
+  and LFO tables, the 9-bit DAC, and the discrete chip's crossover step either side of zero.
+  The PSG is the VDP's SN76489: 16-bit noise register tapped at bits 0 and 3, 2 dB a volume
+  step, mixed against the FM about as Genesis Plus GX does.
+- **Timing.** A frame of audio is a frame of animation: the chips run at the console's
+  clocks, NTSC or PAL, and the result is played back at the page's frame rate, so while the
+  music plays its clock *is* the frame clock and the two cannot drift. On PAL the S&K
+  driver updates twice every fifth frame (`zPalDblUpdCounter`) to keep tempo. That counter
+  starts when the driver boots, so its phase against the song is unknowable; it is taken
+  from the song's start.
+- **Length.** The S&K loop is 3 seconds and the song is 19, so with the music on, playback
+  and video run until the driver has stopped every track, the scene idling on as its title
+  screen does — the hands keep to their own animation. GIF and APNG have no sound and keep
+  the animation's length.
+- **Video.** WebM and MP4 take the music as an Opus or AAC track, and with it on the frames
+  are paced by the clock that track plays on, so a stalled main thread drops frames rather
+  than leaving the picture behind the sound.
+
+Not modelled: the YM2612's timers and SSG-EG, which no song here uses; and the time the
+V-int takes on the Z80, which on the console holds up the DAC loop for a moment each frame.
+
+The preview now runs at the chosen timebase's frame rate. It used to run at 50 Hz either
+way, which NTSC music would have played a sixth slow against.
+
 ## Tests
 
 ```bash
@@ -601,6 +652,12 @@ older versions try to run `test/` as a module. The tests read the functions they
 and the extractor throws instead of silently testing nothing.
 
 - [`test/lzw.test.mjs`](test/lzw.test.mjs) — the GIF encoder's LZW, described above.
+- [`test/sound.test.mjs`](test/sound.test.mjs) — the sound chips, driven by register writes
+  and measured: a YM2612 sine's pitch from fnum and block, its full 9-bit swing, TL at
+  0.75 dB a step, release; the PSG's pitch and 2 dB steps; the DAC loop's rate against
+  `DAC_Setup`; PAL's six updates every five frames. Then the S&K title song at both
+  timebases, which has to be exactly as long as its timeline, loud while it plays and silent
+  after.
 - [`test/spring.test.mjs`](test/spring.test.mjs) — the banner's damped spring against the
   ROM's numbers: 100 frames, −92 entry, +38 at frame 32, −13 at 59, +4 at 74, terminating
   on the ROM's own `y_vel == -$5B` test rather than a guard. Also that tuned parameters
@@ -614,7 +671,10 @@ and the extractor throws instead of silently testing nothing.
   text alone packs at 4 bits and the round-trip covers that branch as well.
 
 The asset pipeline's tests run with `go -C tools/go test ./...`:
-- every PNG each build step writes against the one the committed page carries;
+- every PNG each build step writes against the one the committed page carries, and the
+  music against the page's;
+- the song's voices against the raw bytes in their own comments, the driver's tables
+  against the familiar S3K values, and the song's length against its notes counted by hand;
 - the deflate against the system's stock zlib on all of them;
 - the maths against V8's.
 
@@ -887,7 +947,13 @@ Background art decoded from the [Sonic Retro disassembly][disasm], whose compres
 data is vendored under [`tools/rom/`](tools/rom/); the Kosinski, Enigma and Nemesis formats
 were implemented against [flamewing/mdcomp][mdcomp].
 
+The music comes from the same disassembly: the songs in Flamewing's smps2asm, and the
+S&K sound driver as disassembled by MarkeyJester and Linncaki and commented by Flamewing.
+The YM2612 follows the model of Aaron Giles's [ymfm][ymfm], and its DAC crossover step
+Nuked-OPN2's by nukeykt.
+
 Sonic the Hedgehog, Sonic the Hedgehog 2, Sonic the Hedgehog 3 and Sonic & Knuckles are © **Sega**. This is an unofficial
-fan tool; all of the artwork belongs to them.
+fan tool; all of the artwork and music belongs to them.
 
 [mdcomp]: https://github.com/flamewing/mdcomp
+[ymfm]: https://github.com/aaronsgiles/ymfm

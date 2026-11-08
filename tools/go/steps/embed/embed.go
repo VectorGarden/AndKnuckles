@@ -1,4 +1,4 @@
-// Package embed writes src/generated/assets.js from the built PNGs.
+// Package embed writes src/generated/assets.js from the built PNGs and music.
 //
 // This is the only file that carries base64. Only the artwork and the geometry
 // that comes with it are replaced. Every timing value in the spec -- the camera
@@ -264,6 +264,12 @@ func Build(outArg string) {
 	if has("s2cred-atlas.png") && has("s2cred-table.json") {
 		place(fontRe("CRED2_FONT", "CRED2_SRC"), fontLines("s2cred-table.json", "s2cred-atlas.png", "", "CRED2_FONT", "CRED2_SRC"),
 			`^const CRED_SRC = "[^"]*";$`, false, "CRED_SRC (to put the Sonic 2 credits font after)")
+	}
+
+	// ---- music: each scene's chip-write log and its DAC samples ----
+	if has("music.json") {
+		place(`^const MUSIC = .*;$`, "const MUSIC = "+readText("music.json")+";",
+			`^const CRED2_SRC = "[^"]*";$`, false, "CRED2_SRC (to put the music after)")
 	}
 
 	// ---- font: the atlas and the glyph table ----

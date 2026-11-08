@@ -208,6 +208,18 @@ HEDGEHOG">THE ⏎ HEDGEHOG</button>
       the S&amp;K Death Egg landing, the S3 island, the AIZ fly-in, the Sonic 1 and 2 title screens
       coming up. Off starts on the scene at rest.</span>
     </div>
+    <div class="ctl anim-only music-only full" id="musicCtl">
+      <span class="lbl">Music</span>
+      <div class="seg" id="music" role="group" aria-label="Music">
+        <button data-music="off" aria-pressed="false">Off</button>
+        <button data-music="on" aria-pressed="true">Title music</button>
+      </div>
+      <span class="note">The scene's own music, from the frame its game starts it: the song is run
+      through the game's sound driver ahead of time, and the page plays what the driver sent the
+      YM2612 and PSG on chips of its own, frame for frame with the animation. With it on, playback
+      and video run to the end of the song, the scene idling on as its title screen does. WebM and
+      MP4 carry it; GIF and APNG have no sound and keep to the animation's own length.</span>
+    </div>
     <div class="ctl full">
       <span class="lbl">Text position <b id="sceneYVal">176</b></span>
       <input type="range" id="sceneY" aria-label="Text vertical position" min="0" max="223" step="1" value="176">
