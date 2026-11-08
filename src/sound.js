@@ -18,8 +18,10 @@ const MASTER = {ntsc: 53693175, pal: 53203424};
 const LINES = {ntsc: 262, pal: 313};
 const YM_TICK = 7*144, Z80_TICK = 15, PSG_TICK = 15*16;
 // a PSG channel at full volume against a YM channel's 9-bit swing, as Genesis
-// Plus GX mixes them by default; and the overall level
-const PSG_AMP = 64, MUSIC_GAIN = 1/768;
+// Plus GX mixes them by default; and the overall level, one for every song so
+// they keep their loudness relative to each other (the loudest, S3's title,
+// peaks around 770 of these units)
+const PSG_AMP = 64, MUSIC_GAIN = 1/1024;
 
 function ymTables(){
   const sin = new Uint16Array(256), pow = new Uint16Array(256);
@@ -321,16 +323,21 @@ function b64bytes(s){
 }
 
 /* How many driver updates frame k (from the song's load) gets. NTSC: one a
-   V-int. PAL: the S&K driver adds one every fifth frame, from a counter that
-   starts at 5 when the driver boots (zPalDblUpdCounter); where that phase falls
-   relative to the song is not knowable, so it is taken from the song's start. */
-function updatesOn(k, tb){ return tb === 'pal' && k > 0 && k % 5 === 0 ? 2 : 1; }
+   V-int. PAL: one more whenever zPalDblUpdCounter runs out. It starts at 5 when
+   the driver boots and is reset to `period` -- 5 in S&K, 6 in Sonic 3, which
+   plays PAL music slow -- so the extra updates fall on frames 5, 5+period, ...
+   Where the boot falls relative to the song is not knowable, so it is taken as
+   the song's start. */
+function updatesOn(k, tb, period){
+  return tb === 'pal' && k >= 5 && (k - 5) % period === 0 ? 2 : 1;
+}
 
 /* A scene's music over a timeline of `frames` frames at timebase tb, rendered a
    stretch at a time: next(n) renders up to n more frames and says whether it is
    done. The samples are at the chip's own rate stretched to the page's frame
-   rate (fps), so a frame of audio is exactly a frame of animation. */
-function musicRenderer(music, scene, frames, tb, fps){
+   rate (fps), so a frame of audio is exactly a frame of animation. The song
+   loads on timeline frame `start`. */
+function musicRenderer(music, scene, frames, tb, fps, start){
   const song = music.songs[scene], drv = music.drivers[song.driver];
   const frameM = LINES[tb] * 3420, perFrame = frameM / YM_TICK;
   const n = Math.ceil(frames * perFrame);
@@ -350,12 +357,13 @@ function musicRenderer(music, scene, frames, tb, fps){
       else throw new Error('bad music log byte ' + c);
     }
   }
-  // a DC blocker, as the console's output capacitors are
-  let xl = 0, yl = 0, xr = 0, yr = 0;
+  // a DC blocker, as the console's output capacitors are, settled on the idle
+  // chip: six channels at +4 each, the crossover step either side of zero
+  let xl = 24 * MUSIC_GAIN, yl = 0, xr = xl, yr = 0;
   function next(count){
     for(const stop = Math.min(frames, f + count); f < stop; f++){
-      const t0 = f * frameM, k = f - song.start;
-      if(k >= 0 && !done) for(let u = updatesOn(k, tb); u > 0 && !done; u--) update(t0);
+      const t0 = f * frameM, k = f - start;
+      if(k >= 0 && !done) for(let u = updatesOn(k, tb, drv.palPeriod); u > 0 && !done; u--) update(t0);
       const end = Math.min(n, Math.ceil((f + 1) * perFrame));
       for(; s < end; s++){
         dac.run(s * YM_TICK);
@@ -374,8 +382,8 @@ function musicRenderer(music, scene, frames, tb, fps){
   }
   return {next, left, right, rate: perFrame * fps};
 }
-function renderMusic(music, scene, frames, tb, fps){
-  const r = musicRenderer(music, scene, frames, tb, fps);
+function renderMusic(music, scene, frames, tb, fps, start){
+  const r = musicRenderer(music, scene, frames, tb, fps, start);
   while(!r.next(1e9));
   return r;
 }

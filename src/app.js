@@ -422,14 +422,23 @@ function pause(){
 const sound = {ctx: null, src: null, key: '', t0: 0, f0: 0, cache: new Map()};
 const hasMusic = () => typeof MUSIC !== 'undefined' && !!MUSIC.songs[state.scene];
 const musicOn = () => state.mode === 'anim' && state.music && sceneOn() && hasMusic();
-const musicKey = frames => state.scene + '|' + state.timebase + '|' + frames;
+const musicKey = frames => [state.scene, state.timebase, frames, musicStart()].join('|');
+/* The timeline frame the song loads on: where its game starts it in the
+   opening, counted from a frame count in the scene's spec when the page tunes
+   that (S3's logo hold). With the opening off, the scene starts at rest and the
+   song with it. */
+function musicStart(){
+  const song = MUSIC.songs[state.scene];
+  if(!introOn()) return 0;
+  return song.start + (song.after ? sceneIntro()[song.after] : 0);
+}
 /* Frames until the driver has stopped every track, from the timeline's start,
    plus half a second for the last notes to release. */
 function musicFrames(){
-  const song = MUSIC.songs[state.scene];
+  const song = MUSIC.songs[state.scene], period = MUSIC.drivers[song.driver].palPeriod;
   let f = 0;
-  for(let u = 0; u < song.ticks; f++) u += updatesOn(f, state.timebase);
-  return song.start + f + (tbFps() >> 1);
+  for(let u = 0; u < song.ticks; f++) u += updatesOn(f, state.timebase, period);
+  return musicStart() + f + (tbFps() >> 1);
 }
 /* A title loop is a few seconds and its song is more like twenty, so with the
    music on, playback and video run until the song is over, the scene idling on
@@ -446,7 +455,7 @@ async function musicBuffer(ctx, frames){
   const key = musicKey(frames);
   let job = sound.cache.get(key);
   if(!job){
-    const r = musicRenderer(MUSIC, state.scene, frames, state.timebase, tbFps());
+    const r = musicRenderer(MUSIC, state.scene, frames, state.timebase, tbFps(), musicStart());
     job = (async () => {
       while(!r.next(240)) await new Promise(res => setTimeout(res, 0));
       return r;

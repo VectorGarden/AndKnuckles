@@ -8,8 +8,8 @@ sprite font, and download it as PNG, WebP or AVIF.
 Or switch to **Animated** for the title-screen bounce, optionally over either real
 title screen with its full opening — Sonic 3's out of the SEGA logo, or S&K's with
 the Death Egg — or over the whole Angel Island intro, Tornado to emeralds, exported
-as GIF, APNG, WebM or MP4. The S&K title plays its own music with it, on the page and
-in the WebM and MP4.
+as GIF, APNG, WebM or MP4. The S3 and S&K titles play their own music with it, on the
+page and in the WebM and MP4.
 
 ## How it works
 
@@ -591,8 +591,8 @@ NTSC**, and the smile is not a loop to close in the first place.
 
 ## The music
 
-The S&K title plays *Title (Sonic & Knuckles)* from the frame its game starts it. Nothing
-is recorded: the song is assembled from its smps2asm source in skdisasm, run offline
+The S&K title plays *Title (Sonic & Knuckles)* and the S3 title *Title (Sonic 3)*, each
+from the frame its game starts it. Nothing is recorded: the song is assembled from its smps2asm source in skdisasm, run offline
 through a port of the game's own sound driver, and what the driver wrote to the sound chips
 on every V-int is kept. The page plays that on a YM2612 and a PSG of its own.
 
@@ -603,6 +603,12 @@ on every V-int is kept. The page plays that on a YM2612 and a PSG of its own.
   `cfStopTrack` pops one return address too many and leaves the V-int, so no other track
   updates on that frame and every track still running ends a frame late. The few paths that
   only work by reading the driver's own code as data panic instead; no song here takes one.
+- **Sonic 3** builds the same driver source, and on the music path only one thing differs:
+  its PAL catch-up counter resets to 6 rather than 5, so a PAL Sonic 3 plays its music a
+  little slow. That is kept. Its title song also changes FM5's volume before giving it an
+  instrument, so the driver sends that channel's levels from a null pointer — Z80 address 0,
+  its own `di, di, im 1` — before FM5 jumps into FM1's data and sets a real voice. The bytes
+  are known from the source, so that read is modelled too.
 - **The log** borrows VGM's command bytes, one V-int at a time: 14 KB for the 19-second
   song once the driver's every-frame rewrites of unchanged registers are dropped. A frequency
   is kept or dropped as a pair, because A4h only latches and the A0h write after it applies
@@ -618,13 +624,18 @@ on every V-int is kept. The page plays that on a YM2612 and a PSG of its own.
   and LFO tables, the 9-bit DAC, and the discrete chip's crossover step either side of zero.
   The PSG is the VDP's SN76489: 16-bit noise register tapped at bits 0 and 3, 2 dB a volume
   step, mixed against the FM about as Genesis Plus GX does.
+- **Where it starts.** S&K's title queues its song before its first frame. Sonic 3's waits
+  for `Pal_Title` to fade the SEGA logo to black, so its song starts 8 frames after the
+  logo's `hold` — the page's own shortened hold, not the ROM's three seconds. With the
+  opening off, the scene starts at rest and the song with it.
 - **Timing.** A frame of audio is a frame of animation: the chips run at the console's
   clocks, NTSC or PAL, and the result is played back at the page's frame rate, so while the
-  music plays its clock *is* the frame clock and the two cannot drift. On PAL the S&K
-  driver updates twice every fifth frame (`zPalDblUpdCounter`) to keep tempo. That counter
-  starts when the driver boots, so its phase against the song is unknowable; it is taken
-  from the song's start.
-- **Length.** The S&K loop is 3 seconds and the song is 19, so with the music on, playback
+  music plays its clock *is* the frame clock and the two cannot drift. On PAL the driver
+  updates twice on some frames (`zPalDblUpdCounter`) to keep tempo. That counter starts when
+  the driver boots, so its phase against the song is unknowable; it is taken from the song's
+  start. All songs share one output level, so they keep their loudness relative to each
+  other.
+- **Length.** The S&K loop is 3 seconds and its song 19, so with the music on, playback
   and video run until the driver has stopped every track, the scene idling on as its title
   screen does — the hands keep to their own animation. GIF and APNG have no sound and keep
   the animation's length.
@@ -655,9 +666,9 @@ and the extractor throws instead of silently testing nothing.
 - [`test/sound.test.mjs`](test/sound.test.mjs) — the sound chips, driven by register writes
   and measured: a YM2612 sine's pitch from fnum and block, its full 9-bit swing, TL at
   0.75 dB a step, release; the PSG's pitch and 2 dB steps; the DAC loop's rate against
-  `DAC_Setup`; PAL's six updates every five frames. Then the S&K title song at both
-  timebases, which has to be exactly as long as its timeline, loud while it plays and silent
-  after.
+  `DAC_Setup`; PAL's catch-up every five frames for S&K and every six for Sonic 3. Then both
+  title songs at both timebases, which have to be exactly as long as their timeline, loud
+  while they play and silent after.
 - [`test/spring.test.mjs`](test/spring.test.mjs) — the banner's damped spring against the
   ROM's numbers: 100 frames, −92 entry, +38 at frame 32, −13 at 59, +4 at 74, terminating
   on the ROM's own `y_vel == -$5B` test rather than a guard. Also that tuned parameters
@@ -673,7 +684,7 @@ and the extractor throws instead of silently testing nothing.
 The asset pipeline's tests run with `go -C tools/go test ./...`:
 - every PNG each build step writes against the one the committed page carries, and the
   music against the page's;
-- the song's voices against the raw bytes in their own comments, the driver's tables
+- both songs' voices against the raw bytes in their own comments, the driver's tables
   against the familiar S3K values, and the song's length against its notes counted by hand;
 - the deflate against the system's stock zlib on all of them;
 - the maths against V8's.

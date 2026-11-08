@@ -270,10 +270,13 @@ the YM2612 and PSG on every V-int, and the DAC samples it queued. The root READM
 
 - **Assembling the song.** `sound/asm.go` takes the smps2asm macros the way
   `_smps2asm_inc.asm` expands them for S&K (`SonicDriverVer` 4, songs from source driver 3),
-  in two passes so labels can be used before they are defined. Pointers are `z80_ptr`s
+  in two passes so labels can be used before they are defined. Sonic 3's build
+  (`SonicDriverVer` 3) expands every macro these songs use the same way. Pointers are `z80_ptr`s
   through the $8000 bank window. Each voice in a song is preceded by a comment with the 25
-  bytes it assembles to, and the test requires the macros to land on them.
-- **Running it.** `sound/s3k.go` is the music half of the driver: `zStopAllSound`,
+  bytes it assembles to, and the test requires the macros to land on them. The two songs
+  were converted by different smps2asm versions — S&K's takes the TL carrier bits as written,
+  S3's derives them from the algorithm — so between them both paths are checked.
+- **Running it.** `sound/s3k.go` is the music half of the driver, for both games: `zStopAllSound`,
   `zBGMLoad`, then one `zUpdateMusic` per V-int until every track has stopped. Its frequency
   and envelope tables are read out of the driver source, frequencies through AS's integer
   clock arithmetic (`FM_Sample_Rate` is 7670453 / 144, an integer).
@@ -337,7 +340,7 @@ and [s1disasm](https://github.com/sonicretro/s1disasm) and
 [s2disasm](https://github.com/sonicretro/s2disasm) for the `S1_` and `S2_` files.
 It is Sega's, like the rest of the artwork this project renders — see the credits
 in the root README. The sound files are sources rather than compressed data: a song's
-smps2asm text (`SK_Snd_Title.asm`), the Z80 sound driver (`S3K_Snd_Driver.asm`, read for
+smps2asm text (`SK_Snd_Title.asm`, `S3_Snd_Title.asm`), the Z80 sound driver (`S3K_Snd_Driver.asm`, read for
 its tables), `sonic3k.macros.asm` (`S3K_macros.asm`, for `DAC_Setup`), and the DAC WAVs
 with the driver's `deltas.bin`. The page already embeds the decoded results; these are the
 inputs they came from, kept here so the build runs without a network fetch.
