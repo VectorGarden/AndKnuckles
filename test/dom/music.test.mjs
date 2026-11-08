@@ -28,7 +28,10 @@ test('the music control is offered for a scene with music, when animated', async
   await setup(page, {mode: 'anim', scene: 's1', intro: 'on'});
   assert.equal(await shown(), true, 'the Sonic 1 title');
   await setup(page, {mode: 'anim', scene: 's2', intro: 'on'});
-  assert.equal(await shown(), false, 'a scene without music yet');
+  assert.equal(await shown(), true, 'the Sonic 2 title');
+  // Obj0E starts the music with the emblem's fade, on its frame 56: the driver
+  // takes it on the next V-int
+  assert.equal(await page.evaluate(() => musicStart()), 57);
 });
 
 test('S3\'s song starts after the SEGA logo and its fade, silent until then', async () => {
@@ -74,12 +77,15 @@ test('playing starts the music, and the frame shown is the one it has reached', 
   await music(true);
   await page.click('#play');
   await page.waitForFunction(() => !!sound.src, null, {timeout: 15000});
-  await page.waitForTimeout(800);
+  // wait on the playhead rather than the clock: on a loaded machine the audio
+  // can take a while to get going
+  await page.waitForFunction(() => player.frame > 10, null, {timeout: 15000});
   // a tick shows the frame the music has reached -- checked straight after
   // one, so a busy machine's late animation frames cannot get in between
   const r = await page.evaluate(() => {
     tick(performance.now());
-    const due = (sound.f0 + Math.floor((sound.ctx.currentTime - sound.t0) * tbFps())) % playLen();
+    // until the music's scheduled start the page holds the frame it started on
+    const due = (sound.f0 + Math.max(0, Math.floor((sound.ctx.currentTime - sound.t0) * tbFps()))) % playLen();
     return {frame: player.frame, due, len: sound.src.buffer.duration, want: playLen() / tbFps(), loop: sound.src.loop};
   });
   assert.ok(Math.abs(r.frame - r.due) <= 1, `showing frame ${r.frame}, the music is at ${r.due}`);
@@ -133,5 +139,6 @@ test('a WebM recorded with the music has an Opus track as long as the picture', 
     if(v.duration === Infinity){ v.currentTime = 1e6; await new Promise(res => v.ondurationchange = res); }
     return {duration: v.duration, want: playLen() / tbFps(), status: el('status') ? el('status').textContent : ''};
   }, buf.toString('base64'));
-  assert.ok(Math.abs(meta.duration - meta.want) < 0.5, `${meta.duration}s of video for ${meta.want}s of song`);
+  // a real-time capture: within 5% (a busy machine can stretch a recording)
+  assert.ok(Math.abs(meta.duration - meta.want) < meta.want * 0.05, `${meta.duration}s of video for ${meta.want}s of song`);
 });

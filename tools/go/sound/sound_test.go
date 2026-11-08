@@ -1,6 +1,7 @@
 package sound
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -21,7 +22,8 @@ func TestVoicesMatchTheirComments(t *testing.T) {
 		file, label string
 		n, ver      int
 	}{{"SK_Snd_Title.asm", "Snd_Title_Voices", 6, 4}, {"S3_Snd_Title.asm", "Snd_S3_Title_Voices", 4, 4},
-		{"S1_Snd_Title.asm", "Mus8A_Title_Screen_Voices", 0, 1}, {"S1_Snd_GHZ.asm", "Mus81_GHZ_Voices", 0, 1}} {
+		{"S1_Snd_Title.asm", "Mus8A_Title_Screen_Voices", 0, 1}, {"S1_Snd_GHZ.asm", "Mus81_GHZ_Voices", 0, 1},
+		{"S2_Snd_Title.asm", "Title_screen_Voices", 0, 2}, {"S2_Snd_EHZ.asm", "EHZ_Voices", 0, 2}} {
 		src := string(lib.Rom(c.file))
 		song := AssembleSongFor(src, c.ver)
 		voices := song.Labels[c.label] - song.Base
@@ -59,6 +61,15 @@ func TestVoicesMatchTheirComments(t *testing.T) {
 		}
 		for i, w := range want {
 			got := song.Data[voices+25*i : voices+25*i+25]
+			// Sonic 2's comments are in the S1/S3K byte order; its driver writes
+			// the operators' registers in plain order, so its macro branch swaps
+			// the middle two of every four -- the same registers either way
+			if c.ver == 2 && len(w) == 25 {
+				w = append([]byte(nil), w...)
+				for g := 1; g < 25; g += 4 {
+					w[g+1], w[g+2] = w[g+2], w[g+1]
+				}
+			}
 			if len(w) != 25 || string(got) != string(w) {
 				t.Errorf("%s voice %d assembles to % X\n                    comment says % X", c.file, i, got, w)
 			}
@@ -292,5 +303,61 @@ func TestSonic1TitlePlaysToItsEnd(t *testing.T) {
 	}
 	if d.Playing() || len(out) < 400 || len(out) > 700 {
 		t.Errorf("the title song runs %d frames", len(out))
+	}
+}
+
+// Sonic 2's tables: Sonic 1's notes, thirteen envelopes, and the DAC playlist,
+// which turns 88h-91h into the timpani, tom and bongo at scaled rates.
+func TestSonic2Tables(t *testing.T) {
+	tab := s2Tables(t)
+	if fmt.Sprint(tab.FMFreq[:3], tab.PSGFreq[:3]) != fmt.Sprint([]int{0x25E, 0x284, 0x2AB}, []int{0x356, 0x326, 0x2F9}) {
+		t.Errorf("note tables start %03X / %03X", tab.FMFreq[:3], tab.PSGFreq[:3])
+	}
+	if want := "Kick Snare Clap Scratch Timpani Tom Bongo"; strings.Join(tab.Samples, " ") != want {
+		t.Errorf("samples %v, want %s", tab.Samples, want)
+	}
+	// 88h is the timpani at 1.30 its rate; 8Ch the tom at 1.70
+	if tab.DACSample[7] != 0x85 || tab.DACSample[0xB] != 0x86 || tab.DACLoop[7] >= tab.DACLoop[4] {
+		t.Errorf("playlist 88h: %02X loop %d (timpani itself %d); 8Ch: %02X",
+			tab.DACSample[7], tab.DACLoop[7], tab.DACLoop[4], tab.DACSample[0xB])
+	}
+	if tab.Env[tab.EnvAt[12]] != 0x0E {
+		t.Error("envelope 13 should open on 0Eh")
+	}
+}
+
+func s2Tables(t *testing.T) *Tables2 {
+	t.Helper()
+	return LoadTables2(string(lib.Rom("S2_Snd_Driver.asm")), func(name string) int {
+		rate, _ := ReadWAV(lib.Rom("S2_DAC_" + name + ".wav"))
+		return rate
+	})
+}
+
+// Sonic 2 loads a song and updates its tracks on the same V-int, so notes go
+// out on the load frame itself; its PAL tick, reset to 5 by the load, adds an
+// update on frames 4, 9, 14, ..., so the title is six fifths as short in
+// frames on PAL.
+func TestSonic2TitlePlaysToItsEnd(t *testing.T) {
+	tab := s2Tables(t)
+	song := AssembleSongFor(string(lib.Rom("S2_Snd_Title.asm")), 2)
+	ntsc := NewDriver2(song, tab).PlayFrames(0, 0, []Cue{{0, Command{Song: song}}})
+	d := NewDriver2(song, tab)
+	pal := d.PlayFrames(5, 0, []Cue{{0, Command{Song: song}}})
+	sound := false
+	for _, w := range ntsc[0] {
+		if w.Reg == 0x28 && w.Val&0xF0 != 0 || w.Port == 3 {
+			sound = true
+		}
+	}
+	if !sound {
+		t.Error("nothing starts on the frame the song loads")
+	}
+	if d.Playing() {
+		t.Error("still playing")
+	}
+	// 6 updates every 5 frames: the PAL run is 5/6 the length, to a frame
+	if want := (len(ntsc)*5 + 3) / 6; len(pal) < want-1 || len(pal) > want+1 {
+		t.Errorf("%d frames on NTSC, %d on PAL; want about %d", len(ntsc), len(pal), want)
 	}
 }

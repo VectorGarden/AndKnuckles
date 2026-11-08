@@ -127,12 +127,33 @@ var equatesV1 = func() map[string]int {
 	return e
 }()
 
+// equatesV2 are Sonic 2's: its DAC playlist from 81h and its PSG tones.
+var equatesV2 = func() map[string]int {
+	e := map[string]int{"nMaxPSG": equates["nA5"], "nMaxPSG1": equates["nA5"] + 12, "nMaxPSG2": equates["nA5"] + 12}
+	for i, d := range strings.Fields(`dKick dSnare dClap dScratch dTimpani dHiTom dVLowClap dHiTimpani dMidTimpani
+		dLowTimpani dVLowTimpani dMidTom dLowTom dFloorTom dHiClap dMidClap dLowClap`) {
+		e[d] = 0x81 + i
+	}
+	for i := 1; i <= 0x0D; i++ {
+		e[fmt.Sprintf("fTone_%02X", i)] = i
+	}
+	return e
+}()
+
+// S2Base is where Sonic 2's driver decompresses a Saxman-packed song, and so
+// where those songs are assembled (zMusicData, the build's music_buffer_address).
+const S2Base = 0x1380
+
 // AssembleSongFor assembles a song for the driver SonicDriverVer ver: 4 for
-// S&K (and Sonic 3, whose macros these songs expand the same way), 1 for
-// Sonic 1, whose pointers are big-endian and relative.
+// S&K (and Sonic 3, whose macros these songs expand the same way); 2 for
+// Sonic 2's compressed songs, assembled at S2Base with plain little-endian
+// pointers; 1 for Sonic 1, whose pointers are big-endian and relative.
 func AssembleSongFor(src string, ver int) *Song {
 	lines := strings.Split(strings.ReplaceAll(src, "\r\n", "\n"), "\n")
 	s := &Song{Base: songBase, Labels: map[string]int{}}
+	if ver == 2 {
+		s.Base = S2Base
+	}
 	// two passes, as an assembler makes them: the first only places the labels
 	for pass := 0; pass < 2; pass++ {
 		a := &asm{song: s, pass: pass, ver: ver}
@@ -243,6 +264,10 @@ func (a *asm) ptr(label string) {
 		a.b(v>>8&0xFF, v&0xFF)
 		return
 	}
+	if a.ver == 2 { // the build's z80_ptr for compressed songs: no bank window
+		a.b(v&0xFF, v>>8&0xFF)
+		return
+	}
 	v = v&0x7FFF | 0x8000
 	a.b(v&0xFF, v>>8)
 }
@@ -264,6 +289,9 @@ func (a *asm) jump(label string) {
 func (a *asm) eval(e string) int {
 	v, err := evalExpr(e, func(id string) (int, bool) {
 		if v, ok := equatesV1[id]; ok && a.ver == 1 {
+			return v, true
+		}
+		if v, ok := equatesV2[id]; ok && a.ver == 2 {
 			return v, true
 		}
 		if v, ok := equates[id]; ok {
@@ -299,7 +327,7 @@ func (a *asm) args(args []string, n int) []int {
 // SonicDriverVer 1 with source driver 1.
 func (a *asm) op(op string, args []string) {
 	one := func() int { return a.args(args, 1)[0] }
-	if a.ver == 1 && a.opV1(op, args, one) {
+	if a.ver < 3 && a.opV1(op, args, one) {
 		return
 	}
 	switch op {
@@ -449,8 +477,9 @@ func (a *asm) op(op string, args []string) {
 	}
 }
 
-// opV1 is the coordination flags Sonic 1's driver numbers its own way; the
-// rest assemble as they do for S&K. The S3K-only flags do not exist for it.
+// opV1 is the coordination flags Sonic 1's driver numbers its own way, which
+// Sonic 2's keeps; the rest assemble as they do for S&K. The S3K-only flags do
+// not exist for them.
 func (a *asm) opV1(op string, args []string, one func() int) bool {
 	switch op {
 	case "smpsReturn":
@@ -468,9 +497,22 @@ func (a *asm) opV1(op string, args []string, one func() int) bool {
 	case "smpsSetTempoDiv":
 		a.b(0xEB, one())
 	case "smpsClearPush":
+		if a.ver != 1 {
+			panic("smpsClearPush is Sonic 1's alone")
+		}
 		a.b(0xED)
 	case "smpsStopSpecial":
+		if a.ver != 1 { // the macro stands in smpsStop
+			a.b(0xF2)
+			break
+		}
 		a.b(0xEE)
+	case "smpsPSGAlterVolS2":
+		if a.ver == 2 {
+			a.b(0xE6, one())
+		} else {
+			a.b(0xEC, one())
+		}
 	case "smpsModOn":
 		a.b(0xF1)
 	case "smpsModOff":
@@ -572,7 +614,11 @@ func (a *asm) voice(op string, args []string) {
 			func(i int) int { return vc[fmt.Sprintf("DL%d", i)]<<4 + vc[fmt.Sprintf("RR%d", i)] },
 			func(i int) int { return vc[fmt.Sprintf("TL%d", i)] | mask[i] },
 		} {
-			for _, i := range []int{4, 3, 2, 1} {
+			order := []int{4, 3, 2, 1}
+			if a.ver == 2 { // Sonic 2's driver takes the middle two the other way round
+				order = []int{4, 2, 3, 1}
+			}
+			for _, i := range order {
 				a.b(row(i))
 			}
 		}

@@ -175,3 +175,15 @@ func LoadDAC1(id int, deltas []byte, rom func(string) []byte) DACSample {
 	rate, u8 := ReadWAV(rom("S1_DAC_" + name + ".wav"))
 	return DACSample{ID: id, Rate: rate, Loop: dpcmLoopCounter1(rate), Data: EncodeDPCM(u8, deltas)}
 }
+
+// LoadDAC2 builds one of Sonic 2's seven samples, zDACPtrTbl's order from 81h,
+// at its WAV's rate through Sonic 2's dpcmLoopCounter. A DAC note's own rate
+// comes from zDACMasterPlaylist and goes in the log with it.
+func LoadDAC2(id int, tab *Tables2, deltas []byte, rom func(string) []byte) DACSample {
+	i := id - 0x81
+	if i < 0 || i >= len(tab.Samples) {
+		panic(fmt.Sprintf("Sonic 2 has no DAC sample %02X", id))
+	}
+	rate, u8 := ReadWAV(rom("S2_DAC_" + tab.Samples[i] + ".wav"))
+	return DACSample{ID: id, Rate: rate, Loop: dpcmLoopCounter2(rate), Data: EncodeDPCM(u8, deltas)}
+}

@@ -276,10 +276,16 @@ function makePSG(){
 
      s3k  zPlayDigitalAudio, S3 and S&K: disables the DAC when a sample ends
      s1   Sonic 1's zPlayPCMLoop: never does -- the DAC holds its last value
-          until the next sample, which it re-enables for anyway */
+          until the next sample, which it re-enables for anyway; the 68K sets
+          the timpani's (83h) rate in its table, and it stays
+     s2   Sonic 2's zWriteToDAC: the V-int itself starts a sample, cutting off
+          the last one there and then, with the first wait one djnz turn long;
+          the DAC was enabled with the song and stays so; every DAC note sets
+          its own rate, from zDACMasterPlaylist */
 const DAC_LOOPS = {
-  s3k: {enable: 100, first: 450, w1: [125, 1], w2: [238, 2], check: [267, 2], pass: 303, off: 60},
-  s1:  {enable: 285, first: 305, w1: [105, 0], w2: [217, 1], check: [253, 2], pass: 301, off: null},
+  s3k: {enable: 100, first: [450, 0], w1: [125, 1], w2: [238, 2], check: [267, 2], pass: 303, off: 60, pitch: null},
+  s1:  {enable: 285, first: [305, 0], w1: [105, 0], w2: [217, 1], check: [253, 2], pass: 301, off: null, pitch: '83'},
+  s2:  {enable: null, first: [0, -1], w1: [114, 1], w2: [262, 2], check: null, pass: 295, off: null, pitch: '*'},
 };
 function makeDAC(drv, ym){
   const D = drv.dac, deltas = drv.deltas, L = DAC_LOOPS[drv.loop || 's3k'];
@@ -287,11 +293,10 @@ function makeDAC(drv, ym){
   let cur = null, queued = null, events = [], pitch = null;
   const bytesOf = id => D[id].bytes || (D[id].bytes = b64bytes(D[id].data));
   function start(id, t){
-    // Sonic 1's 68K writes the timpani's pitch into its table entry, where it
-    // stays for every timpani after
-    const loop = id === '83' && pitch !== null ? pitch : D[id].loop;
-    events = [[t + cyc(L.enable), 0x2B, 0x80]];
-    cur = {id, bytes: bytesOf(id), i: 0, acc: 0x80, b: loop, at: t + cyc(L.first)};
+    const loop = pitch !== null && (L.pitch === '*' || L.pitch === id) ? pitch : D[id].loop;
+    const k = 13 * (loop - 1);
+    events = L.enable === null ? [] : [[t + cyc(L.enable), 0x2B, 0x80]];
+    cur = {id, bytes: bytesOf(id), i: 0, acc: 0x80, b: loop, at: t + cyc(L.first[0] + L.first[1]*k)};
     plan();
   }
   // the next pass's two writes and its check
@@ -301,14 +306,21 @@ function makeDAC(drv, ym){
     events.push([cur.at + cyc(L.w1[0] + L.w1[1]*k), 0x2A, cur.acc]);
     cur.acc = (cur.acc + deltas[byte & 15]) & 0xFF;
     events.push([cur.at + cyc(L.w2[0] + L.w2[1]*k), 0x2A, cur.acc]);
-    cur.check = cur.at + cyc(L.check[0] + L.check[1]*k);
+    cur.check = L.check ? cur.at + cyc(L.check[0] + L.check[1]*k) : cur.at + cyc(L.w2[0] + L.w2[1]*k);
     cur.at += cyc(L.pass + 2*k);
   }
   function queue(idx, t){ queued = {id: idx ? (0x80 + idx).toString(16).toUpperCase() : null, t}; }
   function setPitch(v){ pitch = v; }
   function run(t){
     for(;;){
-      while(events.length && events[0][0] <= t){ const e = events.shift(); ym.write(0, e[1], e[2]); }
+      // where the V-int starts the sample, it takes effect at its own time
+      const qt = queued && !L.check ? queued.t : Infinity;
+      while(events.length && events[0][0] <= Math.min(t, qt)){ const e = events.shift(); ym.write(0, e[1], e[2]); }
+      if(qt <= t){
+        const q = queued; queued = null; events = []; cur = null;
+        if(q.id && D[q.id]) start(q.id, q.t);
+        continue;
+      }
       if(events.length) return;
       if(!cur){
         if(queued && queued.t <= t){ const q = queued; queued = null; if(q.id && D[q.id]) start(q.id, q.t); continue; }

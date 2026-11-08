@@ -48,8 +48,8 @@ The code is in [`go/`](go/):
   - a reader for the data literals in `tools/font`;
   - `Math.hypot`, `atan2`, `sin`, `cos` and `round` as V8 computes them.
 - **`fonts/`** — reads `tools/font/s1-logo.mjs`, evaluating its shape calls.
-- **`sound/`** — the music: an assembler for smps2asm songs, ports of the S&K and Sonic 1
-  sound drivers, the DAC samples' DPCM, and the log the page plays.
+- **`sound/`** — the music: an assembler for smps2asm songs, ports of the S&K, Sonic 1 and
+  Sonic 2 sound drivers, the DAC samples' DPCM, and the log the page plays.
 - **`steps/<name>/`** — one build step each, described below. Each step's test builds it
   into a fresh directory and requires every PNG it writes to be the one the committed page
   carries, byte for byte, so a step that drifts from the page fails its own test by name.
@@ -286,6 +286,9 @@ the step's test checks them against. The root README's
   through `SonicDriverVer` 1. Its tables come out of `s1.sounddriver.asm` the same way, and
   its three samples — kick, snare, timpani — from its WAVs, through its own
   `dpcmLoopCounter` (301 cycles a pass).
+- **Sonic 2.** `sound/s2.go` is Sonic 2's Z80 driver, its songs assembled through
+  `SonicDriverVer` 2 at `$1380`, where the driver unpacks them. Its tables, envelopes and DAC
+  playlist come out of `s2.sounddriver.asm`, its seven samples from its WAVs.
 - **Running it.** `sound/s3k.go` is the music half of the driver, for both games: `zStopAllSound`,
   `zBGMLoad`, then one `zUpdateMusic` per V-int until every track has stopped. Its frequency
   and envelope tables are read out of the driver source, frequencies through AS's integer
@@ -353,7 +356,9 @@ in the root README. The sound files are sources rather than compressed data: a s
 smps2asm text (`SK_Snd_Title.asm`, `S3_Snd_Title.asm`, `S3K_Snd_AIZ1.asm`, `SK_Snd_Knuckles.asm`), the Z80 sound driver (`S3K_Snd_Driver.asm`, read for
 its tables and its universal voice bank), `sonic3k.macros.asm` (`S3K_macros.asm`, for `DAC_Setup`), and the DAC WAVs
 with the driver's `deltas.bin`; for Sonic 1, `S1_Snd_Title.asm`, `S1_Snd_GHZ.asm`,
-`S1_Snd_Driver.asm` (`s1.sounddriver.asm`), its three DAC WAVs and its `deltas.bin`.
+`S1_Snd_Driver.asm` (`s1.sounddriver.asm`), its three DAC WAVs and its `deltas.bin`; for
+Sonic 2, `S2_Snd_Title.asm`, `S2_Snd_EHZ.asm`, `S2_Snd_Driver.asm` (`s2.sounddriver.asm`),
+its seven DAC WAVs and its `deltas.bin`.
 The page already embeds the decoded results; these are the
 inputs they came from, kept here so the build runs without a network fetch.
 

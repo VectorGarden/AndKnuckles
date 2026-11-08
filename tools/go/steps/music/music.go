@@ -52,16 +52,22 @@ type Driver struct {
 	// zPalDblUpdCounter to 5 in S&K, and to 6 in Sonic 3, which the disassembly
 	// notes plays PAL music too slow. Sonic 1 never does.
 	PALPeriod int
+	// Sonic 2 keeps its own PAL tick, reset when a song loads; any non-zero
+	// period turns it on.
 	// Loop names the Z80 DAC loop that plays its samples, for the page:
-	// zPlayDigitalAudio ("s3k") or Sonic 1's zPlayPCMLoop ("s1").
+	// zPlayDigitalAudio ("s3k"), Sonic 1's zPlayPCMLoop ("s1") or Sonic 2's
+	// zWriteToDAC ("s2").
 	Loop string
+	// Ver is the SonicDriverVer its songs assemble for.
+	Ver int
 }
 
 // Drivers by name.
 var Drivers = map[string]Driver{
-	"s1":  {Loop: "s1"},
-	"s3":  {PALPeriod: 6, Loop: "s3k"},
-	"s3k": {PALPeriod: 5, Loop: "s3k"},
+	"s1":  {Loop: "s1", Ver: 1},
+	"s2":  {PALPeriod: 5, Loop: "s2", Ver: 2},
+	"s3":  {PALPeriod: 6, Loop: "s3k", Ver: 4},
+	"s3k": {PALPeriod: 5, Loop: "s3k", Ver: 4},
 }
 
 // player is either driver.
@@ -103,6 +109,12 @@ var Songs = []Song{
 	// decompressing the level's art takes; that is not modelled, so the song
 	// starts on frame 0 there too.
 	{Scene: "ghz", File: "S1_Snd_GHZ.asm", Title: "Green Hill Zone", Driver: "s1", For: 1500},
+	// Sonic 2's title has Obj0E start the music on its frame 56, the frame the
+	// emblem starts to fade in (Obj0E_Sonic_FadeInAndPlayMusic); the driver
+	// takes it on the next V-int.
+	{Scene: "s2", File: "S2_Snd_Title.asm", Title: "Title Screen", Driver: "s2", Start: 57},
+	// EHZ is zone music, queued at the level's start like GHZ's.
+	{Scene: "ehz", File: "S2_Snd_EHZ.asm", Title: "Emerald Hill Zone", Driver: "s2", For: 1500},
 	{Scene: "aiz", File: "S3K_Snd_AIZ1.asm", Title: "Angel Island Zone Act 1, then Knuckles' theme", Driver: "s3k",
 		For: 1500, Cues: []Cue{
 			{Frame: 587, FadeOut: true},
@@ -118,6 +130,11 @@ func Build(outArg string) {
 	tab := sound.LoadTables(string(lib.Rom("S3K_Snd_Driver.asm")))
 	timpani, _ := sound.ReadWAV(lib.Rom("S1_DAC_timpani.wav"))
 	tab1 := sound.LoadTables1(string(lib.Rom("S1_Snd_Driver.asm")), timpani)
+	tab2 := sound.LoadTables2(string(lib.Rom("S2_Snd_Driver.asm")), func(name string) int {
+		rate, _ := sound.ReadWAV(lib.Rom("S2_DAC_" + name + ".wav"))
+		return rate
+	})
+	deltas2 := lib.Rom("S2_DAC_deltas.bin")
 	macros := string(lib.Rom("S3K_macros.asm"))
 	deltas := lib.Rom("S3K_DAC_deltas.bin")
 	deltas1 := lib.Rom("S1_DAC_deltas.bin")
@@ -132,10 +149,7 @@ func Build(outArg string) {
 		return assembled[file]
 	}
 	for _, s := range Songs {
-		ver = 4
-		if s.Driver == "s1" {
-			ver = 1
-		}
+		ver = Drivers[s.Driver].Ver
 		if used[s.Driver] == nil {
 			used[s.Driver] = map[int]bool{}
 		}
@@ -154,8 +168,11 @@ func Build(outArg string) {
 				period = Drivers[s.Driver].PALPeriod
 			}
 			var drv player = sound.NewDriver(song(s.File), tab)
-			if s.Driver == "s1" {
+			switch s.Driver {
+			case "s1":
 				drv = sound.NewDriver1(song(s.File), tab1)
+			case "s2":
+				drv = sound.NewDriver2(song(s.File), tab2)
 			}
 			out := drv.PlayFrames(period, s.For, cues)
 			for _, f := range out {
@@ -192,15 +209,18 @@ func Build(outArg string) {
 		}
 		sort.Ints(ids)
 		dac := &lib.Obj{}
-		dl := deltas
-		if name == "s1" {
-			dl = deltas1
+		dl := map[string][]byte{"s1": deltas1, "s2": deltas2}[name]
+		if dl == nil {
+			dl = deltas
 		}
 		for _, id := range ids {
 			var d sound.DACSample
-			if name == "s1" {
+			switch name {
+			case "s1":
 				d = sound.LoadDAC1(id, deltas1, lib.Rom)
-			} else {
+			case "s2":
+				d = sound.LoadDAC2(id, tab2, deltas2, lib.Rom)
+			default:
 				d = sound.LoadDAC(id, macros, deltas, lib.Rom)
 			}
 			dac.Set(fmt.Sprintf("%02X", id), lib.O("rate", d.Rate, "loop", d.Loop,
